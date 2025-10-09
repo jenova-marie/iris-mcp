@@ -6,6 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Iris MCP is a Model Context Protocol server that enables Claude Code instances across different project directories to communicate and coordinate via MCP tools.
 
+## Team Identity
+
+This Claude instance represents the **iris-mcp** team.
+
+When using Iris MCP tools (`teams_ask`, `teams_send_message`, `teams_notify`),
+always set `fromTeam: "iris-mcp"` to identify yourself in inter-team communication.
+
 ## Build & Development Commands
 
 ```bash

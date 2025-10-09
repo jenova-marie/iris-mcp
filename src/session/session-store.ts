@@ -1,0 +1,321 @@
+/**
+ * Session Store - SQLite database wrapper for team-to-team sessions
+ *
+ * Manages persistent storage of session metadata including UUIDs, timestamps,
+ * and usage statistics for team pair conversations.
+ */
+
+import Database from "better-sqlite3";
+import { existsSync, mkdirSync } from "fs";
+import { dirname } from "path";
+import { Logger } from "../utils/logger.js";
+import type {
+  SessionInfo,
+  SessionRow,
+  SessionFilters,
+  SessionStatus,
+} from "./types.js";
+
+const logger = new Logger("session-store");
+
+/**
+ * SQLite-based session storage
+ */
+export class SessionStore {
+  private db: Database.Database;
+
+  constructor(dbPath = "./data/team-sessions.db") {
+    // Ensure data directory exists
+    const dataDir = dirname(dbPath);
+    if (!existsSync(dataDir)) {
+      mkdirSync(dataDir, { recursive: true });
+    }
+
+    // Open database
+    this.db = new Database(dbPath);
+    this.db.pragma("journal_mode = WAL");
+
+    // Initialize schema
+    this.initializeSchema();
+
+    logger.info("Session store initialized", { dbPath });
+  }
+
+  /**
+   * Initialize database schema
+   */
+  private initializeSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS team_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_team TEXT,
+        to_team TEXT NOT NULL,
+        session_id TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER NOT NULL,
+        message_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        UNIQUE(from_team, to_team)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_team_sessions_from_to
+        ON team_sessions(from_team, to_team);
+
+      CREATE INDEX IF NOT EXISTS idx_team_sessions_session_id
+        ON team_sessions(session_id);
+
+      CREATE INDEX IF NOT EXISTS idx_team_sessions_status
+        ON team_sessions(status);
+    `);
+
+    logger.debug("Schema initialized");
+  }
+
+  /**
+   * Convert database row to SessionInfo
+   */
+  private rowToSessionInfo(row: SessionRow): SessionInfo {
+    return {
+      id: row.id,
+      fromTeam: row.from_team,
+      toTeam: row.to_team,
+      sessionId: row.session_id,
+      createdAt: new Date(row.created_at),
+      lastUsedAt: new Date(row.last_used_at),
+      messageCount: row.message_count,
+      status: row.status,
+    };
+  }
+
+  /**
+   * Create a new session record
+   */
+  create(
+    fromTeam: string | null,
+    toTeam: string,
+    sessionId: string,
+  ): SessionInfo {
+    const now = Date.now();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO team_sessions (
+        from_team, to_team, session_id, created_at, last_used_at, message_count, status
+      ) VALUES (?, ?, ?, ?, ?, 0, 'active')
+    `);
+
+    const result = stmt.run(fromTeam, toTeam, sessionId, now, now);
+
+    logger.info("Session created", {
+      fromTeam,
+      toTeam,
+      sessionId,
+      id: result.lastInsertRowid,
+    });
+
+    return this.rowToSessionInfo({
+      id: Number(result.lastInsertRowid),
+      from_team: fromTeam,
+      to_team: toTeam,
+      session_id: sessionId,
+      created_at: now,
+      last_used_at: now,
+      message_count: 0,
+      status: "active",
+    });
+  }
+
+  /**
+   * Get session by team pair
+   */
+  getByTeamPair(
+    fromTeam: string | null,
+    toTeam: string,
+  ): SessionInfo | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM team_sessions
+      WHERE from_team IS ? AND to_team = ?
+    `);
+
+    const row = stmt.get(fromTeam, toTeam) as SessionRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return this.rowToSessionInfo(row);
+  }
+
+  /**
+   * Get session by session ID
+   */
+  getBySessionId(sessionId: string): SessionInfo | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM team_sessions
+      WHERE session_id = ?
+    `);
+
+    const row = stmt.get(sessionId) as SessionRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return this.rowToSessionInfo(row);
+  }
+
+  /**
+   * List sessions with optional filters
+   */
+  list(filters?: SessionFilters): SessionInfo[] {
+    let query = "SELECT * FROM team_sessions WHERE 1=1";
+    const params: any[] = [];
+
+    if (filters?.fromTeam !== undefined) {
+      query += " AND from_team IS ?";
+      params.push(filters.fromTeam);
+    }
+
+    if (filters?.toTeam) {
+      query += " AND to_team = ?";
+      params.push(filters.toTeam);
+    }
+
+    if (filters?.status) {
+      query += " AND status = ?";
+      params.push(filters.status);
+    }
+
+    if (filters?.createdAfter) {
+      query += " AND created_at > ?";
+      params.push(filters.createdAfter.getTime());
+    }
+
+    if (filters?.usedAfter) {
+      query += " AND last_used_at > ?";
+      params.push(filters.usedAfter.getTime());
+    }
+
+    query += " ORDER BY last_used_at DESC";
+
+    if (filters?.limit) {
+      query += " LIMIT ?";
+      params.push(filters.limit);
+    }
+
+    const stmt = this.db.prepare(query);
+    const rows = stmt.all(...params) as SessionRow[];
+
+    return rows.map((row) => this.rowToSessionInfo(row));
+  }
+
+  /**
+   * Update session's last used timestamp
+   */
+  updateLastUsed(sessionId: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET last_used_at = ?
+      WHERE session_id = ?
+    `);
+
+    stmt.run(Date.now(), sessionId);
+
+    logger.debug("Updated last used timestamp", { sessionId });
+  }
+
+  /**
+   * Increment message count for a session
+   */
+  incrementMessageCount(sessionId: string, count = 1): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET message_count = message_count + ?
+      WHERE session_id = ?
+    `);
+
+    stmt.run(count, sessionId);
+
+    logger.debug("Incremented message count", { sessionId, count });
+  }
+
+  /**
+   * Update session status
+   */
+  updateStatus(sessionId: string, status: SessionStatus): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET status = ?
+      WHERE session_id = ?
+    `);
+
+    stmt.run(status, sessionId);
+
+    logger.info("Updated session status", { sessionId, status });
+  }
+
+  /**
+   * Delete a session record
+   */
+  delete(sessionId: string): void {
+    const stmt = this.db.prepare(`
+      DELETE FROM team_sessions
+      WHERE session_id = ?
+    `);
+
+    stmt.run(sessionId);
+
+    logger.info("Session deleted", { sessionId });
+  }
+
+  /**
+   * Delete sessions by team pair
+   */
+  deleteByTeamPair(fromTeam: string | null, toTeam: string): void {
+    const stmt = this.db.prepare(`
+      DELETE FROM team_sessions
+      WHERE from_team IS ? AND to_team = ?
+    `);
+
+    stmt.run(fromTeam, toTeam);
+
+    logger.info("Sessions deleted for team pair", { fromTeam, toTeam });
+  }
+
+  /**
+   * Get session count statistics
+   */
+  getStats(): {
+    total: number;
+    active: number;
+    archived: number;
+    totalMessages: number;
+  } {
+    const row = this.db
+      .prepare(
+        `
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) as active,
+        SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) as archived,
+        SUM(message_count) as total_messages
+      FROM team_sessions
+    `,
+      )
+      .get() as any;
+
+    return {
+      total: row.total || 0,
+      active: row.active || 0,
+      archived: row.archived || 0,
+      totalMessages: row.total_messages || 0,
+    };
+  }
+
+  /**
+   * Close database connection
+   */
+  close(): void {
+    this.db.close();
+    logger.info("Session store closed");
+  }
+}

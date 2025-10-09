@@ -14,7 +14,7 @@ describe("SessionManager Integration", () => {
   const testConfigPath = "./teams.json"; // Use real teams.json
   const testDbPath = "./test-integration-session-manager.db";
 
-  // Helper to clean database before tests
+  // Helper to clean database and session files before tests
   const cleanDatabase = () => {
     [testDbPath, `${testDbPath}-shm`, `${testDbPath}-wal`].forEach((file) => {
       if (existsSync(file)) {
@@ -23,11 +23,40 @@ describe("SessionManager Integration", () => {
     });
   };
 
+  // Helper to clean up orphaned session files
+  const cleanSessionFiles = () => {
+    const { rmSync } = require("fs");
+    const { join } = require("path");
+    const { homedir } = require("os");
+
+    const teams = ["iris-mcp", "team-alpha", "team-beta", "team-delta", "team-gamma"];
+
+    for (const team of teams) {
+      // Construct the escaped path for each team
+      const teamPath = join(
+        homedir(),
+        ".claude",
+        "projects",
+        `-Users-jenova-projects-jenova-marie-iris-mcp${team === "iris-mcp" ? "" : `-teams-${team}`}`,
+      );
+
+      // Remove all session files in this team's directory
+      try {
+        if (existsSync(teamPath)) {
+          rmSync(teamPath, { recursive: true, force: true });
+        }
+      } catch (error) {
+        // Ignore errors, directory might not exist
+      }
+    }
+  };
+
   afterEach(() => {
     if (manager) {
       manager.close();
     }
     cleanDatabase();
+    cleanSessionFiles();
   });
 
   // Tests that spawn claude processes

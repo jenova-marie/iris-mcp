@@ -59,7 +59,7 @@ describe("SessionManager", () => {
       },
     };
 
-    manager = new SessionManager(testConfig, testDbPath);
+    manager = new SessionManager(testConfig, testDbPath, true); // Skip actual session file init in tests
   });
 
   afterEach(() => {
@@ -103,10 +103,10 @@ describe("SessionManager", () => {
         },
       };
 
-      const invalidManager = new SessionManager(invalidConfig, testDbPath);
+      const invalidManager = new SessionManager(invalidConfig, testDbPath, true); // Skip actual session file init in tests
 
       await expect(invalidManager.initialize()).rejects.toThrow(
-        "Invalid project path",
+        "Project path does not exist",
       );
 
       invalidManager.close();
@@ -279,10 +279,12 @@ describe("SessionManager", () => {
       await manager.initialize();
     });
 
-    it("should return empty array when no sessions", () => {
+    it("should return pre-initialized sessions after initialization", () => {
       const sessions = manager.listSessions();
 
-      expect(sessions).toEqual([]);
+      // After initialization, there should be sessions for each team (created during pre-initialization)
+      expect(sessions).toHaveLength(3); // One for each team (team-a, team-b, team-c)
+      expect(sessions.every(s => s.fromTeam === null)).toBe(true); // All pre-initialized from external
     });
 
     it("should list all sessions", async () => {
@@ -292,7 +294,8 @@ describe("SessionManager", () => {
 
       const sessions = manager.listSessions();
 
-      expect(sessions).toHaveLength(3);
+      // 3 pre-initialized + 3 new = 6 total
+      expect(sessions).toHaveLength(6);
     });
 
     it("should filter by fromTeam", async () => {
@@ -313,7 +316,8 @@ describe("SessionManager", () => {
 
       const sessions = manager.listSessions({ toTeam: "team-b" });
 
-      expect(sessions).toHaveLength(2);
+      // 1 pre-initialized (null -> team-b) + 2 created = 3 total
+      expect(sessions).toHaveLength(3);
       expect(sessions.every((s) => s.toTeam === "team-b")).toBe(true);
     });
   });
@@ -397,8 +401,9 @@ describe("SessionManager", () => {
 
       const stats = manager.getStats();
 
-      expect(stats.total).toBe(3);
-      expect(stats.active).toBe(3);
+      // 3 pre-initialized + 3 created = 6 total
+      expect(stats.total).toBe(6);
+      expect(stats.active).toBe(6);
       expect(stats.totalMessages).toBe(10);
     });
   });
@@ -420,7 +425,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const testManager = new SessionManager(configWithBoth, testDbPath);
+      const testManager = new SessionManager(configWithBoth, testDbPath, true); // Skip session file init in tests
 
       await expect(testManager.initialize()).resolves.not.toThrow();
 
@@ -443,7 +448,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const testManager = new SessionManager(configWithPath, testDbPath);
+      const testManager = new SessionManager(configWithPath, testDbPath, true); // Skip session file init in tests
 
       await expect(testManager.initialize()).resolves.not.toThrow();
 

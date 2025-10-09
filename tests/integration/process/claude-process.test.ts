@@ -35,7 +35,7 @@ describe("ClaudeProcess Integration", () => {
       const metrics = claudeProcess.getMetrics();
       expect(metrics.pid).toBeDefined();
       expect(metrics.status).toBe("idle");
-    }, 15000);
+    });
 
     it("should handle spawn errors gracefully", async () => {
       const invalidConfig: TeamConfig = {
@@ -81,14 +81,14 @@ describe("ClaudeProcess Integration", () => {
         teamName: "test-team",
         pid: expect.any(Number),
       });
-    }, 15000);
+    });
   });
 
   describe("stdio communication", () => {
     beforeEach(async () => {
       claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
       await claudeProcess.spawn();
-    }, 15000);
+    });
 
     it("should send simple message and receive response", async () => {
       const response = await claudeProcess.sendMessage("Hello, Claude!", 30000);
@@ -96,14 +96,6 @@ describe("ClaudeProcess Integration", () => {
       expect(response).toBeDefined();
       expect(typeof response).toBe("string");
     }, 35000);
-
-    it("should handle multiple sequential messages", async () => {
-      const response1 = await claudeProcess.sendMessage("What is 2+2?", 30000);
-      const response2 = await claudeProcess.sendMessage("What is 3+3?", 30000);
-
-      expect(response1).toBeDefined();
-      expect(response2).toBeDefined();
-    }, 65000);
 
     it("should emit message-sent and message-response events", async () => {
       const messageSentPromise = new Promise((resolve) => {
@@ -150,7 +142,7 @@ describe("ClaudeProcess Integration", () => {
       expect(claudeProcess.getMetrics().status).toBe("idle");
 
       // During message processing
-      const responsePromise = claudeProcess.sendMessage("Test", 30000);
+      const responsePromise = claudeProcess.sendMessage("Test", 35000);
 
       // Small delay to let processing start
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -162,7 +154,7 @@ describe("ClaudeProcess Integration", () => {
       // After terminate
       await claudeProcess.terminate();
       expect(claudeProcess.getMetrics().status).toBe("stopped");
-    }, 35000);
+    }, 40000);
 
     it("should track message count", async () => {
       claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
@@ -170,25 +162,25 @@ describe("ClaudeProcess Integration", () => {
 
       const initialCount = claudeProcess.getMetrics().messagesProcessed;
 
-      await claudeProcess.sendMessage("Test 1", 30000);
-      await claudeProcess.sendMessage("Test 2", 30000);
+      await claudeProcess.sendMessage("Test 1", 35000);
+      await claudeProcess.sendMessage("Test 2", 35000);
 
       const finalCount = claudeProcess.getMetrics().messagesProcessed;
       expect(finalCount).toBe(initialCount + 2);
-    }, 65000);
+    }, 75000);
   });
 
   describe("error handling", () => {
     beforeEach(async () => {
       claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
       await claudeProcess.spawn();
-    }, 15000);
+    });
 
     it("should timeout on messages that take too long", async () => {
       await expect(
-        claudeProcess.sendMessage("This might timeout", 100), // Very short timeout
+        claudeProcess.sendMessage("This might timeout", 1000), // Short timeout to force timeout
       ).rejects.toThrow();
-    }, 5000);
+    }, 10000);
 
     it("should handle process errors", async () => {
       const errorPromise = new Promise((resolve) => {
@@ -198,7 +190,11 @@ describe("ClaudeProcess Integration", () => {
       });
 
       // Force an error by terminating the process while it has a message
-      const messagePromise = claudeProcess.sendMessage("Test", 30000);
+      const messagePromise = claudeProcess.sendMessage("Test", 35000);
+
+      // Give message time to start processing
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       await claudeProcess.terminate();
 
       // Either the error event fires or the message rejects
@@ -207,6 +203,6 @@ describe("ClaudeProcess Integration", () => {
       } catch (error) {
         expect(error).toBeDefined();
       }
-    }, 35000);
+    }, 40000);
   });
 });

@@ -1,17 +1,22 @@
-# CLAUDE.md - Test Team
+# CLAUDE.md - Team Test
 
-This file provides guidance to Claude Code (claude.ai/code) when working in the test-team directory.
+This file provides guidance to Claude Code (claude.ai/code) when working in the team-test directory.
 
-# Iris MCP Test Team
+# Iris MCP Team Test
 
-This is the **test-team** team configured in the Iris MCP server for testing cross-project Claude coordination functionality.
+This is the **team-test** team configured in the Iris MCP server for testing cross-project Claude coordination functionality.
 
-## Identity
+## Team Identity
 
-- **Team Name**: `test-team`
+This Claude instance represents the **team-test** team.
+
+When using Iris MCP tools (`teams_ask`, `teams_send_message`, `teams_notify`),
+always set `fromTeam: "team-test"` to identify yourself in inter-team communication.
+
+- **Team Name**: `team-test`
 - **Purpose**: Testing and validation target for Iris MCP communication tools
-- **Project Path**: `/Users/jenova/projects/jenova-marie/iris-mcp/tests/test-team`
-- **Configuration**: Defined in `../../teams.json` as "test-team"
+- **Project Path**: `/Users/jenova/projects/jenova-marie/iris-mcp/tests/team-test`
+- **Configuration**: Defined in `../../teams.json` as "team-test"
 - **Status**: Testing environment with `skipPermissions: true` enabled
 
 ## Role in Iris MCP Ecosystem
@@ -127,13 +132,13 @@ When **other teams contact you**, you should:
 ### Example Response Pattern
 
 ```
-User (in iris-mcp team): "Ask test-team if they can receive messages"
-Claude (iris-mcp): *calls teams_ask("test-team", "Can you receive messages?")*
+User (in iris-mcp team): "Ask team-test if they can receive messages"
+Claude (iris-mcp): *calls teams_ask("team-test", "Can you receive messages?")*
 
 You receive: "Can you receive messages?"
 You respond: "Yes! Message received successfully via Iris MCP stdio streaming.
-             Process pool is functioning correctly. I'm running in test-team
-             directory at /Users/jenova/projects/jenova-marie/iris-mcp/tests/test-team"
+             Process pool is functioning correctly. I'm running in team-test
+             directory at /Users/jenova/projects/jenova-marie/iris-mcp/tests/team-test"
 ```
 
 ## Local Context & Files
@@ -211,7 +216,7 @@ pnpm build
 pnpm inspector
 
 # In browser at localhost:5173
-# Call: teams_ask("test-team", "Are you receiving this message?")
+# Call: teams_ask("team-test", "Are you receiving this message?")
 ```
 
 To test from Claude Code CLI:
@@ -221,7 +226,7 @@ To test from Claude Code CLI:
 claude mcp add iris --scope user -- node /path/to/iris-mcp/dist/index.js
 
 # In any project with Iris MCP enabled
-# Ask Claude: "Using Iris MCP, ask team test-team about their purpose"
+# Ask Claude: "Using Iris MCP, ask team team-test about their purpose"
 ```
 
 ## Important Notes
@@ -236,7 +241,7 @@ claude mcp add iris --scope user -- node /path/to/iris-mcp/dist/index.js
 
 If communication fails:
 
-1. **Check teams.json**: Verify "test-team" is configured correctly
+1. **Check teams.json**: Verify "team-test" is configured correctly
 2. **Check process pool**: Use `teams_get_status` to see if your process is active
 3. **Check logs**: All logs go to stderr in structured JSON format
 4. **Check health**: Unhealthy processes are auto-restarted

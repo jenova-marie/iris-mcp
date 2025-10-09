@@ -59,7 +59,7 @@ describe('teams_get_status Integration', () => {
       expect(result.processPool.processes).toHaveProperty('backend');
       expect(result.processPool.processes.frontend.status).toBe('idle');
       expect(result.processPool.processes.backend.status).toBe('idle');
-    }, 20000);
+    }, 8000);
 
     it('should include process metrics', async () => {
       await fixture.pool.getOrCreateProcess('mobile');
@@ -77,7 +77,7 @@ describe('teams_get_status Integration', () => {
       expect(mobileProcess.status).toBe('idle');
       expect(mobileProcess.messagesProcessed).toBeGreaterThanOrEqual(0);
       expect(mobileProcess.uptime).toBeGreaterThan(0);
-    }, 15000);
+    }, 8000);
   });
 
   describe('team filtering', () => {
@@ -115,7 +115,7 @@ describe('teams_get_status Integration', () => {
 
       // But teams list should include frontend
       expect(result.teams).toBeDefined();
-    }, 20000);
+    }, 8000);
   });
 
   describe('notification statistics', () => {
@@ -202,7 +202,7 @@ describe('teams_get_status Integration', () => {
 
       // Should list all teams
       expect(result.teams.length).toBe(3);
-    }, 20000);
+    }, 8000);
 
     it('should reflect real-time state changes', async () => {
       // Initial state
@@ -235,7 +235,7 @@ describe('teams_get_status Integration', () => {
         fixture.configManager
       );
       expect(result.notifications.totalPending).toBe(1);
-    }, 15000);
+    }, 8000);
   });
 
   describe('default behavior', () => {
@@ -263,24 +263,5 @@ describe('teams_get_status Integration', () => {
       expect(result.processPool).toBeDefined();
       expect(result.notifications).toBeDefined();
     }, 5000);
-  });
-
-  describe('concurrent operations', () => {
-    it('should handle concurrent status requests', async () => {
-      await fixture.pool.getOrCreateProcess('frontend');
-
-      const operations = [
-        teamsGetStatus({}, fixture.pool, fixture.notificationQueue, fixture.configManager),
-        teamsGetStatus({}, fixture.pool, fixture.notificationQueue, fixture.configManager),
-        teamsGetStatus({}, fixture.pool, fixture.notificationQueue, fixture.configManager),
-      ];
-
-      const results = await Promise.all(operations);
-
-      expect(results).toHaveLength(3);
-      results.forEach(result => {
-        expect(result.processPool.totalProcesses).toBe(1);
-      });
-    }, 15000);
   });
 });

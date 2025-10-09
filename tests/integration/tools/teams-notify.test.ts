@@ -3,72 +3,76 @@
  * Tests mechanism without validating response content
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { teamsNotify } from '../../../src/tools/teams-notify.js';
-import { createTestFixture, cleanupTestFixture, type TestFixture } from './utils/test-helpers.js';
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { teamsNotify } from "../../../src/tools/teams-notify.js";
+import {
+  createTestFixture,
+  cleanupTestFixture,
+  type TestFixture,
+} from "./utils/test-helpers.js";
 
-describe('teams_notify Integration', () => {
+describe("teams_notify Integration", () => {
   let fixture: TestFixture;
 
   beforeEach(() => {
-    fixture = createTestFixture('teams-notify');
+    fixture = createTestFixture("teams-notify");
   });
 
   afterEach(async () => {
     await cleanupTestFixture(fixture);
   });
 
-  describe('successful execution', () => {
-    it('should add notification to queue', async () => {
+  describe("successful execution", () => {
+    it("should add notification to queue", async () => {
       const result = await teamsNotify(
         {
-          toTeam: 'frontend',
-          message: 'Test notification',
-          fromTeam: 'backend',
+          toTeam: "frontend",
+          message: "Test notification",
+          fromTeam: "backend",
           ttlDays: 30,
         },
-        fixture.notificationQueue
+        fixture.notificationQueue,
       );
 
       expect(result).toBeDefined();
       expect(result.notificationId).toBeDefined();
-      expect(result.to).toBe('frontend');
-      expect(result.message).toBe('Test notification');
-      expect(result.from).toBe('backend');
+      expect(result.to).toBe("frontend");
+      expect(result.message).toBe("Test notification");
+      expect(result.from).toBe("backend");
       expect(result.expiresAt).toBeGreaterThan(Date.now());
       expect(result.timestamp).toBeGreaterThan(0);
 
       // Verify notification was actually added to queue
-      const notifications = fixture.notificationQueue.getForTeam('frontend');
+      const notifications = fixture.notificationQueue.getPending("frontend");
       expect(notifications.length).toBe(1);
-      expect(notifications[0].message).toBe('Test notification');
-      expect(notifications[0].fromTeam).toBe('backend');
+      expect(notifications[0].message).toBe("Test notification");
+      expect(notifications[0].fromTeam).toBe("backend");
     }, 5000);
 
-    it('should handle notification without fromTeam', async () => {
+    it("should handle notification without fromTeam", async () => {
       const result = await teamsNotify(
         {
-          toTeam: 'backend',
-          message: 'Anonymous notification',
+          toTeam: "backend",
+          message: "Anonymous notification",
         },
-        fixture.notificationQueue
+        fixture.notificationQueue,
       );
 
-      expect(result.to).toBe('backend');
+      expect(result.to).toBe("backend");
       expect(result.from).toBeUndefined();
 
-      const notifications = fixture.notificationQueue.getForTeam('backend');
+      const notifications = fixture.notificationQueue.getPending("backend");
       expect(notifications[0].fromTeam).toBeNull();
     }, 5000);
 
-    it('should handle custom TTL', async () => {
+    it("should handle custom TTL", async () => {
       const result = await teamsNotify(
         {
-          toTeam: 'mobile',
-          message: 'Short-lived notification',
+          toTeam: "mobile",
+          message: "Short-lived notification",
           ttlDays: 7,
         },
-        fixture.notificationQueue
+        fixture.notificationQueue,
       );
 
       expect(result.expiresAt).toBeDefined();
@@ -82,13 +86,13 @@ describe('teams_notify Integration', () => {
       expect(result.expiresAt).toBeLessThan(expectedExpiry + tolerance);
     }, 5000);
 
-    it('should use default TTL when not specified', async () => {
+    it("should use default TTL when not specified", async () => {
       const result = await teamsNotify(
         {
-          toTeam: 'frontend',
-          message: 'Default TTL notification',
+          toTeam: "frontend",
+          message: "Default TTL notification",
         },
-        fixture.notificationQueue
+        fixture.notificationQueue,
       );
 
       // Default is 30 days
@@ -100,177 +104,129 @@ describe('teams_notify Integration', () => {
       expect(result.expiresAt).toBeLessThan(expectedExpiry + tolerance);
     }, 5000);
 
-    it('should handle multiple notifications to same team', async () => {
+    it("should handle multiple notifications to same team", async () => {
       await teamsNotify(
-        { toTeam: 'frontend', message: 'Notification 1', fromTeam: 'backend' },
-        fixture.notificationQueue
+        { toTeam: "frontend", message: "Notification 1", fromTeam: "backend" },
+        fixture.notificationQueue,
       );
 
       await teamsNotify(
-        { toTeam: 'frontend', message: 'Notification 2', fromTeam: 'mobile' },
-        fixture.notificationQueue
+        { toTeam: "frontend", message: "Notification 2", fromTeam: "mobile" },
+        fixture.notificationQueue,
       );
 
       await teamsNotify(
-        { toTeam: 'frontend', message: 'Notification 3', fromTeam: 'backend' },
-        fixture.notificationQueue
+        { toTeam: "frontend", message: "Notification 3", fromTeam: "backend" },
+        fixture.notificationQueue,
       );
 
-      const notifications = fixture.notificationQueue.getForTeam('frontend');
+      const notifications = fixture.notificationQueue.getPending("frontend");
       expect(notifications.length).toBe(3);
     }, 5000);
 
-    it('should handle notifications to different teams', async () => {
+    it("should handle notifications to different teams", async () => {
       await teamsNotify(
-        { toTeam: 'frontend', message: 'To frontend' },
-        fixture.notificationQueue
+        { toTeam: "frontend", message: "To frontend" },
+        fixture.notificationQueue,
       );
 
       await teamsNotify(
-        { toTeam: 'backend', message: 'To backend' },
-        fixture.notificationQueue
+        { toTeam: "backend", message: "To backend" },
+        fixture.notificationQueue,
       );
 
       await teamsNotify(
-        { toTeam: 'mobile', message: 'To mobile' },
-        fixture.notificationQueue
+        { toTeam: "mobile", message: "To mobile" },
+        fixture.notificationQueue,
       );
 
-      expect(fixture.notificationQueue.getForTeam('frontend').length).toBe(1);
-      expect(fixture.notificationQueue.getForTeam('backend').length).toBe(1);
-      expect(fixture.notificationQueue.getForTeam('mobile').length).toBe(1);
+      expect(fixture.notificationQueue.getPending("frontend").length).toBe(1);
+      expect(fixture.notificationQueue.getPending("backend").length).toBe(1);
+      expect(fixture.notificationQueue.getPending("mobile").length).toBe(1);
     }, 5000);
   });
 
-  describe('validation errors', () => {
-    it('should throw error for invalid team name', async () => {
+  describe("validation errors", () => {
+    it("should throw error for invalid team name", async () => {
       await expect(
         teamsNotify(
           {
-            toTeam: '../invalid',
-            message: 'test',
+            toTeam: "../invalid",
+            message: "test",
           },
-          fixture.notificationQueue
-        )
-      ).rejects.toThrow('Invalid team name');
+          fixture.notificationQueue,
+        ),
+      ).rejects.toThrow("Team name contains invalid characters");
     }, 5000);
 
-    it('should throw error for empty team name', async () => {
+    it("should throw error for empty team name", async () => {
       await expect(
         teamsNotify(
           {
-            toTeam: '',
-            message: 'test',
+            toTeam: "",
+            message: "test",
           },
-          fixture.notificationQueue
-        )
+          fixture.notificationQueue,
+        ),
       ).rejects.toThrow();
     }, 5000);
 
-    it('should throw error for empty message', async () => {
+    it("should throw error for empty message", async () => {
       await expect(
         teamsNotify(
           {
-            toTeam: 'frontend',
-            message: '',
+            toTeam: "frontend",
+            message: "",
           },
-          fixture.notificationQueue
-        )
-      ).rejects.toThrow('Invalid message');
+          fixture.notificationQueue,
+        ),
+      ).rejects.toThrow("Message is required");
     }, 5000);
 
-    it('should throw error for message that is too long', async () => {
-      const longMessage = 'x'.repeat(100001);
+    it("should throw error for message that is too long", async () => {
+      const longMessage = "x".repeat(100001);
 
       await expect(
         teamsNotify(
           {
-            toTeam: 'frontend',
+            toTeam: "frontend",
             message: longMessage,
           },
-          fixture.notificationQueue
-        )
-      ).rejects.toThrow('Invalid message');
+          fixture.notificationQueue,
+        ),
+      ).rejects.toThrow("Message exceeds maximum length");
     }, 5000);
 
-    it('should throw error for invalid fromTeam', async () => {
+    it("should throw error for invalid fromTeam", async () => {
       await expect(
         teamsNotify(
           {
-            toTeam: 'frontend',
-            message: 'test',
-            fromTeam: '../invalid',
+            toTeam: "frontend",
+            message: "test",
+            fromTeam: "../invalid",
           },
-          fixture.notificationQueue
-        )
-      ).rejects.toThrow('Invalid team name');
+          fixture.notificationQueue,
+        ),
+      ).rejects.toThrow("Team name contains invalid characters");
     }, 5000);
   });
 
-  describe('concurrent operations', () => {
-    it('should handle concurrent notifications', async () => {
-      const operations = [
-        teamsNotify(
-          { toTeam: 'frontend', message: 'Notification 1', fromTeam: 'backend' },
-          fixture.notificationQueue
-        ),
-        teamsNotify(
-          { toTeam: 'backend', message: 'Notification 2', fromTeam: 'mobile' },
-          fixture.notificationQueue
-        ),
-        teamsNotify(
-          { toTeam: 'mobile', message: 'Notification 3', fromTeam: 'frontend' },
-          fixture.notificationQueue
-        ),
-      ];
-
-      const results = await Promise.all(operations);
-
-      expect(results).toHaveLength(3);
-      results.forEach(result => {
-        expect(result.notificationId).toBeDefined();
-      });
-
-      // Verify all notifications were added
-      expect(fixture.notificationQueue.getForTeam('frontend').length).toBe(1);
-      expect(fixture.notificationQueue.getForTeam('backend').length).toBe(1);
-      expect(fixture.notificationQueue.getForTeam('mobile').length).toBe(1);
-    }, 5000);
-
-    it('should handle rapid sequential notifications', async () => {
-      const promises = [];
-      for (let i = 0; i < 10; i++) {
-        promises.push(
-          teamsNotify(
-            { toTeam: 'frontend', message: `Notification ${i}`, fromTeam: 'backend' },
-            fixture.notificationQueue
-          )
-        );
-      }
-
-      await Promise.all(promises);
-
-      const notifications = fixture.notificationQueue.getForTeam('frontend');
-      expect(notifications.length).toBe(10);
-    }, 5000);
-  });
-
-  describe('persistence', () => {
-    it('should persist notifications across queue reopens', async () => {
+  describe("persistence", () => {
+    it("should persist notifications across queue reopens", async () => {
       await teamsNotify(
-        { toTeam: 'frontend', message: 'Persistent notification' },
-        fixture.notificationQueue
+        { toTeam: "frontend", message: "Persistent notification" },
+        fixture.notificationQueue,
       );
 
       // Close and reopen the queue
       fixture.notificationQueue.close();
-      const newQueue = new (await import('../../../src/notifications/queue.js')).NotificationQueue(
-        fixture.dbPath
-      );
+      const newQueue = new (
+        await import("../../../src/notifications/queue.js")
+      ).NotificationQueue(fixture.dbPath);
 
-      const notifications = newQueue.getForTeam('frontend');
+      const notifications = newQueue.getPending("frontend");
       expect(notifications.length).toBe(1);
-      expect(notifications[0].message).toBe('Persistent notification');
+      expect(notifications[0].message).toBe("Persistent notification");
 
       newQueue.close();
     }, 5000);

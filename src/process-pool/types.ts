@@ -50,4 +50,5 @@ export interface ProcessPoolStatus {
   totalProcesses: number;
   maxProcesses: number;
   processes: Record<string, ProcessMetrics>;
+  activeSessions: number;
 }

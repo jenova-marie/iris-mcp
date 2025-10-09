@@ -33,6 +33,7 @@ export class ClaudeProcess extends EventEmitter {
   private initPromise: Promise<void> | null = null;
   private initResolve: (() => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
+  private debugLogPath: string | null = null;
 
   constructor(
     private teamName: string,
@@ -42,6 +43,13 @@ export class ClaudeProcess extends EventEmitter {
   ) {
     super();
     this.logger = new Logger(`process:${teamName}`);
+  }
+
+  /**
+   * Get debug log path if debug mode was enabled
+   */
+  getDebugLogPath(): string | null {
+    return this.debugLogPath;
   }
 
   /**
@@ -69,9 +77,15 @@ export class ClaudeProcess extends EventEmitter {
       // See docs/HEADLESS_CLAUDE.md and docs/SESSION.md for reference
       const args: string[] = [];
 
-      // Only use --resume if we have a sessionId
-      if (this.sessionId) {
+      // Only use --resume if we have a sessionId and not in test mode
+      // In test mode, session files don't exist so we can't resume
+      if (this.sessionId && process.env.NODE_ENV !== "test") {
         args.push("--resume", this.sessionId);
+      }
+
+      // Enable debug mode in test environment for better diagnostics
+      if (process.env.NODE_ENV === "test" || process.env.DEBUG) {
+        args.push("--debug");
       }
 
       args.push(
@@ -80,7 +94,7 @@ export class ClaudeProcess extends EventEmitter {
         "--input-format", // Accept JSON messages via stdin
         "stream-json",
         "--output-format", // Emit JSON messages via stdout
-        "stream-json"
+        "stream-json",
       );
 
       if (this.teamConfig.skipPermissions) {
@@ -116,7 +130,19 @@ export class ClaudeProcess extends EventEmitter {
       // Handle stderr (logs from Claude)
       if (this.process.stderr) {
         this.process.stderr.on("data", (data) => {
-          this.logger.debug("Claude stderr", { output: data.toString() });
+          const output = data.toString();
+
+          // Capture debug log path from stderr
+          // Claude outputs: "Logging to: /path/to/debug.txt"
+          const logPathMatch = output.match(/Logging to: (.+)/);
+          if (logPathMatch) {
+            this.debugLogPath = logPathMatch[1].trim();
+            this.logger.info("Claude debug logs available", {
+              path: this.debugLogPath,
+            });
+          }
+
+          this.logger.debug("Claude stderr", { output });
         });
       }
 
@@ -246,7 +272,7 @@ export class ClaudeProcess extends EventEmitter {
           this.logger.warn("Force killing process");
           this.process.kill("SIGKILL");
         }
-      }, 5000);
+      });
 
       this.process.once("exit", () => {
         clearTimeout(killTimer);

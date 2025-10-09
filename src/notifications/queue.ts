@@ -234,9 +234,9 @@ export class NotificationQueue {
     const stmt = this.db.prepare(`
       SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END) as read,
-        SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expired
+        COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
+        COALESCE(SUM(CASE WHEN status = 'read' THEN 1 ELSE 0 END), 0) as read,
+        COALESCE(SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END), 0) as expired
       FROM notifications
     `);
 

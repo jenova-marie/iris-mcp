@@ -1408,7 +1408,7 @@ describe('ClaudeProcessPool', () => {
     });
 
     pool.setTeamConfigs({
-      'test-team': {
+      'team-alpha': {
         path: '/tmp/test-project',
         description: 'Test team',
         skipPermissions: true
@@ -1421,14 +1421,14 @@ describe('ClaudeProcessPool', () => {
   });
 
   it('should create a new process', async () => {
-    const process = await pool.getOrCreateProcess('test-team');
+    const process = await pool.getOrCreateProcess('team-alpha');
     expect(process).toBeDefined();
     expect(process.isHealthy()).toBe(true);
   });
 
   it('should reuse existing process', async () => {
-    const process1 = await pool.getOrCreateProcess('test-team');
-    const process2 = await pool.getOrCreateProcess('test-team');
+    const process1 = await pool.getOrCreateProcess('team-alpha');
+    const process2 = await pool.getOrCreateProcess('team-alpha');
     expect(process1).toBe(process2);
   });
 

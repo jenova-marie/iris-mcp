@@ -84,24 +84,52 @@ On MCP server startup, `SessionManager` performs:
 
 **IMPORTANT**: The `project` property in `teams.json` is **case-sensitive** and must match the actual filesystem path exactly.
 
-#### Phase 2: Session Creation
+#### Phase 2: Session Initialization (CRITICAL)
+
+**Sessions MUST be pre-created before they can be resumed.** This is a two-step process:
+
+##### Step 1: Create Session File
 
 When a new `(fromTeam, toTeam)` pair is encountered:
 
 1. **Generate UUID v4** for the session
-2. **Pre-create the session** using:
+2. **Create the session** by spawning Claude with `--session-id`:
    ```bash
    cd {toTeam.project}
-   claude --session-id {uuid} --print "Initial session creation"
+   claude --session-id {uuid} --print --input-format stream-json --output-format stream-json
    ```
    **Critical**: `--session-id <uuid>` creates a NEW session but will NOT resume an existing one
-3. **Store in database** with metadata (created_at, last_used_at)
-4. **Verify session file created** in `~/.claude/projects/{escaped-path}/{uuid}.jsonl`
 
-**Why pre-create?**
-- Improves responsiveness on first request (no creation latency)
-- Validates session setup before actual use
-- Ensures session file exists before `--resume` attempts
+3. **Send initialization ping** immediately after spawn to create conversation:
+   ```json
+   {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Session initialized"}]}}
+   ```
+
+4. **Wait for response** from Claude (init message + response to ping)
+
+5. **Exit the process** cleanly
+
+6. **Verify session file created** in `~/.claude/projects/{escaped-path}/{uuid}.jsonl`
+
+7. **Store in database** with metadata (created_at, last_used_at)
+
+##### Step 2: At Startup - Validate All Sessions
+
+During `SessionManager.initialize()` (BEFORE any processes spawn):
+
+1. **Load all teams** from `teams.json`
+2. **For each team**:
+   - Check if session exists in database for this team
+   - If exists: Verify session file exists in `~/.claude/projects/{escaped-path}/{sessionId}.jsonl`
+   - If file missing: Re-initialize session using Step 1
+   - If no session in database: Generate new UUID and initialize using Step 1
+3. **Wait for all sessions to be ready** before allowing MCP tools or tests to proceed
+
+**Why this is critical:**
+- `claude --resume` will FAIL if session doesn't exist
+- Session file is only created when first conversation message is sent
+- Tests and MCP startup MUST wait for all sessions to be initialized
+- This prevents the "exit code 1" crash we were seeing
 
 #### Phase 3: Session Usage
 
@@ -237,22 +265,32 @@ The `teams.json` schema now requires a `project` property:
    - CRUD operations for session records
    - Query sessions by team pairs
 
-2. **Session Discovery**:
+2. **Session Initialization** (CRITICAL - Runs at startup):
+   - For each team in `teams.json`, ensure a session exists
+   - Verify session file exists in `~/.claude/projects/{escaped-path}/{uuid}.jsonl`
+   - If missing: Create session using `claude --session-id {uuid}` + ping
+   - MUST complete BEFORE any ClaudeProcess can spawn with `--resume`
+   - Returns Promise that resolves when all sessions are ready
+
+3. **Session Discovery**:
    - Scan `~/.claude/projects/` for existing sessions
    - Match session files to configured teams
    - Sync database with filesystem state
+   - Recover orphaned sessions (files without database entries)
 
-3. **Session Creation**:
+4. **Session Creation**:
    - Generate UUIDs for new team pairs
-   - Execute `claude --session-id <uuid>` to pre-create sessions
+   - Execute `claude --session-id <uuid>` to create sessions
+   - Send initialization ping to create conversation
+   - Wait for response and exit cleanly
    - Validate session file creation
 
-4. **Session Retrieval**:
+5. **Session Retrieval**:
    - Lookup session ID for `(fromTeam, toTeam)` pairs
-   - Create session on-demand if missing
+   - Create session on-demand if missing (async operation)
    - Return session metadata
 
-5. **Metadata Tracking**:
+6. **Metadata Tracking**:
    - Update `last_used_at` on each use
    - Increment `message_count` after messages
    - Track session health/status
@@ -261,12 +299,18 @@ The `teams.json` schema now requires a `project` property:
 
 ```typescript
 interface SessionManager {
-  // Initialization
+  // Initialization - MUST complete before any process spawns
   initialize(): Promise<void>;
+
+  // Ensures session exists for team (creates if missing)
+  ensureTeamSession(teamName: string): Promise<SessionInfo>;
 
   // Session lifecycle
   getOrCreateSession(fromTeam: string | null, toTeam: string): Promise<SessionInfo>;
   createSession(fromTeam: string | null, toTeam: string): Promise<SessionInfo>;
+
+  // Internal: Initialize a new session file using claude --session-id
+  initializeSessionFile(teamName: string, sessionId: string): Promise<void>;
 
   // Session queries
   getSession(fromTeam: string | null, toTeam: string): Promise<SessionInfo | null>;

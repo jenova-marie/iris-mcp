@@ -165,14 +165,13 @@ export class SessionManager {
           logger.info("Initial session created", { teamName, sessionId });
         }
       } catch (error) {
-        logger.error("Failed to initialize session for team", error);
-
-        // Don't fail entire initialization if one team fails
-        // This allows other teams to continue working
-        logger.warn("Continuing initialization despite error", {
+        logger.error("Failed to initialize session for team", {
           teamName,
-          errorMessage: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error),
         });
+        throw new ConfigurationError(
+          `Failed to initialize team '${teamName}': ${error instanceof Error ? error.message : String(error)}`,
+        );
       }
     }
 
@@ -228,8 +227,11 @@ export class SessionManager {
         "ping", // REQUIRED Add a ping command to create session conversation
       ];
 
+      // Use absolute path to claude binary to avoid PATH resolution issues
+      const claudePath = "/Users/jenova/.asdf/installs/nodejs/22.16.0/bin/claude";
+
       // Log the exact command being run
-      const command = `claude ${args.join(" ")}`;
+      const command = `${claudePath} ${args.join(" ")}`;
       logger.info("Spawning claude process", {
         teamName,
         sessionId,
@@ -238,10 +240,14 @@ export class SessionManager {
       });
 
       // Spawn Claude
-      const claudeProcess = spawn("claude", args, {
+      const claudeProcess = spawn(claudePath, args, {
         cwd: projectPath,
         stdio: ["pipe", "pipe", "pipe"],
+        env: process.env, // Inherit environment
       });
+
+      // Close stdin immediately - we're not sending input, just need EOF
+      claudeProcess.stdin!.end();
 
       // Capture any errors
       let spawnError: Error | null = null;
@@ -350,7 +356,7 @@ export class SessionManager {
                 teamName,
                 sessionId,
                 code,
-                command: `claude ${args.join(" ")}`,
+                command: `${claudePath} ${args.join(" ")}`,
                 cwd: projectPath,
                 stdoutLength: stdoutData.length,
                 stderrLength: stderrData.length,
@@ -369,6 +375,30 @@ export class SessionManager {
               .join("\n");
 
             reject(new ProcessError(errorMsg, teamName));
+          } else if (!stdoutData.toLowerCase().includes("pong")) {
+            // Verify we got the expected "pong" response to our "ping"
+            logger.error("Session initialized but did not receive 'pong' response", {
+              teamName,
+              sessionId,
+              code,
+              command: `${claudePath} ${args.join(" ")}`,
+              cwd: projectPath,
+              stdoutLength: stdoutData.length,
+              stderrLength: stderrData.length,
+              stdout: stdoutData,
+              stderr: stderrData,
+              debugLogPath,
+            });
+
+            const errorMsg = [
+              "Session initialized but did not receive expected 'pong' response",
+              `Received: ${stdoutData.substring(0, 200)}`,
+              debugLogPath ? `Debug logs: ${debugLogPath}` : null,
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+            reject(new ProcessError(errorMsg, teamName));
           } else {
             logger.info(
               "Session initialization process completed successfully",
@@ -378,6 +408,7 @@ export class SessionManager {
                 code,
                 stdoutLength: stdoutData.length,
                 stderrLength: stderrData.length,
+                response: stdoutData.substring(0, 100),
               },
             );
             resolve();

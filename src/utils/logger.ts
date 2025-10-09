@@ -32,13 +32,36 @@ export class Logger {
 
   error(message: string, error?: any): void {
     const errorMeta = error
-      ? {
-          error: error?.message || error,
-          stack: error?.stack,
-        }
+      ? this.formatError(error)
       : undefined;
 
     this.log('error', message, errorMeta);
+  }
+
+  private formatError(error: any): any {
+    if (!error) return undefined;
+
+    // In DEBUG mode, include everything
+    const isDebug = process.env.DEBUG || process.env.LOG_LEVEL === 'debug';
+
+    if (error instanceof Error) {
+      return {
+        error: error.message,
+        stack: isDebug ? error.stack : error.stack?.split('\n').slice(0, 3).join('\n'),
+        name: error.name,
+        ...(isDebug && error.cause ? { cause: this.formatError(error.cause) } : {}),
+      };
+    }
+
+    // Plain object - return as-is in DEBUG, stringify otherwise
+    if (typeof error === 'object') {
+      if (isDebug) {
+        return { error };
+      }
+      return { error: JSON.stringify(error).substring(0, 500) };
+    }
+
+    return { error: String(error) };
   }
 
   private log(level: LogLevel, message: string, meta?: any): void {

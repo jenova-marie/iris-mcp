@@ -96,18 +96,16 @@ When a new `(fromTeam, toTeam)` pair is encountered:
 2. **Create the session** by spawning Claude with `--session-id`:
    ```bash
    cd {toTeam.project}
-   claude --session-id {uuid} --print --input-format stream-json --output-format stream-json
+   claude --session-id {uuid} --print ping
    ```
    **Critical**: `--session-id <uuid>` creates a NEW session but will NOT resume an existing one
 
-3. **Send initialization ping** immediately after spawn to create conversation:
-   ```json
-   {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Session initialized"}]}}
-   ```
+   **Note**: Session initialization uses simple command-line message (`ping`), NOT stream-json format.
+   Stream-json is only used when resuming sessions with `--resume`.
 
-4. **Wait for response** from Claude (init message + response to ping)
+3. **Wait for response** from Claude
 
-5. **Exit the process** cleanly
+4. **Exit the process** cleanly
 
 6. **Verify session file created** in `~/.claude/projects/{escaped-path}/{uuid}.jsonl`
 

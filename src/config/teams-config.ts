@@ -41,7 +41,15 @@ export class TeamsConfigManager {
 
   constructor(configPath?: string) {
     // Default to teams.json in project root
-    this.configPath = configPath || resolve(process.cwd(), 'teams.json');
+    // Use IRIS_CONFIG_PATH env var, or resolve relative to this module's directory
+    if (configPath) {
+      this.configPath = configPath;
+    } else if (process.env.IRIS_CONFIG_PATH) {
+      this.configPath = resolve(process.env.IRIS_CONFIG_PATH);
+    } else {
+      // Resolve relative to the dist directory (2 levels up from config/)
+      this.configPath = resolve(__dirname, '../../teams.json');
+    }
   }
 
   /**

@@ -2,14 +2,14 @@
  * Unit tests for teams configuration manager
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TeamsConfigManager } from '../../../src/config/teams-config.js';
-import { ConfigurationError } from '../../../src/utils/errors.js';
-import { writeFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import { ConfigurationError } from "../../../src/utils/errors.js";
+import { writeFileSync, unlinkSync, existsSync, mkdirSync } from "fs";
 
-describe('TeamsConfigManager', () => {
-  const testConfigPath = './test-teams-config.json';
-  const testDirPath = './test-project-dir';
+describe("TeamsConfigManager", () => {
+  const testConfigPath = "./team-alphas-config.json";
+  const testDirPath = "./test-project-dir";
 
   beforeEach(() => {
     // Create test project directory
@@ -34,19 +34,19 @@ describe('TeamsConfigManager', () => {
     teams: {
       frontend: {
         path: testDirPath,
-        description: 'Frontend team',
+        description: "Frontend team",
         skipPermissions: true,
-        color: '#61dafb',
+        color: "#61dafb",
       },
       backend: {
         path: testDirPath,
-        description: 'Backend team',
+        description: "Backend team",
       },
     },
   });
 
-  describe('load', () => {
-    it('should load valid configuration', () => {
+  describe("load", () => {
+    it("should load valid configuration", () => {
       const config = createValidConfig();
       writeFileSync(testConfigPath, JSON.stringify(config, null, 2));
 
@@ -57,15 +57,15 @@ describe('TeamsConfigManager', () => {
       expect(loaded.teams.frontend.path).toBe(testDirPath);
     });
 
-    it('should throw error when config file does not exist', () => {
-      const manager = new TeamsConfigManager('./non-existent.json');
+    it("should throw error when config file does not exist", () => {
+      const manager = new TeamsConfigManager("./non-existent.json");
 
       expect(() => manager.load()).toThrow(ConfigurationError);
       expect(() => manager.load()).toThrow(/not found/);
     });
 
-    it('should throw error for invalid JSON', () => {
-      writeFileSync(testConfigPath, '{ invalid json }');
+    it("should throw error for invalid JSON", () => {
+      writeFileSync(testConfigPath, "{ invalid json }");
 
       const manager = new TeamsConfigManager(testConfigPath);
 
@@ -73,7 +73,7 @@ describe('TeamsConfigManager', () => {
       expect(() => manager.load()).toThrow(/Invalid JSON/);
     });
 
-    it('should throw error for invalid schema', () => {
+    it("should throw error for invalid schema", () => {
       const invalidConfig = {
         settings: {
           idleTimeout: -1000, // Invalid: must be positive
@@ -91,7 +91,7 @@ describe('TeamsConfigManager', () => {
       expect(() => manager.load()).toThrow(/validation failed/);
     });
 
-    it('should validate maxProcesses range', () => {
+    it("should validate maxProcesses range", () => {
       const config = createValidConfig();
       config.settings.maxProcesses = 100; // Invalid: max is 50
 
@@ -102,9 +102,9 @@ describe('TeamsConfigManager', () => {
       expect(() => manager.load()).toThrow(ConfigurationError);
     });
 
-    it('should validate color format', () => {
+    it("should validate color format", () => {
       const config = createValidConfig();
-      config.teams.frontend.color = 'red'; // Invalid: must be hex
+      config.teams.frontend.color = "red"; // Invalid: must be hex
 
       writeFileSync(testConfigPath, JSON.stringify(config));
 
@@ -113,9 +113,9 @@ describe('TeamsConfigManager', () => {
       expect(() => manager.load()).toThrow(ConfigurationError);
     });
 
-    it('should warn when team path does not exist', () => {
+    it("should warn when team path does not exist", () => {
       const config = createValidConfig();
-      config.teams.backend.path = '/non/existent/path';
+      config.teams.backend.path = "/non/existent/path";
 
       writeFileSync(testConfigPath, JSON.stringify(config));
 
@@ -126,8 +126,8 @@ describe('TeamsConfigManager', () => {
     });
   });
 
-  describe('getConfig', () => {
-    it('should return loaded configuration', () => {
+  describe("getConfig", () => {
+    it("should return loaded configuration", () => {
       const config = createValidConfig();
       writeFileSync(testConfigPath, JSON.stringify(config));
 
@@ -139,7 +139,7 @@ describe('TeamsConfigManager', () => {
       expect(retrieved.settings.maxProcesses).toBe(10);
     });
 
-    it('should throw error when config not loaded', () => {
+    it("should throw error when config not loaded", () => {
       const manager = new TeamsConfigManager(testConfigPath);
 
       expect(() => manager.getConfig()).toThrow(ConfigurationError);
@@ -147,33 +147,33 @@ describe('TeamsConfigManager', () => {
     });
   });
 
-  describe('getTeamConfig', () => {
+  describe("getTeamConfig", () => {
     beforeEach(() => {
       const config = createValidConfig();
       writeFileSync(testConfigPath, JSON.stringify(config));
     });
 
-    it('should return team configuration', () => {
+    it("should return team configuration", () => {
       const manager = new TeamsConfigManager(testConfigPath);
       manager.load();
 
-      const team = manager.getTeamConfig('frontend');
+      const team = manager.getTeamConfig("frontend");
 
       expect(team).toBeDefined();
       expect(team?.path).toBe(testDirPath);
-      expect(team?.description).toBe('Frontend team');
+      expect(team?.description).toBe("Frontend team");
     });
 
-    it('should return null for non-existent team', () => {
+    it("should return null for non-existent team", () => {
       const manager = new TeamsConfigManager(testConfigPath);
       manager.load();
 
-      const team = manager.getTeamConfig('mobile');
+      const team = manager.getTeamConfig("mobile");
 
       expect(team).toBeNull();
     });
 
-    it('should use team-specific idleTimeout if provided', () => {
+    it("should use team-specific idleTimeout if provided", () => {
       const config = createValidConfig();
       config.teams.frontend.idleTimeout = 600000;
       writeFileSync(testConfigPath, JSON.stringify(config));
@@ -181,23 +181,23 @@ describe('TeamsConfigManager', () => {
       const manager = new TeamsConfigManager(testConfigPath);
       manager.load();
 
-      const team = manager.getTeamConfig('frontend');
+      const team = manager.getTeamConfig("frontend");
 
       expect(team?.idleTimeout).toBe(600000);
     });
 
-    it('should use global idleTimeout if team-specific not provided', () => {
+    it("should use global idleTimeout if team-specific not provided", () => {
       const manager = new TeamsConfigManager(testConfigPath);
       manager.load();
 
-      const team = manager.getTeamConfig('backend');
+      const team = manager.getTeamConfig("backend");
 
       expect(team?.idleTimeout).toBe(300000);
     });
   });
 
-  describe('getTeamNames', () => {
-    it('should return list of team names', () => {
+  describe("getTeamNames", () => {
+    it("should return list of team names", () => {
       const config = createValidConfig();
       writeFileSync(testConfigPath, JSON.stringify(config));
 
@@ -206,10 +206,10 @@ describe('TeamsConfigManager', () => {
 
       const teams = manager.getTeamNames();
 
-      expect(teams).toEqual(['frontend', 'backend']);
+      expect(teams).toEqual(["frontend", "backend"]);
     });
 
-    it('should return empty array when no teams configured', () => {
+    it("should return empty array when no teams configured", () => {
       const config = createValidConfig();
       config.teams = {};
       writeFileSync(testConfigPath, JSON.stringify(config));
@@ -223,8 +223,8 @@ describe('TeamsConfigManager', () => {
     });
   });
 
-  describe('watch', () => {
-    it('should watch configuration file for changes', (done) => {
+  describe("watch", () => {
+    it("should watch configuration file for changes", (done) => {
       const config = createValidConfig();
       writeFileSync(testConfigPath, JSON.stringify(config));
 
@@ -250,8 +250,8 @@ describe('TeamsConfigManager', () => {
     });
   });
 
-  describe('default config path', () => {
-    it('should use teams.json in cwd by default', () => {
+  describe("default config path", () => {
+    it("should use teams.json in cwd by default", () => {
       const manager = new TeamsConfigManager();
 
       // Since teams.json exists in the project root, load should succeed

@@ -30,7 +30,8 @@ describe('teamsSendMessage', () => {
     expect(mockProcessPool.sendMessage).toHaveBeenCalledWith(
       'backend',
       'Breaking change coming',
-      30000
+      30000,
+      'frontend' // fromTeam parameter
     );
 
     expect(result.from).toBe('frontend');
@@ -90,7 +91,8 @@ describe('teamsSendMessage', () => {
     expect(mockProcessPool.sendMessage).toHaveBeenCalledWith(
       'backend',
       'Test',
-      60000
+      60000,
+      null // fromTeam defaults to null when not provided
     );
   });
 

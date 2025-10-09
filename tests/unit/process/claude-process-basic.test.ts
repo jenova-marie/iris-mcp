@@ -16,7 +16,7 @@ describe("ClaudeProcess Unit Tests", () => {
   };
 
   beforeEach(() => {
-    claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
+    claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
   });
 
   describe("constructor", () => {

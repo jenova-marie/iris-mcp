@@ -29,7 +29,8 @@ describe('teamsAsk', () => {
     expect(mockProcessPool.sendMessage).toHaveBeenCalledWith(
       'backend',
       'What database do you use?',
-      30000
+      30000,
+      null // fromTeam defaults to null when not provided
     );
 
     expect(result.team).toBe('backend');
@@ -54,7 +55,8 @@ describe('teamsAsk', () => {
     expect(mockProcessPool.sendMessage).toHaveBeenCalledWith(
       'frontend',
       'What framework do you use?',
-      60000
+      60000,
+      null // fromTeam defaults to null when not provided
     );
   });
 

@@ -7,13 +7,14 @@ export interface ProcessPoolConfig {
   idleTimeout: number;
   maxProcesses: number;
   healthCheckInterval: number;
+  sessionInitTimeout: number;
 }
 
 export interface TeamConfig {
-  path?: string; // Deprecated, use 'project' instead
-  project?: string; // Preferred - case-sensitive absolute path
+  path: string; // Absolute path to team project directory
   description: string;
   idleTimeout?: number;
+  sessionInitTimeout?: number;
   skipPermissions?: boolean;
   color?: string;
 }

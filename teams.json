@@ -2,7 +2,8 @@
   "settings": {
     "idleTimeout": 300000,
     "maxProcesses": 10,
-    "healthCheckInterval": 30000
+    "healthCheckInterval": 30000,
+    "sessionInitTimeout": 20000
   },
   "teams": {
     "iris-mcp": {

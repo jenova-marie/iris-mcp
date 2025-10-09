@@ -30,6 +30,7 @@ describe("TeamsConfigManager", () => {
       idleTimeout: 300000,
       maxProcesses: 10,
       healthCheckInterval: 30000,
+      sessionInitTimeout: 20000,
     },
     teams: {
       frontend: {
@@ -79,6 +80,7 @@ describe("TeamsConfigManager", () => {
           idleTimeout: -1000, // Invalid: must be positive
           maxProcesses: 10,
           healthCheckInterval: 30000,
+          sessionInitTimeout: 20000,
         },
         teams: {},
       };

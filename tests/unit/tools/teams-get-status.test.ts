@@ -99,6 +99,10 @@ describe('teamsGetStatus', () => {
       pending: 5,
       read: 3,
       expired: 2,
+      byTeam: {
+        backend: 2,
+        frontend: 2,
+      },
     });
 
     expect(result.timestamp).toBeDefined();
@@ -142,6 +146,15 @@ describe('teamsGetStatus', () => {
 
     expect(result.teams).toHaveLength(1);
     expect(result.teams[0].name).toBe('frontend');
+
+    // Queue stats should include byTeam field (empty in this case)
+    expect(result.queue).toEqual({
+      total: 0,
+      pending: 0,
+      read: 0,
+      expired: 0,
+      byTeam: {},
+    });
   });
 
   it('should exclude notifications when includeNotifications is false', async () => {

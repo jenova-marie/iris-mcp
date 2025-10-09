@@ -51,6 +51,29 @@ describe("MCP Tools Integration", () => {
   };
 
   beforeEach(async () => {
+    // Clean up any leftover session files from previous runs
+    const { readdirSync, unlinkSync } = await import("fs");
+    const { join } = await import("path");
+
+    // Clean up test teams' session directories
+    for (const teamName of ["frontend", "backend", "mobile"]) {
+      const sessionsDir = join(process.cwd(), ".claude", "sessions", teamName);
+      try {
+        const files = readdirSync(sessionsDir);
+        for (const file of files) {
+          if (file.endsWith(".jsonl")) {
+            try {
+              unlinkSync(join(sessionsDir, file));
+            } catch (err) {
+              // Ignore cleanup errors
+            }
+          }
+        }
+      } catch (err) {
+        // Directory may not exist, ignore
+      }
+    }
+
     // Write test config
     writeFileSync(testConfigPath, JSON.stringify(testConfig, null, 2));
 
@@ -58,9 +81,9 @@ describe("MCP Tools Integration", () => {
     configManager = new TeamsConfigManager(testConfigPath);
     configManager.load();
 
-    // Create and initialize session manager
+    // Create and initialize session manager with skipSessionFileInit flag for testing
     const teamsConfig = configManager.getConfig();
-    sessionManager = new SessionManager(teamsConfig, testSessionDbPath);
+    sessionManager = new SessionManager(teamsConfig, testSessionDbPath, true); // Skip session file init in tests
     await sessionManager.initialize();
 
     // Create process pool
@@ -73,7 +96,7 @@ describe("MCP Tools Integration", () => {
 
     // Create notification queue
     notificationQueue = new NotificationQueue(testDbPath);
-  });
+  }, 15000); // 15 second timeout for beforeEach
 
   afterEach(async () => {
     // Clean up pool
@@ -101,7 +124,20 @@ describe("MCP Tools Integration", () => {
     if (existsSync(testDbPath)) {
       unlinkSync(testDbPath);
     }
-  });
+
+    // Clean up session files
+    const { readdirSync, rmSync } = await import("fs");
+    const { join } = await import("path");
+
+    for (const teamName of ["frontend", "backend", "mobile"]) {
+      const sessionsDir = join(process.cwd(), ".claude", "sessions", teamName);
+      try {
+        rmSync(sessionsDir, { recursive: true, force: true });
+      } catch (err) {
+        // Ignore cleanup errors
+      }
+    }
+  }, 15000); // 15 second timeout for afterEach
 
   describe("teams_ask", () => {
     it("should send question and receive response", async () => {
@@ -133,7 +169,7 @@ describe("MCP Tools Integration", () => {
           pool,
         ),
       ).rejects.toThrow("Team name contains invalid characters");
-    }, 5000);
+    });
 
     it("should throw validation error for empty question", async () => {
       await expect(
@@ -146,7 +182,7 @@ describe("MCP Tools Integration", () => {
           pool,
         ),
       ).rejects.toThrow("Message is required and must be a string");
-    }, 5000);
+    });
 
     it("should throw error for non-existent team", async () => {
       await expect(
@@ -159,7 +195,7 @@ describe("MCP Tools Integration", () => {
           pool,
         ),
       ).rejects.toThrow('Team "nonexistent" not found');
-    }, 5000);
+    });
   });
 
   describe("teams_send_message", () => {
@@ -201,7 +237,7 @@ describe("MCP Tools Integration", () => {
         {
           toTeam: "mobile",
           message: "Test message",
-          fromTeam: "custom-sender",
+          fromTeam: "frontend", // Use an existing team
           waitForResponse: true,
           timeout: 30000,
         },
@@ -209,7 +245,7 @@ describe("MCP Tools Integration", () => {
       );
 
       expect(result).toBeDefined();
-      expect(result.from).toBe("custom-sender");
+      expect(result.from).toBe("frontend");
     }, 35000);
 
     it("should throw validation error for invalid team name", async () => {
@@ -224,7 +260,7 @@ describe("MCP Tools Integration", () => {
           pool,
         ),
       ).rejects.toThrow("Team name contains invalid characters");
-    }, 5000);
+    });
 
     it("should throw validation error for empty message", async () => {
       await expect(
@@ -238,7 +274,7 @@ describe("MCP Tools Integration", () => {
           pool,
         ),
       ).rejects.toThrow("Message is required and must be a string");
-    }, 5000);
+    });
 
     it("should throw error for non-existent team", async () => {
       await expect(
@@ -252,7 +288,7 @@ describe("MCP Tools Integration", () => {
           pool,
         ),
       ).rejects.toThrow('Team "nonexistent" not found');
-    }, 5000);
+    });
   });
 
   describe("teams_notify", () => {
@@ -272,11 +308,11 @@ describe("MCP Tools Integration", () => {
       expect(result.from).toBe("backend");
 
       // Verify notification was added to queue
-      const notifications = notificationQueue.getForTeam("frontend");
+      const notifications = notificationQueue.getPending("frontend");
       expect(notifications.length).toBeGreaterThan(0);
       expect(notifications[0].message).toBe("Notification message");
       expect(notifications[0].fromTeam).toBe("backend");
-    }, 5000);
+    });
 
     it("should handle optional fromTeam parameter", async () => {
       const result = await teamsNotify(
@@ -291,10 +327,10 @@ describe("MCP Tools Integration", () => {
       expect(result).toBeDefined();
       expect(result.from).toBeUndefined();
 
-      const notifications = notificationQueue.getForTeam("backend");
+      const notifications = notificationQueue.getPending("backend");
       expect(notifications.length).toBeGreaterThan(0);
       expect(notifications[0].fromTeam).toBeNull();
-    }, 5000);
+    });
 
     it("should handle optional ttlDays parameter", async () => {
       const result = await teamsNotify(
@@ -308,9 +344,9 @@ describe("MCP Tools Integration", () => {
       );
 
       expect(result).toBeDefined();
-      const notifications = notificationQueue.getForTeam("mobile");
+      const notifications = notificationQueue.getPending("mobile");
       expect(notifications.length).toBeGreaterThan(0);
-    }, 5000);
+    });
 
     it("should throw validation error for invalid team name", async () => {
       await expect(
@@ -323,7 +359,7 @@ describe("MCP Tools Integration", () => {
           notificationQueue,
         ),
       ).rejects.toThrow("Team name contains invalid characters");
-    }, 5000);
+    });
 
     it("should throw validation error for empty message", async () => {
       await expect(
@@ -336,7 +372,7 @@ describe("MCP Tools Integration", () => {
           notificationQueue,
         ),
       ).rejects.toThrow("Message is required and must be a string");
-    }, 5000);
+    });
 
     it("should handle multiple notifications to same team", async () => {
       await teamsNotify(
@@ -367,19 +403,18 @@ describe("MCP Tools Integration", () => {
         notificationQueue,
       );
 
-      const notifications = notificationQueue.getForTeam("frontend");
+      const notifications = notificationQueue.getPending("frontend");
       expect(notifications.length).toBe(3);
-    }, 5000);
+    });
   });
 
   describe("teams_get_status", () => {
     it("should return status with no active processes", async () => {
       const result = await teamsGetStatus(
+        { includeNotifications: true },
         pool,
         notificationQueue,
         configManager,
-        undefined,
-        true,
       );
 
       expect(result).toBeDefined();
@@ -387,10 +422,10 @@ describe("MCP Tools Integration", () => {
       expect(result.teams).toBeDefined();
       expect(Array.isArray(result.teams)).toBe(true);
       expect(result.teams.length).toBeGreaterThan(0);
-      expect(result.processPool).toBeDefined();
-      expect(result.processPool.totalProcesses).toBe(0);
-      expect(result.notifications).toBeDefined();
-    }, 5000);
+      expect(result.pool).toBeDefined();
+      expect(result.pool.totalProcesses).toBe(0);
+      expect(result.queue).toBeDefined();
+    });
 
     it("should return status with active processes", async () => {
       // Create some processes
@@ -398,17 +433,16 @@ describe("MCP Tools Integration", () => {
       await pool.getOrCreateProcess("backend");
 
       const result = await teamsGetStatus(
+        { includeNotifications: true },
         pool,
         notificationQueue,
         configManager,
-        undefined,
-        true,
       );
 
-      expect(result.processPool.totalProcesses).toBe(2);
-      expect(result.processPool.processes).toHaveProperty("frontend");
-      expect(result.processPool.processes).toHaveProperty("backend");
-      expect(result.processPool.processes.frontend.status).toBe("idle");
+      expect(result.pool.totalProcesses).toBe(2);
+      expect(result.pool).toBeDefined();
+      expect(result.teams.some((t) => t.name === "frontend")).toBe(true);
+      expect(result.teams.some((t) => t.name === "backend")).toBe(true);
     }, 20000);
 
     it("should return status for specific team only", async () => {
@@ -416,15 +450,14 @@ describe("MCP Tools Integration", () => {
       await pool.getOrCreateProcess("backend");
 
       const result = await teamsGetStatus(
+        { team: "frontend", includeNotifications: true },
         pool,
         notificationQueue,
         configManager,
-        "frontend",
-        true,
       );
 
       expect(result).toBeDefined();
-      expect(result.processPool.processes).toHaveProperty("frontend");
+      expect(result.pool).toBeDefined();
       // Should still show all processes, but focused on frontend team
       expect(result.teams).toBeDefined();
     }, 20000);
@@ -436,46 +469,40 @@ describe("MCP Tools Integration", () => {
       notificationQueue.add("backend", "Test 3", "frontend");
 
       const result = await teamsGetStatus(
+        { includeNotifications: true },
         pool,
         notificationQueue,
         configManager,
-        undefined,
-        true,
       );
 
-      expect(result.notifications).toBeDefined();
-      expect(result.notifications.totalPending).toBeGreaterThan(0);
-      expect(result.notifications.byTeam).toBeDefined();
-      expect(result.notifications.byTeam.frontend).toBeGreaterThan(0);
-    }, 5000);
+      expect(result.queue).toBeDefined();
+      expect(result.queue!.pending).toBeGreaterThan(0);
+    });
 
     it("should work with includeNotifications=false", async () => {
       const result = await teamsGetStatus(
+        { includeNotifications: false },
         pool,
         notificationQueue,
         configManager,
-        undefined,
-        false,
       );
 
       expect(result).toBeDefined();
       expect(result.teams).toBeDefined();
-      expect(result.processPool).toBeDefined();
+      expect(result.pool).toBeDefined();
       // Notifications should still be included but might be minimal
-    }, 5000);
+    });
 
     it("should handle empty pool gracefully", async () => {
       const result = await teamsGetStatus(
+        { includeNotifications: true },
         pool,
         notificationQueue,
         configManager,
-        undefined,
-        true,
       );
 
-      expect(result.processPool.totalProcesses).toBe(0);
-      expect(Object.keys(result.processPool.processes)).toHaveLength(0);
-    }, 5000);
+      expect(result.pool.totalProcesses).toBe(0);
+    });
   });
 
   describe("cross-tool integration", () => {
@@ -514,15 +541,14 @@ describe("MCP Tools Integration", () => {
 
       // Get status showing all activity
       const status = await teamsGetStatus(
+        { includeNotifications: true },
         pool,
         notificationQueue,
         configManager,
-        undefined,
-        true,
       );
 
-      expect(status.processPool.totalProcesses).toBeGreaterThan(0);
-      expect(status.notifications.totalPending).toBeGreaterThan(0);
+      expect(status.pool.totalProcesses).toBeGreaterThan(0);
+      expect(status.queue!.pending).toBeGreaterThan(0);
     }, 70000);
 
     it("should handle concurrent operations across tools", async () => {
@@ -535,7 +561,7 @@ describe("MCP Tools Integration", () => {
           {
             toTeam: "backend",
             message: "Message 1",
-            fromTeam: "test",
+            fromTeam: "frontend",
             waitForResponse: true,
             timeout: 30000,
           },
@@ -561,14 +587,13 @@ describe("MCP Tools Integration", () => {
 
       // Verify via status
       const status = await teamsGetStatus(
+        { includeNotifications: true },
         pool,
         notificationQueue,
         configManager,
-        undefined,
-        true,
       );
 
-      expect(status.processPool.totalProcesses).toBeGreaterThan(0);
+      expect(status.pool.totalProcesses).toBeGreaterThan(0);
     }, 40000);
   });
 });

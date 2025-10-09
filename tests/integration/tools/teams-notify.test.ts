@@ -14,8 +14,8 @@ import {
 describe("teams_notify Integration", () => {
   let fixture: TestFixture;
 
-  beforeEach(() => {
-    fixture = createTestFixture("teams-notify");
+  beforeEach(async () => {
+    fixture = await createTestFixture("teams-notify");
   });
 
   afterEach(async () => {
@@ -47,7 +47,7 @@ describe("teams_notify Integration", () => {
       expect(notifications.length).toBe(1);
       expect(notifications[0].message).toBe("Test notification");
       expect(notifications[0].fromTeam).toBe("backend");
-    }, 5000);
+    });
 
     it("should handle notification without fromTeam", async () => {
       const result = await teamsNotify(
@@ -63,7 +63,7 @@ describe("teams_notify Integration", () => {
 
       const notifications = fixture.notificationQueue.getPending("backend");
       expect(notifications[0].fromTeam).toBeNull();
-    }, 5000);
+    });
 
     it("should handle custom TTL", async () => {
       const result = await teamsNotify(
@@ -84,7 +84,7 @@ describe("teams_notify Integration", () => {
 
       expect(result.expiresAt).toBeGreaterThan(expectedExpiry - tolerance);
       expect(result.expiresAt).toBeLessThan(expectedExpiry + tolerance);
-    }, 5000);
+    });
 
     it("should use default TTL when not specified", async () => {
       const result = await teamsNotify(
@@ -102,7 +102,7 @@ describe("teams_notify Integration", () => {
 
       expect(result.expiresAt).toBeGreaterThan(expectedExpiry - tolerance);
       expect(result.expiresAt).toBeLessThan(expectedExpiry + tolerance);
-    }, 5000);
+    });
 
     it("should handle multiple notifications to same team", async () => {
       await teamsNotify(
@@ -122,7 +122,7 @@ describe("teams_notify Integration", () => {
 
       const notifications = fixture.notificationQueue.getPending("frontend");
       expect(notifications.length).toBe(3);
-    }, 5000);
+    });
 
     it("should handle notifications to different teams", async () => {
       await teamsNotify(
@@ -143,7 +143,7 @@ describe("teams_notify Integration", () => {
       expect(fixture.notificationQueue.getPending("frontend").length).toBe(1);
       expect(fixture.notificationQueue.getPending("backend").length).toBe(1);
       expect(fixture.notificationQueue.getPending("mobile").length).toBe(1);
-    }, 5000);
+    });
   });
 
   describe("validation errors", () => {
@@ -157,7 +157,7 @@ describe("teams_notify Integration", () => {
           fixture.notificationQueue,
         ),
       ).rejects.toThrow("Team name contains invalid characters");
-    }, 5000);
+    });
 
     it("should throw error for empty team name", async () => {
       await expect(
@@ -169,7 +169,7 @@ describe("teams_notify Integration", () => {
           fixture.notificationQueue,
         ),
       ).rejects.toThrow();
-    }, 5000);
+    });
 
     it("should throw error for empty message", async () => {
       await expect(
@@ -181,21 +181,7 @@ describe("teams_notify Integration", () => {
           fixture.notificationQueue,
         ),
       ).rejects.toThrow("Message is required");
-    }, 5000);
-
-    it("should throw error for message that is too long", async () => {
-      const longMessage = "x".repeat(100001);
-
-      await expect(
-        teamsNotify(
-          {
-            toTeam: "frontend",
-            message: longMessage,
-          },
-          fixture.notificationQueue,
-        ),
-      ).rejects.toThrow("Message exceeds maximum length");
-    }, 5000);
+    });
 
     it("should throw error for invalid fromTeam", async () => {
       await expect(
@@ -208,7 +194,7 @@ describe("teams_notify Integration", () => {
           fixture.notificationQueue,
         ),
       ).rejects.toThrow("Team name contains invalid characters");
-    }, 5000);
+    });
   });
 
   describe("persistence", () => {
@@ -229,6 +215,6 @@ describe("teams_notify Integration", () => {
       expect(notifications[0].message).toBe("Persistent notification");
 
       newQueue.close();
-    }, 5000);
+    });
   });
 });

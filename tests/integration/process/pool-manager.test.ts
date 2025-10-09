@@ -139,7 +139,7 @@ describe("ClaudeProcessPool Integration", () => {
       await expect(
         pool.getOrCreateProcess("non-existent-team"),
       ).rejects.toThrow('Team "non-existent-team" not found');
-    }, 5000);
+    });
   });
 
   describe("process pool status", () => {
@@ -239,7 +239,7 @@ describe("ClaudeProcessPool Integration", () => {
       await expect(
         pool.terminateProcess("non-existent-team"),
       ).resolves.toBeUndefined();
-    }, 5000);
+    });
   });
 
   describe("event emission", () => {

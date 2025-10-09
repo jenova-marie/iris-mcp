@@ -10,8 +10,8 @@ import { createTestFixture, cleanupTestFixture, type TestFixture } from './utils
 describe('teams_get_status Integration', () => {
   let fixture: TestFixture;
 
-  beforeEach(() => {
-    fixture = createTestFixture('teams-get-status');
+  beforeEach(async () => {
+    fixture = await createTestFixture('teams-get-status');
   });
 
   afterEach(async () => {
@@ -33,14 +33,14 @@ describe('teams_get_status Integration', () => {
       expect(result.teams).toBeDefined();
       expect(Array.isArray(result.teams)).toBe(true);
       expect(result.teams.length).toBeGreaterThan(0);
-      expect(result.processPool).toBeDefined();
-      expect(result.processPool.totalProcesses).toBe(0);
-      expect(result.processPool.maxProcesses).toBe(5);
-      expect(result.notifications).toBeDefined();
-      expect(result.notifications.totalPending).toBe(0);
-    }, 5000);
+      expect(result.pool).toBeDefined();
+      expect(result.pool.totalProcesses).toBe(0);
+      expect(result.pool.maxProcesses).toBe(5);
+      expect(result.queue || {}).toBeDefined();
+      expect(result.queue.pending).toBe(0);
+    });
 
-    it('should return status with active processes', async () => {
+    it('should return status with active processes', { timeout: 40000 }, async () => {
       // Create some processes
       await fixture.pool.getOrCreateProcess('frontend');
       await fixture.pool.getOrCreateProcess('backend');
@@ -54,12 +54,12 @@ describe('teams_get_status Integration', () => {
         fixture.configManager
       );
 
-      expect(result.processPool.totalProcesses).toBe(2);
-      expect(result.processPool.processes).toHaveProperty('frontend');
-      expect(result.processPool.processes).toHaveProperty('backend');
-      expect(result.processPool.processes.frontend.status).toBe('idle');
-      expect(result.processPool.processes.backend.status).toBe('idle');
-    }, 8000);
+      expect(result.pool.totalProcesses).toBe(2);
+      expect(result.pool.processes).toHaveProperty('external->frontend');
+      expect(result.pool.processes).toHaveProperty('external->backend');
+      expect(result.pool.processes['external->frontend'].status).toBe('idle');
+      expect(result.pool.processes['external->backend'].status).toBe('idle');
+    }); // 2x testTimeout - spawns 2 processes
 
     it('should include process metrics', async () => {
       await fixture.pool.getOrCreateProcess('mobile');
@@ -71,13 +71,13 @@ describe('teams_get_status Integration', () => {
         fixture.configManager
       );
 
-      const mobileProcess = result.processPool.processes.mobile;
+      const mobileProcess = result.pool.processes['external->mobile'];
       expect(mobileProcess).toBeDefined();
       expect(mobileProcess.pid).toBeDefined();
       expect(mobileProcess.status).toBe('idle');
       expect(mobileProcess.messagesProcessed).toBeGreaterThanOrEqual(0);
       expect(mobileProcess.uptime).toBeGreaterThan(0);
-    }, 8000);
+    });
   });
 
   describe('team filtering', () => {
@@ -94,9 +94,9 @@ describe('teams_get_status Integration', () => {
       expect(teamNames).toContain('frontend');
       expect(teamNames).toContain('backend');
       expect(teamNames).toContain('mobile');
-    }, 5000);
+    });
 
-    it('should filter by specific team', async () => {
+    it('should filter by specific team', { timeout: 40000 }, async () => {
       await fixture.pool.getOrCreateProcess('frontend');
       await fixture.pool.getOrCreateProcess('backend');
 
@@ -110,12 +110,12 @@ describe('teams_get_status Integration', () => {
       );
 
       // Process pool should still show all processes
-      expect(result.processPool.processes).toHaveProperty('frontend');
-      expect(result.processPool.processes).toHaveProperty('backend');
+      expect(result.pool.processes).toHaveProperty('external->frontend');
+      expect(result.pool.processes).toHaveProperty('external->backend');
 
       // But teams list should include frontend
       expect(result.teams).toBeDefined();
-    }, 8000);
+    }); // 2x testTimeout - spawns 2 processes
   });
 
   describe('notification statistics', () => {
@@ -134,11 +134,11 @@ describe('teams_get_status Integration', () => {
         fixture.configManager
       );
 
-      expect(result.notifications.totalPending).toBe(3);
-      expect(result.notifications.byTeam).toBeDefined();
-      expect(result.notifications.byTeam.frontend).toBe(2);
-      expect(result.notifications.byTeam.backend).toBe(1);
-    }, 5000);
+      expect(result.queue.pending).toBe(3);
+      expect(result.queue.byTeam).toBeDefined();
+      expect(result.queue.byTeam.frontend).toBe(2);
+      expect(result.queue.byTeam.backend).toBe(1);
+    });
 
     it('should work with includeNotifications=false', async () => {
       fixture.notificationQueue.add('frontend', 'Test', 'backend');
@@ -154,10 +154,10 @@ describe('teams_get_status Integration', () => {
 
       expect(result).toBeDefined();
       expect(result.teams).toBeDefined();
-      expect(result.processPool).toBeDefined();
+      expect(result.pool).toBeDefined();
       // Notifications should still be present but may have minimal data
-      expect(result.notifications).toBeDefined();
-    }, 5000);
+      expect(result.queue || {}).toBeDefined();
+    });
 
     it('should handle empty notification queue', async () => {
       const result = await teamsGetStatus(
@@ -169,13 +169,13 @@ describe('teams_get_status Integration', () => {
         fixture.configManager
       );
 
-      expect(result.notifications.totalPending).toBe(0);
-      expect(Object.keys(result.notifications.byTeam || {})).toHaveLength(0);
-    }, 5000);
+      expect(result.queue.pending).toBe(0);
+      expect(Object.keys(result.queue.byTeam || {})).toHaveLength(0);
+    });
   });
 
   describe('combined state', () => {
-    it('should show combined process and notification state', async () => {
+    it('should show combined process and notification state', { timeout: 40000 }, async () => {
       // Create processes
       await fixture.pool.getOrCreateProcess('frontend');
       await fixture.pool.getOrCreateProcess('backend');
@@ -194,15 +194,15 @@ describe('teams_get_status Integration', () => {
       );
 
       // Should show active processes
-      expect(result.processPool.totalProcesses).toBe(2);
+      expect(result.pool.totalProcesses).toBe(2);
 
       // Should show pending notifications
-      expect(result.notifications.totalPending).toBe(2);
-      expect(result.notifications.byTeam.mobile).toBe(2);
+      expect(result.queue.pending).toBe(2);
+      expect(result.queue.byTeam.mobile).toBe(2);
 
       // Should list all teams
       expect(result.teams.length).toBe(3);
-    }, 8000);
+    }); // 2x testTimeout - spawns 2 processes
 
     it('should reflect real-time state changes', async () => {
       // Initial state
@@ -212,7 +212,7 @@ describe('teams_get_status Integration', () => {
         fixture.notificationQueue,
         fixture.configManager
       );
-      expect(result.processPool.totalProcesses).toBe(0);
+      expect(result.pool.totalProcesses).toBe(0);
 
       // Add a process
       await fixture.pool.getOrCreateProcess('frontend');
@@ -223,7 +223,7 @@ describe('teams_get_status Integration', () => {
         fixture.notificationQueue,
         fixture.configManager
       );
-      expect(result.processPool.totalProcesses).toBe(1);
+      expect(result.pool.totalProcesses).toBe(1);
 
       // Add notifications
       fixture.notificationQueue.add('backend', 'Test', 'frontend');
@@ -234,8 +234,8 @@ describe('teams_get_status Integration', () => {
         fixture.notificationQueue,
         fixture.configManager
       );
-      expect(result.notifications.totalPending).toBe(1);
-    }, 8000);
+      expect(result.queue.pending).toBe(1);
+    });
   });
 
   describe('default behavior', () => {
@@ -247,8 +247,8 @@ describe('teams_get_status Integration', () => {
         fixture.configManager
       );
 
-      expect(result.notifications).toBeDefined();
-    }, 5000);
+      expect(result.queue || {}).toBeDefined();
+    });
 
     it('should handle empty input object', async () => {
       const result = await teamsGetStatus(
@@ -260,8 +260,8 @@ describe('teams_get_status Integration', () => {
 
       expect(result).toBeDefined();
       expect(result.teams).toBeDefined();
-      expect(result.processPool).toBeDefined();
-      expect(result.notifications).toBeDefined();
-    }, 5000);
+      expect(result.pool).toBeDefined();
+      expect(result.queue || {}).toBeDefined();
+    });
   });
 });

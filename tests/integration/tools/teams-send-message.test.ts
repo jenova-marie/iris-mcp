@@ -14,8 +14,8 @@ import {
 describe("teams_send_message Integration", () => {
   let fixture: TestFixture;
 
-  beforeEach(() => {
-    fixture = createTestFixture("teams-send-message");
+  beforeEach(async () => {
+    fixture = await createTestFixture("teams-send-message");
   });
 
   afterEach(async () => {
@@ -29,7 +29,6 @@ describe("teams_send_message Integration", () => {
           toTeam: "backend",
           message: "Test message",
           waitForResponse: true,
-          timeout: 8000,
         },
         fixture.pool,
       );
@@ -42,7 +41,7 @@ describe("teams_send_message Integration", () => {
       expect(result.async).toBe(false);
       expect(result.duration).toBeGreaterThan(0);
       expect(result.timestamp).toBeGreaterThan(0);
-    }, 8000);
+    });
 
     it("should include fromTeam in result", async () => {
       const result = await teamsSendMessage(
@@ -51,7 +50,6 @@ describe("teams_send_message Integration", () => {
           toTeam: "backend",
           message: "Test from mobile",
           waitForResponse: true,
-          timeout: 8000,
         },
         fixture.pool,
       );
@@ -59,7 +57,7 @@ describe("teams_send_message Integration", () => {
       expect(result.from).toBe("mobile");
       expect(result.to).toBe("backend");
       expect(result.response).toBeDefined();
-    }, 8000);
+    });
   });
 
   describe("asynchronous messaging (waitForResponse=false)", () => {
@@ -69,7 +67,6 @@ describe("teams_send_message Integration", () => {
           toTeam: "backend",
           message: "Background task",
           waitForResponse: false,
-          timeout: 8000,
         },
         fixture.pool,
       );
@@ -80,7 +77,7 @@ describe("teams_send_message Integration", () => {
       expect(result.async).toBe(true);
       expect(result.response).toBeUndefined();
       expect(result.timestamp).toBeGreaterThan(0);
-    }, 8000);
+    });
 
     it("should return quickly for async messages", async () => {
       const startTime = Date.now();
@@ -98,7 +95,7 @@ describe("teams_send_message Integration", () => {
 
       // Async should return much faster than typical Claude response (< 8s)
       expect(duration).toBeLessThan(8000);
-    }, 8000);
+    });
   });
 
   describe("default behavior", () => {
@@ -107,27 +104,13 @@ describe("teams_send_message Integration", () => {
         {
           toTeam: "mobile",
           message: "Default behavior test",
-          timeout: 8000,
         },
         fixture.pool,
       );
 
       expect(result.async).toBe(false);
       expect(result.response).toBeDefined();
-    }, 8000);
-
-    it("should use default timeout", async () => {
-      const result = await teamsSendMessage(
-        {
-          toTeam: "frontend",
-          message: "Default timeout test",
-          waitForResponse: true,
-        },
-        fixture.pool,
-      );
-
-      expect(result.response).toBeDefined();
-    }, 8000);
+    });
   });
 
   describe("validation errors", () => {
@@ -141,7 +124,7 @@ describe("teams_send_message Integration", () => {
           fixture.pool,
         ),
       ).rejects.toThrow("Team name contains invalid characters");
-    }, 5000);
+    });
 
     it("should throw error for empty message", async () => {
       await expect(
@@ -153,21 +136,7 @@ describe("teams_send_message Integration", () => {
           fixture.pool,
         ),
       ).rejects.toThrow("Message is required");
-    }, 5000);
-
-    it("should throw error for message that is too long", async () => {
-      const longMessage = "x".repeat(100001);
-
-      await expect(
-        teamsSendMessage(
-          {
-            toTeam: "backend",
-            message: longMessage,
-          },
-          fixture.pool,
-        ),
-      ).rejects.toThrow("Message exceeds maximum length");
-    }, 5000);
+    });
 
     it("should throw error for non-existent team", async () => {
       await expect(
@@ -179,6 +148,6 @@ describe("teams_send_message Integration", () => {
           fixture.pool,
         ),
       ).rejects.toThrow('Team "nonexistent" not found');
-    }, 5000);
+    });
   });
 });

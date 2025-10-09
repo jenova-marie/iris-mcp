@@ -43,6 +43,10 @@ export async function teamsSendMessage(
   validateTeamName(toTeam);
   validateMessage(message);
 
+  if (fromTeam) {
+    validateTeamName(fromTeam);
+  }
+
   if (waitForResponse) {
     validateTimeout(timeout);
   }
@@ -58,10 +62,15 @@ export async function teamsSendMessage(
   try {
     if (waitForResponse) {
       // Send and wait for response
-      const response = await processPool.sendMessage(toTeam, message, timeout);
+      const response = await processPool.sendMessage(
+        toTeam,
+        message,
+        timeout,
+        fromTeam || null,
+      );
       const duration = Date.now() - startTime;
 
-      logger.info('Received response from team', { toTeam, duration });
+      logger.info("Received response from team", { toTeam, duration });
 
       return {
         from: fromTeam,
@@ -75,12 +84,12 @@ export async function teamsSendMessage(
     } else {
       // Fire and forget (queue the message)
       processPool
-        .sendMessage(toTeam, message, timeout)
+        .sendMessage(toTeam, message, timeout, fromTeam || null)
         .catch((error) => {
-          logger.error('Failed to send async message', error);
+          logger.error("Failed to send async message", error);
         });
 
-      logger.info('Message queued (async)', { toTeam });
+      logger.info("Message queued (async)", { toTeam });
 
       return {
         from: fromTeam,

@@ -12,6 +12,7 @@ const logger = new Logger('tool:teams_ask');
 export interface TeamsAskInput {
   team: string;
   question: string;
+  fromTeam?: string;
   timeout?: number;
 }
 
@@ -25,26 +26,39 @@ export interface TeamsAskOutput {
 
 export async function teamsAsk(
   input: TeamsAskInput,
-  processPool: ClaudeProcessPool
+  processPool: ClaudeProcessPool,
 ): Promise<TeamsAskOutput> {
-  const { team, question, timeout = 30000 } = input;
+  const { team, question, fromTeam, timeout = 30000 } = input;
 
   // Validate inputs
   validateTeamName(team);
   validateMessage(question);
   validateTimeout(timeout);
 
-  logger.info('Asking team', { team, question: question.substring(0, 50) + '...' });
+  if (fromTeam) {
+    validateTeamName(fromTeam);
+  }
+
+  logger.info("Asking team", {
+    fromTeam,
+    team,
+    question: question.substring(0, 50) + "...",
+  });
 
   const startTime = Date.now();
 
   try {
     // Send message to team and wait for response
-    const response = await processPool.sendMessage(team, question, timeout);
+    const response = await processPool.sendMessage(
+      team,
+      question,
+      timeout,
+      fromTeam || null,
+    );
 
     const duration = Date.now() - startTime;
 
-    logger.info('Received response from team', { team, duration });
+    logger.info("Received response from team", { team, duration });
 
     return {
       team,
@@ -54,7 +68,7 @@ export async function teamsAsk(
       timestamp: Date.now(),
     };
   } catch (error) {
-    logger.error('Failed to get response from team', error);
+    logger.error("Failed to get response from team", error);
     throw error;
   }
 }

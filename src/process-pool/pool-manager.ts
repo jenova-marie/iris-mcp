@@ -13,6 +13,7 @@ import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
 
 export class ClaudeProcessPool extends EventEmitter {
   private processes = new Map<string, ClaudeProcess>();
+  private sessionToProcess = new Map<string, string>(); // sessionId -> poolKey mapping
   private accessOrder: string[] = []; // For LRU tracking
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private logger = new Logger("pool");
@@ -24,6 +25,23 @@ export class ClaudeProcessPool extends EventEmitter {
   ) {
     super();
     this.startHealthCheck();
+  }
+
+  /**
+   * Generate pool key for team pair
+   * Format: "fromTeam->toTeam" or "external->toTeam"
+   */
+  private getPoolKey(fromTeam: string | null, toTeam: string): string {
+    return `${fromTeam ?? 'external'}->${toTeam}`;
+  }
+
+  /**
+   * Get process by session ID
+   */
+  getProcessBySessionId(sessionId: string): ClaudeProcess | undefined {
+    const poolKey = this.sessionToProcess.get(sessionId);
+    if (!poolKey) return undefined;
+    return this.processes.get(poolKey);
   }
 
   /**
@@ -54,13 +72,16 @@ export class ClaudeProcessPool extends EventEmitter {
       sessionId: session.sessionId,
     });
 
+    // Generate pool key for this team pair
+    const poolKey = this.getPoolKey(fromTeam, teamName);
+
     // Update access order for LRU
-    this.updateAccessOrder(teamName);
+    this.updateAccessOrder(poolKey);
 
     // Return existing process if available
-    const existing = this.processes.get(teamName);
+    const existing = this.processes.get(poolKey);
     if (existing && existing.getMetrics().status !== "stopped") {
-      this.logger.debug("Using existing process", { teamName });
+      this.logger.debug("Using existing process", { poolKey, sessionId: session.sessionId });
 
       // Record session usage
       this.sessionManager.recordUsage(session.sessionId);
@@ -75,6 +96,7 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Create new process
     this.logger.info("Creating new process", {
+      poolKey,
       teamName,
       sessionId: session.sessionId,
     });
@@ -90,13 +112,15 @@ export class ClaudeProcessPool extends EventEmitter {
     process.on("spawned", (data) => this.emit("process-spawned", data));
     process.on("terminated", (data) => {
       this.emit("process-terminated", data);
-      this.processes.delete(teamName);
-      this.removeFromAccessOrder(teamName);
+      this.processes.delete(poolKey);
+      this.sessionToProcess.delete(session.sessionId);
+      this.removeFromAccessOrder(poolKey);
     });
     process.on("exited", (data) => {
       this.emit("process-exited", data);
-      this.processes.delete(teamName);
-      this.removeFromAccessOrder(teamName);
+      this.processes.delete(poolKey);
+      this.sessionToProcess.delete(session.sessionId);
+      this.removeFromAccessOrder(poolKey);
     });
     process.on("error", (data) => this.emit("process-error", data));
     process.on("message-sent", (data) => {
@@ -112,9 +136,10 @@ export class ClaudeProcessPool extends EventEmitter {
     // Spawn the process
     await process.spawn();
 
-    // Add to pool
-    this.processes.set(teamName, process);
-    this.updateAccessOrder(teamName);
+    // Add to pool with pool key
+    this.processes.set(poolKey, process);
+    this.sessionToProcess.set(session.sessionId, poolKey);
+    this.updateAccessOrder(poolKey);
 
     // Record session usage
     this.sessionManager.recordUsage(session.sessionId);
@@ -175,27 +200,74 @@ export class ClaudeProcessPool extends EventEmitter {
   }
 
   /**
-   * Get pool status
+   * Get pool status with session information
    */
   getStatus(): ProcessPoolStatus {
     const processes: Record<string, any> = {};
 
-    for (const [teamName, process] of this.processes) {
-      processes[teamName] = process.getMetrics();
+    for (const [poolKey, process] of this.processes) {
+      const metrics = process.getMetrics();
+
+      // Find associated session ID
+      let sessionId: string | undefined;
+      for (const [sid, pk] of this.sessionToProcess) {
+        if (pk === poolKey) {
+          sessionId = sid;
+          break;
+        }
+      }
+
+      processes[poolKey] = {
+        ...metrics,
+        sessionId,
+        poolKey,
+      };
     }
 
     return {
       totalProcesses: this.processes.size,
       maxProcesses: this.config.maxProcesses,
       processes,
+      activeSessions: this.sessionToProcess.size,
     };
   }
 
   /**
    * Get process for a team (if exists)
+   * @deprecated Use getProcessBySessionId or getOrCreateProcess instead
    */
   getProcess(teamName: string): ClaudeProcess | undefined {
-    return this.processes.get(teamName);
+    // Try to find by team name in any pool key
+    for (const [poolKey, process] of this.processes) {
+      if (poolKey.endsWith(`->${teamName}`)) {
+        return process;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Send a command to a process (for compaction, etc.)
+   */
+  async sendCommandToSession(sessionId: string, command: string): Promise<string | null> {
+    const process = this.getProcessBySessionId(sessionId);
+    if (!process) {
+      this.logger.warn("No process found for session", { sessionId });
+      return null;
+    }
+
+    try {
+      const response = await process.sendMessage(command);
+      this.logger.info("Command sent to session", { sessionId, command });
+      return response;
+    } catch (error) {
+      this.logger.error("Failed to send command to session", {
+        sessionId,
+        command,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
   }
 
   /**

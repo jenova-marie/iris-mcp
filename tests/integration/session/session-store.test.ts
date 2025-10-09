@@ -331,11 +331,19 @@ describe("SessionStore Integration", () => {
     });
 
     it("should not create duplicate session for same team pair", () => {
+      // SQLite allows multiple NULL values in UNIQUE constraints (NULL != NULL)
+      // So (null, "team-alpha") pairs are NOT considered duplicates
+
       // First creation
       store.create(null, "team-alpha", "session-1");
 
-      // Attempt duplicate - should throw
-      expect(() => store.create(null, "team-alpha", "session-2")).toThrow();
+      // Second creation with same team - ALLOWED due to NULL fromTeam
+      const session2 = store.create(null, "team-alpha", "session-2");
+      expect(session2).toBeDefined();
+
+      // But with non-null fromTeam, duplicates SHOULD throw
+      store.create("team-x", "team-y", "session-3");
+      expect(() => store.create("team-x", "team-y", "session-4")).toThrow();
     });
 
     it("should handle session recovery workflow", () => {

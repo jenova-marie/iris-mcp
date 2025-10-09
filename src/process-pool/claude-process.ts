@@ -47,20 +47,25 @@ export class ClaudeProcess extends EventEmitter {
         skipPermissions: this.teamConfig.skipPermissions,
       });
 
-      // Spawn claude-code CLI
-      // TODO: Adjust command based on actual claude-code installation
-      const args = ['--headless'];
+      // Spawn Claude CLI in print mode with stream-json I/O
+      const args = [
+        '--print',
+        '--verbose', // Required for stream-json output
+        '--input-format', 'stream-json',
+        '--output-format', 'stream-json',
+        '--include-partial-messages',
+        '--replay-user-messages',
+      ];
 
       if (this.teamConfig.skipPermissions) {
-        args.push('--skip-permissions');
+        args.push('--dangerously-skip-permissions');
       }
 
-      this.process = spawn('claude-code', args, {
+      this.process = spawn('claude', args, {
         cwd: this.teamConfig.path,
         stdio: ['pipe', 'pipe', 'pipe'],
         env: {
           ...process.env,
-          CLAUDE_HEADLESS: '1',
         },
       });
 
@@ -236,8 +241,22 @@ export class ClaudeProcess extends EventEmitter {
     this.resetIdleTimer();
 
     try {
-      // Write message to Claude's stdin
-      this.process.stdin.write(this.currentMessage.message + '\n');
+      // Write message to Claude's stdin in stream-json format
+      // Format per docs: { type: 'user', message: { role: 'user', content: [{ type: 'text', text: string }] } }
+      const jsonMessage = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: this.currentMessage.message,
+            },
+          ],
+        },
+      }) + '\n';
+
+      this.process.stdin.write(jsonMessage);
       this.messagesProcessed++;
 
       this.emit('message-sent', {
@@ -258,32 +277,68 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   /**
-   * Handle stdout data from Claude
+   * Handle stdout data from Claude (stream-json format)
    */
   private handleStdout(data: Buffer): void {
     this.responseBuffer += data.toString();
 
-    // Check for complete response (assuming newline-delimited)
+    // Parse newline-delimited JSON responses
     const lines = this.responseBuffer.split('\n');
 
     // Keep the last incomplete line in buffer
     this.responseBuffer = lines.pop() || '';
 
     for (const line of lines) {
-      if (line.trim() && this.currentMessage) {
-        // Resolve the current message with the response
-        this.currentMessage.resolve(line);
+      if (!line.trim()) {
+        continue;
+      }
 
-        this.emit('message-response', {
-          teamName: this.teamName,
-          response: line,
+      try {
+        const jsonResponse = JSON.parse(line);
+
+        // Handle different message types from Claude stream-json output
+        if (jsonResponse.type === 'assistant') {
+          // This is a complete assistant response
+          // Format: { type: 'assistant', message: { content: [{ type: 'text', text: string }] } }
+          const content = jsonResponse.message?.content
+            ? jsonResponse.message.content
+                .map((c: any) => c.text || JSON.stringify(c))
+                .join('')
+            : '';
+
+          if (this.currentMessage) {
+            this.currentMessage.resolve(content);
+
+            this.emit('message-response', {
+              teamName: this.teamName,
+              response: content,
+            });
+
+            this.currentMessage = null;
+            this.status = 'idle';
+            this.processNextMessage();
+          }
+        } else if (jsonResponse.type === 'error') {
+          // Error from Claude
+          if (this.currentMessage) {
+            this.currentMessage.reject(
+              new ProcessError(
+                `Claude error: ${jsonResponse.error?.message || JSON.stringify(jsonResponse.error)}`,
+                this.teamName
+              )
+            );
+            this.currentMessage = null;
+            this.status = 'idle';
+            this.processNextMessage();
+          }
+        }
+        // Ignore other message types (system, result, etc.)
+      } catch (error) {
+        this.logger.debug('Failed to parse JSON response', {
+          line,
+          error: error instanceof Error ? error.message : error,
         });
-
-        this.currentMessage = null;
-        this.status = 'idle';
-
-        // Process next message if any
-        this.processNextMessage();
+        // Continue processing other lines
       }
     }
   }

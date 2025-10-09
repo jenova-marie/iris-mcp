@@ -3,22 +3,24 @@
  * Manages a pool of Claude Code processes with LRU eviction
  */
 
-import { EventEmitter } from 'events';
-import { ClaudeProcess } from './claude-process.js';
-import type { ProcessPoolStatus, ProcessPoolConfig } from './types.js';
-import { TeamsConfigManager } from '../config/teams-config.js';
-import { Logger } from '../utils/logger.js';
-import { TeamNotFoundError, ProcessPoolLimitError } from '../utils/errors.js';
+import { EventEmitter } from "events";
+import { ClaudeProcess } from "./claude-process.js";
+import type { ProcessPoolStatus, ProcessPoolConfig } from "./types.js";
+import { TeamsConfigManager } from "../config/teams-config.js";
+import { SessionManager } from "../session/session-manager.js";
+import { Logger } from "../utils/logger.js";
+import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
 
 export class ClaudeProcessPool extends EventEmitter {
   private processes = new Map<string, ClaudeProcess>();
   private accessOrder: string[] = []; // For LRU tracking
   private healthCheckInterval: NodeJS.Timeout | null = null;
-  private logger = new Logger('pool');
+  private logger = new Logger("pool");
 
   constructor(
     private configManager: TeamsConfigManager,
-    private config: ProcessPoolConfig
+    private config: ProcessPoolConfig,
+    private sessionManager: SessionManager,
   ) {
     super();
     this.startHealthCheck();
@@ -26,21 +28,43 @@ export class ClaudeProcessPool extends EventEmitter {
 
   /**
    * Get or create a process for a team
+   *
+   * @param teamName - The team to get/create process for
+   * @param fromTeam - The requesting team (null for external requests)
    */
-  async getOrCreateProcess(teamName: string): Promise<ClaudeProcess> {
+  async getOrCreateProcess(
+    teamName: string,
+    fromTeam: string | null = null,
+  ): Promise<ClaudeProcess> {
     // Check if team exists in configuration
     const teamConfig = this.configManager.getTeamConfig(teamName);
     if (!teamConfig) {
       throw new TeamNotFoundError(teamName);
     }
 
+    // Get or create session for this team pair
+    const session = await this.sessionManager.getOrCreateSession(
+      fromTeam,
+      teamName,
+    );
+
+    this.logger.debug("Using session for team pair", {
+      fromTeam,
+      toTeam: teamName,
+      sessionId: session.sessionId,
+    });
+
     // Update access order for LRU
     this.updateAccessOrder(teamName);
 
     // Return existing process if available
     const existing = this.processes.get(teamName);
-    if (existing && existing.getMetrics().status !== 'stopped') {
-      this.logger.debug('Using existing process', { teamName });
+    if (existing && existing.getMetrics().status !== "stopped") {
+      this.logger.debug("Using existing process", { teamName });
+
+      // Record session usage
+      this.sessionManager.recordUsage(session.sessionId);
+
       return existing;
     }
 
@@ -50,29 +74,40 @@ export class ClaudeProcessPool extends EventEmitter {
     }
 
     // Create new process
-    this.logger.info('Creating new process', { teamName });
+    this.logger.info("Creating new process", {
+      teamName,
+      sessionId: session.sessionId,
+    });
 
     const process = new ClaudeProcess(
       teamName,
       teamConfig,
-      teamConfig.idleTimeout || this.config.idleTimeout
+      teamConfig.idleTimeout || this.config.idleTimeout,
+      session.sessionId,
     );
 
     // Set up event forwarding
-    process.on('spawned', (data) => this.emit('process-spawned', data));
-    process.on('terminated', (data) => {
-      this.emit('process-terminated', data);
+    process.on("spawned", (data) => this.emit("process-spawned", data));
+    process.on("terminated", (data) => {
+      this.emit("process-terminated", data);
       this.processes.delete(teamName);
       this.removeFromAccessOrder(teamName);
     });
-    process.on('exited', (data) => {
-      this.emit('process-exited', data);
+    process.on("exited", (data) => {
+      this.emit("process-exited", data);
       this.processes.delete(teamName);
       this.removeFromAccessOrder(teamName);
     });
-    process.on('error', (data) => this.emit('process-error', data));
-    process.on('message-sent', (data) => this.emit('message-sent', data));
-    process.on('message-response', (data) => this.emit('message-response', data));
+    process.on("error", (data) => this.emit("process-error", data));
+    process.on("message-sent", (data) => {
+      this.emit("message-sent", data);
+
+      // Increment message count for session
+      this.sessionManager.incrementMessageCount(session.sessionId);
+    });
+    process.on("message-response", (data) =>
+      this.emit("message-response", data),
+    );
 
     // Spawn the process
     await process.spawn();
@@ -81,14 +116,27 @@ export class ClaudeProcessPool extends EventEmitter {
     this.processes.set(teamName, process);
     this.updateAccessOrder(teamName);
 
+    // Record session usage
+    this.sessionManager.recordUsage(session.sessionId);
+
     return process;
   }
 
   /**
    * Send a message to a team
+   *
+   * @param teamName - The team to send message to
+   * @param message - The message content
+   * @param timeout - Optional timeout in ms
+   * @param fromTeam - The requesting team (null for external requests)
    */
-  async sendMessage(teamName: string, message: string, timeout?: number): Promise<string> {
-    const process = await this.getOrCreateProcess(teamName);
+  async sendMessage(
+    teamName: string,
+    message: string,
+    timeout?: number,
+    fromTeam: string | null = null,
+  ): Promise<string> {
+    const process = await this.getOrCreateProcess(teamName, fromTeam);
     return process.sendMessage(message, timeout);
   }
 

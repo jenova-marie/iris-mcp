@@ -30,12 +30,14 @@ export interface TeamsGetStatusOutput {
   pool: {
     totalProcesses: number;
     maxProcesses: number;
+    processes: Record<string, any>;
   };
   queue?: {
     total: number;
     pending: number;
     read: number;
     expired: number;
+    byTeam: Record<string, number>;
   };
   timestamp: number;
 }
@@ -92,12 +94,30 @@ export async function teamsGetStatus(
       pool: {
         totalProcesses: poolStatus.totalProcesses,
         maxProcesses: poolStatus.maxProcesses,
+        processes: poolStatus.processes,
       },
       timestamp: Date.now(),
     };
 
     if (includeNotifications) {
-      output.queue = notificationQueue.getStats();
+      const queueStats = notificationQueue.getStats();
+      const byTeam: Record<string, number> = {};
+
+      // Count pending notifications per team
+      for (const teamName of Object.keys(config.teams)) {
+        const pending = notificationQueue.getPending(teamName);
+        if (pending.length > 0) {
+          byTeam[teamName] = pending.length;
+        }
+      }
+
+      output.queue = {
+        total: queueStats.total,
+        pending: queueStats.pending,
+        read: queueStats.read,
+        expired: queueStats.expired,
+        byTeam,
+      };
     }
 
     logger.info('Status retrieved', {

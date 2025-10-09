@@ -33,6 +33,9 @@ export async function teamsNotify(
 
   // Validate inputs
   validateTeamName(toTeam);
+  if (fromTeam) {
+    validateTeamName(fromTeam);
+  }
   validateMessage(message);
 
   logger.info('Creating notification', {

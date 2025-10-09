@@ -1,0 +1,8 @@
+{
+  "settings": {
+    "idleTimeout": 300000,
+    "maxProcesses": 10,
+    "healthCheckInterval": 30000
+  },
+  "teams": {}
+}

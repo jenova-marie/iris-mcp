@@ -35,3 +35,9 @@ yarn-error.log*
 # Temporary files
 *.tmp
 .cache/
+
+# Iris Data
+data/
+*.db
+*.db-wal
+*.db-shm

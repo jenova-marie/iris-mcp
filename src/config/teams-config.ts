@@ -17,27 +17,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Zod schema for validation
-const TeamConfigSchema = z
-  .object({
-    path: z.string().min(1, "Path cannot be empty").optional(),
-    project: z.string().min(1, "Project path cannot be empty").optional(),
-    description: z.string(),
-    idleTimeout: z.number().positive().optional(),
-    skipPermissions: z.boolean().optional(),
-    color: z
-      .string()
-      .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
-      .optional(),
-  })
-  .refine((data) => data.project || data.path, {
-    message: "Either 'project' or 'path' must be specified",
-  });
+const TeamConfigSchema = z.object({
+  path: z.string().min(1, "Path cannot be empty"),
+  description: z.string(),
+  idleTimeout: z.number().positive().optional(),
+  sessionInitTimeout: z.number().positive().optional(),
+  skipPermissions: z.boolean().optional(),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
+    .optional(),
+});
 
 const TeamsConfigSchema = z.object({
   settings: z.object({
     idleTimeout: z.number().positive(),
     maxProcesses: z.number().int().min(1).max(50),
     healthCheckInterval: z.number().positive(),
+    sessionInitTimeout: z.number().positive(),
   }),
   teams: z.record(z.string(), TeamConfigSchema),
 });
@@ -80,9 +77,8 @@ export class TeamsConfigManager {
 
       // Validate team paths exist
       for (const [name, team] of Object.entries(validated.teams)) {
-        const projectPath = team.project || team.path;
-        if (projectPath && !existsSync(projectPath)) {
-          logger.warn(`Team "${name}" path does not exist: ${projectPath}`);
+        if (!existsSync(team.path)) {
+          logger.warn(`Team "${name}" path does not exist: ${team.path}`);
         }
       }
 

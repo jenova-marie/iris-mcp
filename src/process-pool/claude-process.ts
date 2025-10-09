@@ -38,7 +38,7 @@ export class ClaudeProcess extends EventEmitter {
     private teamName: string,
     private teamConfig: TeamConfig,
     private idleTimeout: number,
-    private sessionId: string,
+    private sessionId?: string,
   ) {
     super();
     this.logger = new Logger(`process:${teamName}`);
@@ -65,18 +65,23 @@ export class ClaudeProcess extends EventEmitter {
       });
 
       // Spawn Claude CLI in headless mode with stream-json I/O
-      // Use --resume to continue existing session
+      // Use --resume to continue existing session if sessionId provided
       // See docs/HEADLESS_CLAUDE.md and docs/SESSION.md for reference
-      const args = [
-        "--resume", // Resume existing session
-        this.sessionId,
+      const args: string[] = [];
+
+      // Only use --resume if we have a sessionId
+      if (this.sessionId) {
+        args.push("--resume", this.sessionId);
+      }
+
+      args.push(
         "--print", // Non-interactive headless mode
         "--verbose", // Required for stream-json output
         "--input-format", // Accept JSON messages via stdin
         "stream-json",
         "--output-format", // Emit JSON messages via stdout
-        "stream-json",
-      ];
+        "stream-json"
+      );
 
       if (this.teamConfig.skipPermissions) {
         args.push("--dangerously-skip-permissions");

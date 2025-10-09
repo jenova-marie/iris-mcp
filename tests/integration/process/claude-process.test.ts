@@ -28,7 +28,7 @@ describe("ClaudeProcess Integration", () => {
 
   describe("process spawning", () => {
     it("should spawn claude process successfully", async () => {
-      claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
+      claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
 
       await claudeProcess.spawn();
 
@@ -66,7 +66,7 @@ describe("ClaudeProcess Integration", () => {
     }, 15000);
 
     it("should emit spawned event when ready", async () => {
-      claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
+      claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
 
       const spawnedPromise = new Promise((resolve) => {
         claudeProcess.once("spawned", (data) => {
@@ -78,7 +78,7 @@ describe("ClaudeProcess Integration", () => {
       const spawnedData = await spawnedPromise;
 
       expect(spawnedData).toMatchObject({
-        teamName: "test-team",
+        teamName: "team-alpha",
         pid: expect.any(Number),
       });
     });
@@ -86,7 +86,7 @@ describe("ClaudeProcess Integration", () => {
 
   describe("stdio communication", () => {
     beforeEach(async () => {
-      claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
+      claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
       await claudeProcess.spawn();
     });
 
@@ -117,12 +117,12 @@ describe("ClaudeProcess Integration", () => {
       const response = await responsePromise;
 
       expect(sentData).toMatchObject({
-        teamName: "test-team",
+        teamName: "team-alpha",
         message: expect.any(String),
       });
 
       expect(responseData).toMatchObject({
-        teamName: "test-team",
+        teamName: "team-alpha",
         response: expect.any(String),
       });
 
@@ -132,7 +132,7 @@ describe("ClaudeProcess Integration", () => {
 
   describe("process lifecycle", () => {
     it("should transition through states correctly", async () => {
-      claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
+      claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
 
       // Initial state
       expect(claudeProcess.getMetrics().status).toBe("stopped");
@@ -157,7 +157,7 @@ describe("ClaudeProcess Integration", () => {
     }, 40000);
 
     it("should track message count", async () => {
-      claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
+      claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
       await claudeProcess.spawn();
 
       const initialCount = claudeProcess.getMetrics().messagesProcessed;
@@ -172,7 +172,7 @@ describe("ClaudeProcess Integration", () => {
 
   describe("error handling", () => {
     beforeEach(async () => {
-      claudeProcess = new ClaudeProcess("test-team", testTeamConfig, 300000);
+      claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
       await claudeProcess.spawn();
     });
 

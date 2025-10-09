@@ -10,6 +10,7 @@ import { teamsNotify } from "../../../src/tools/teams-notify.js";
 import { teamsGetStatus } from "../../../src/tools/teams-get-status.js";
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
 import { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import { SessionManager } from "../../../src/session/session-manager.js";
 import { NotificationQueue } from "../../../src/notifications/queue.js";
 import type { ProcessPoolConfig } from "../../../src/process-pool/types.js";
 import { writeFileSync, unlinkSync, existsSync } from "fs";
@@ -17,8 +18,10 @@ import { writeFileSync, unlinkSync, existsSync } from "fs";
 describe("MCP Tools Integration", () => {
   let pool: ClaudeProcessPool;
   let configManager: TeamsConfigManager;
+  let sessionManager: SessionManager;
   let notificationQueue: NotificationQueue;
   const testConfigPath = "./test-mcp-tools-teams.json";
+  const testSessionDbPath = "./test-mcp-tools-sessions.db";
   const testDbPath = "./test-mcp-tools-notifications.db";
 
   // Create test configuration
@@ -47,7 +50,7 @@ describe("MCP Tools Integration", () => {
     },
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Write test config
     writeFileSync(testConfigPath, JSON.stringify(testConfig, null, 2));
 
@@ -55,13 +58,18 @@ describe("MCP Tools Integration", () => {
     configManager = new TeamsConfigManager(testConfigPath);
     configManager.load();
 
+    // Create and initialize session manager
+    const teamsConfig = configManager.getConfig();
+    sessionManager = new SessionManager(teamsConfig, testSessionDbPath);
+    await sessionManager.initialize();
+
     // Create process pool
     const poolConfig: ProcessPoolConfig = {
       idleTimeout: 300000,
       maxProcesses: 5,
       healthCheckInterval: 30000,
     };
-    pool = new ClaudeProcessPool(configManager, poolConfig);
+    pool = new ClaudeProcessPool(configManager, poolConfig, sessionManager);
 
     // Create notification queue
     notificationQueue = new NotificationQueue(testDbPath);
@@ -73,6 +81,11 @@ describe("MCP Tools Integration", () => {
       await pool.terminateAll();
     }
 
+    // Clean up session manager
+    if (sessionManager) {
+      sessionManager.close();
+    }
+
     // Clean up notification queue
     if (notificationQueue) {
       notificationQueue.close();
@@ -81,6 +94,9 @@ describe("MCP Tools Integration", () => {
     // Clean up files
     if (existsSync(testConfigPath)) {
       unlinkSync(testConfigPath);
+    }
+    if (existsSync(testSessionDbPath)) {
+      unlinkSync(testSessionDbPath);
     }
     if (existsSync(testDbPath)) {
       unlinkSync(testDbPath);

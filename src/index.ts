@@ -13,42 +13,48 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 
-import { getConfigManager } from './config/teams-config.js';
-import { ClaudeProcessPool } from './process-pool/pool-manager.js';
-import { NotificationQueue } from './notifications/queue.js';
-import { Logger } from './utils/logger.js';
+import { getConfigManager } from "./config/teams-config.js";
+import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
+import { NotificationQueue } from "./notifications/queue.js";
+import { SessionManager } from "./session/session-manager.js";
+import { Logger } from "./utils/logger.js";
 import {
   teamsAsk,
   teamsSendMessage,
   teamsNotify,
   teamsGetStatus,
-} from './tools/index.js';
+} from "./tools/index.js";
 
 const logger = new Logger('server');
 
 // MCP Tool Definitions
 const TOOLS: Tool[] = [
   {
-    name: 'teams_ask',
+    name: "teams_ask",
     description:
-      'Ask a team a question and wait for a synchronous response. Use this for direct Q&A where you need an immediate answer.',
+      "Ask a team a question and wait for a synchronous response. Use this for direct Q&A where you need an immediate answer.",
     inputSchema: {
-      type: 'object',
+      type: "object",
       properties: {
         team: {
-          type: 'string',
-          description: 'Name of the team to ask (e.g., "frontend", "backend", "mobile")',
+          type: "string",
+          description:
+            'Name of the team to ask (e.g., "frontend", "backend", "mobile")',
         },
         question: {
-          type: 'string',
-          description: 'The question to ask the team',
+          type: "string",
+          description: "The question to ask the team",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Optional: Name of the team asking the question",
         },
         timeout: {
-          type: 'number',
-          description: 'Optional timeout in milliseconds (default: 30000)',
+          type: "number",
+          description: "Optional timeout in milliseconds (default: 30000)",
         },
       },
-      required: ['team', 'question'],
+      required: ["team", "question"],
     },
   },
   {
@@ -132,29 +138,34 @@ const TOOLS: Tool[] = [
 class IrisMcpServer {
   private server: Server;
   private configManager: ReturnType<typeof getConfigManager>;
+  private sessionManager: SessionManager;
   private processPool: ClaudeProcessPool;
   private notificationQueue: NotificationQueue;
 
   constructor() {
     this.server = new Server(
       {
-        name: '@iris-mcp/server',
-        version: '1.0.0',
+        name: "@iris-mcp/server",
+        version: "1.0.0",
       },
       {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     // Initialize components
     this.configManager = getConfigManager();
     const config = this.configManager.load();
 
+    // Initialize session manager
+    this.sessionManager = new SessionManager(config);
+
     this.processPool = new ClaudeProcessPool(
       this.configManager,
-      config.settings
+      config.settings,
+      this.sessionManager,
     );
 
     this.notificationQueue = new NotificationQueue();
@@ -286,27 +297,33 @@ class IrisMcpServer {
   }
 
   async run(): Promise<void> {
+    // Initialize session manager
+    logger.info("Initializing session manager...");
+    await this.sessionManager.initialize();
+    logger.info("Session manager initialized");
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
 
-    logger.info('Iris MCP Server running on stdio');
+    logger.info("Iris MCP Server running on stdio");
 
     // Graceful shutdown
-    process.on('SIGINT', () => this.shutdown());
-    process.on('SIGTERM', () => this.shutdown());
+    process.on("SIGINT", () => this.shutdown());
+    process.on("SIGTERM", () => this.shutdown());
   }
 
   private async shutdown(): Promise<void> {
-    logger.info('Shutting down Iris MCP Server...');
+    logger.info("Shutting down Iris MCP Server...");
 
     try {
       await this.processPool.terminateAll();
       this.notificationQueue.close();
+      this.sessionManager.close();
 
-      logger.info('Shutdown complete');
+      logger.info("Shutdown complete");
       process.exit(0);
     } catch (error) {
-      logger.error('Error during shutdown', error);
+      logger.error("Error during shutdown", error);
       process.exit(1);
     }
   }

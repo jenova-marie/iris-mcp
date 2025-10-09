@@ -6,18 +6,34 @@
   },
   "teams": {
     "iris-mcp": {
-      "project": "/Users/jenova/projects/jenova-marie/iris-mcp",
       "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
       "description": "Iris MCP team - points to itself for testing",
       "skipPermissions": true,
       "color": "#E91E63"
     },
-    "test-team": {
-      "project": "/Users/jenova/projects/jenova-marie/iris-mcp/tests/team-test",
-      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/tests/test-team",
-      "description": "Iris MCP test team - points to a testing team",
+    "team-alpha": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/teams/team-alpha",
+      "description": "Iris MCP Team Alpha - points to a testing team",
       "skipPermissions": true,
       "color": "#4CAF50"
+    },
+    "team-beta": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/teams/team-beta",
+      "description": "Iris MCP Team Beta - points to a testing team",
+      "skipPermissions": true,
+      "color": "#4CAAF0"
+    },
+    "team-delta": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/teams/team-delta",
+      "description": "Iris MCP Team Delta - points to a testing team",
+      "skipPermissions": true,
+      "color": "#4CAF50"
+    },
+    "team-gamma": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/teams/team-gamma",
+      "description": "Iris MCP Team Gamma - points to a testing team",
+      "skipPermissions": true,
+      "color": "#4CAAF0"
     }
   }
 }

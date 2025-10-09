@@ -1,0 +1,24 @@
+{
+  "settings": {
+    "idleTimeout": 300000,
+    "maxProcesses": 5,
+    "healthCheckInterval": 30000
+  },
+  "teams": {
+    "frontend": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
+      "description": "Frontend team",
+      "skipPermissions": true
+    },
+    "backend": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
+      "description": "Backend team",
+      "skipPermissions": true
+    },
+    "mobile": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
+      "description": "Mobile team",
+      "skipPermissions": true
+    }
+  }
+}

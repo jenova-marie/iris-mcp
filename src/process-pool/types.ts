@@ -10,7 +10,8 @@ export interface ProcessPoolConfig {
 }
 
 export interface TeamConfig {
-  path: string;
+  path?: string; // Deprecated, use 'project' instead
+  project?: string; // Preferred - case-sensitive absolute path
   description: string;
   idleTimeout?: number;
   skipPermissions?: boolean;

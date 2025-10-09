@@ -6,12 +6,14 @@
   },
   "teams": {
     "iris-mcp": {
+      "project": "/Users/jenova/projects/jenova-marie/iris-mcp",
       "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
       "description": "Iris MCP team - points to itself for testing",
       "skipPermissions": true,
       "color": "#E91E63"
     },
     "test-team": {
+      "project": "/Users/jenova/projects/jenova-marie/iris-mcp/tests/team-test",
       "path": "/Users/jenova/projects/jenova-marie/iris-mcp/tests/test-team",
       "description": "Iris MCP test team - points to a testing team",
       "skipPermissions": true,

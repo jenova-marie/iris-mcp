@@ -94,27 +94,22 @@ export class SessionManager {
       }
     }
 
-    // Discover existing sessions from filesystem (skip if unit testing)
-    if (!this.skipSessionFileInit) {
-      await this.discoverExistingSessions();
-    }
+    // PRE-INITIALIZE ALL TEAM SESSIONS
+    logger.info("Pre-initializing team sessions");
 
-    // PRE-INITIALIZE ALL TEAM SESSIONS (skip if unit testing)
-    // This ensures session files exist before any --resume attempts
-    if (!this.skipSessionFileInit) {
-      logger.info("Pre-initializing team sessions");
+    for (const [teamName, teamConfig] of Object.entries(
+      this.teamsConfig.teams,
+    )) {
+      try {
+        logger.info("Processing team for session initialization", {
+          teamName,
+        });
+        const projectPath = this.getProjectPath(teamConfig);
 
-      for (const [teamName, teamConfig] of Object.entries(
-        this.teamsConfig.teams,
-      )) {
-        try {
-          logger.info("Processing team for session initialization", { teamName });
-          const projectPath = this.getProjectPath(teamConfig);
+        // Check if session exists for (null, teamName) - external→team sessions
+        const existing = this.store.getByTeamPair(null, teamName);
 
-          // Check if session exists for (null, teamName) - external→team sessions
-          const existing = this.store.getByTeamPair(null, teamName);
-
-          if (existing) {
+        if (existing) {
           // Verify session file exists
           const sessionFilePath = getSessionFilePath(
             projectPath,
@@ -142,7 +137,7 @@ export class SessionManager {
           const newSessionId = generateSecureUUID();
 
           // Create new session file with new UUID
-          await this.initializeSessionFile(teamName, newSessionId);
+          await this.initializeSession(teamName, newSessionId);
 
           // Delete old database entry
           this.store.delete(existing.sessionId);
@@ -162,23 +157,22 @@ export class SessionManager {
           });
 
           const sessionId = generateSecureUUID();
-          await this.initializeSessionFile(teamName, sessionId);
+          await this.initializeSession(teamName, sessionId);
 
           // Store in database
           this.store.create(null, teamName, sessionId);
 
           logger.info("Initial session created", { teamName, sessionId });
-          }
-        } catch (error) {
-          logger.error("Failed to initialize session for team", error);
-
-          // Don't fail entire initialization if one team fails
-          // This allows other teams to continue working
-          logger.warn("Continuing initialization despite error", {
-            teamName,
-            errorMessage: error instanceof Error ? error.message : String(error),
-          });
         }
+      } catch (error) {
+        logger.error("Failed to initialize session for team", error);
+
+        // Don't fail entire initialization if one team fails
+        // This allows other teams to continue working
+        logger.warn("Continuing initialization despite error", {
+          teamName,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
       }
     }
 
@@ -197,120 +191,10 @@ export class SessionManager {
   }
 
   /**
-   * Discover existing sessions from Claude's project directories
-   */
-  private async discoverExistingSessions(): Promise<void> {
-    logger.info("Discovering existing sessions from filesystem");
-
-    let orphanedCount = 0;
-    let recoveredCount = 0;
-
-    for (const [teamName, teamConfig] of Object.entries(
-      this.teamsConfig.teams,
-    )) {
-      const projectPath = this.getProjectPath(teamConfig);
-
-      try {
-        const sessionIds = listTeamSessions(projectPath);
-
-        logger.debug("Found sessions for team", {
-          teamName,
-          count: sessionIds.length,
-        });
-
-        // Check if any discovered sessions are missing from database
-        for (const sessionId of sessionIds) {
-          // Validate session ID format
-          if (!validateUUID(sessionId)) {
-            logger.warn("Skipping invalid session ID", {
-              teamName,
-              sessionId,
-            });
-            continue;
-          }
-
-          const existing = this.store.getBySessionId(sessionId);
-
-          if (!existing) {
-            orphanedCount++;
-            logger.warn("Found orphaned session file", {
-              teamName,
-              sessionId,
-            });
-
-            // Try to recover the session
-            const recovered = await this.recoverOrphanedSession(
-              teamName,
-              sessionId,
-              projectPath,
-            );
-            if (recovered) {
-              recoveredCount++;
-            }
-          }
-        }
-      } catch (error) {
-        logger.warn("Failed to discover sessions for team", {
-          teamName,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    if (orphanedCount > 0) {
-      logger.info("Session discovery completed", {
-        orphanedCount,
-        recoveredCount,
-      });
-    }
-  }
-
-  /**
-   * Attempt to recover an orphaned session
-   */
-  private async recoverOrphanedSession(
-    toTeam: string,
-    sessionId: string,
-    projectPath: string,
-  ): Promise<boolean> {
-    try {
-      // Try to read session file metadata to infer fromTeam
-      const sessionFilePath = getSessionFilePath(projectPath, sessionId);
-
-      // For now, we'll create a recovery entry with null fromTeam
-      // In future, could parse session file to determine actual fromTeam
-      logger.info("Recovering orphaned session", {
-        toTeam,
-        sessionId,
-      });
-
-      // Create database entry for orphaned session
-      const sessionInfo = this.store.create(null, toTeam, sessionId);
-
-      // Mark as potentially needing maintenance
-      this.store.updateStatus(sessionId, "compact_pending");
-
-      logger.info("Successfully recovered orphaned session", {
-        toTeam,
-        sessionId,
-      });
-
-      return true;
-    } catch (error) {
-      logger.error("Failed to recover orphaned session", {
-        toTeam,
-        sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return false;
-    }
-  }
-
-  /**
-   * Initialize a session file using claude --session-id
+   * Initialize a session using claude --session-id
    * This creates the actual .jsonl file in ~/.claude/projects/
    */
-  private async initializeSessionFile(
+  private async initializeSession(
     teamName: string,
     sessionId: string,
   ): Promise<void> {
@@ -323,7 +207,8 @@ export class SessionManager {
 
     // Get timeout from team config or fall back to global settings
     const sessionInitTimeout =
-      teamConfig.sessionInitTimeout ?? this.teamsConfig.settings.sessionInitTimeout;
+      teamConfig.sessionInitTimeout ??
+      this.teamsConfig.settings.sessionInitTimeout;
 
     logger.info("Initializing session file", {
       teamName,
@@ -332,40 +217,19 @@ export class SessionManager {
       sessionInitTimeout,
     });
 
-    // Skip actual file initialization if in unit test mode
-    if (this.skipSessionFileInit) {
-      logger.debug("Skipping session file initialization (unit test mode)", {
-        teamName,
-        sessionId,
-      });
-      return;
-    }
-
     try {
       const { spawn } = await import("child_process");
 
       // Build command args for session creation
-      // --print requires input from stdin, not as positional argument
       const args = [
         "--session-id", // Create NEW session (not resume)
         sessionId,
         "--print", // Non-interactive mode
+        "ping", // REQUIRED Add a ping command to create session conversation
       ];
 
-      // Enable debug mode for better diagnostics
-      if (process.env.DEBUG || process.env.NODE_ENV === "test") {
-        args.push("--debug");
-        logger.info("Enabling --debug flag for session initialization", {
-          teamName,
-          sessionId,
-        });
-      }
-
-      // Note: --dangerously-skip-permissions is NOT used during session creation
-      // It's only used when resuming sessions with --resume
-
       // Log the exact command being run
-      const command = `claude ${args.join(' ')}`;
+      const command = `claude ${args.join(" ")}`;
       logger.info("Spawning claude process", {
         teamName,
         sessionId,
@@ -373,15 +237,11 @@ export class SessionManager {
         cwd: projectPath,
       });
 
-      // Spawn Claude with --session-id and send ping via stdin
+      // Spawn Claude
       const claudeProcess = spawn("claude", args, {
         cwd: projectPath,
         stdio: ["pipe", "pipe", "pipe"],
       });
-
-      // Send "ping" message via stdin (required for --print mode)
-      claudeProcess.stdin!.write("ping\n");
-      claudeProcess.stdin!.end();
 
       // Capture any errors
       let spawnError: Error | null = null;
@@ -458,18 +318,21 @@ export class SessionManager {
             reject(spawnError);
           } else if (code !== 0 && code !== 143) {
             // 143 is SIGTERM which is ok
-            logger.error("Session initialization failed with non-zero exit code", {
-              teamName,
-              sessionId,
-              code,
-              command: `claude ${args.join(" ")}`,
-              cwd: projectPath,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-              stdout: stdoutData,
-              stderr: stderrData,
-              debugLogPath,
-            });
+            logger.error(
+              "Session initialization failed with non-zero exit code",
+              {
+                teamName,
+                sessionId,
+                code,
+                command: `claude ${args.join(" ")}`,
+                cwd: projectPath,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                stdout: stdoutData,
+                stderr: stderrData,
+                debugLogPath,
+              },
+            );
 
             const errorMsg = [
               `Session initialization failed with exit code ${code}`,
@@ -481,18 +344,21 @@ export class SessionManager {
 
             reject(new ProcessError(errorMsg, teamName));
           } else if (!responseReceived) {
-            logger.error("Session initialization completed but no response received", {
-              teamName,
-              sessionId,
-              code,
-              command: `claude ${args.join(" ")}`,
-              cwd: projectPath,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-              stdout: stdoutData,
-              stderr: stderrData,
-              debugLogPath,
-            });
+            logger.error(
+              "Session initialization completed but no response received",
+              {
+                teamName,
+                sessionId,
+                code,
+                command: `claude ${args.join(" ")}`,
+                cwd: projectPath,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                stdout: stdoutData,
+                stderr: stderrData,
+                debugLogPath,
+              },
+            );
 
             const errorMsg = [
               "Session initialization completed but no response received",
@@ -504,13 +370,16 @@ export class SessionManager {
 
             reject(new ProcessError(errorMsg, teamName));
           } else {
-            logger.info("Session initialization process completed successfully", {
-              teamName,
-              sessionId,
-              code,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-            });
+            logger.info(
+              "Session initialization process completed successfully",
+              {
+                teamName,
+                sessionId,
+                code,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+              },
+            );
             resolve();
           }
         });
@@ -542,7 +411,7 @@ export class SessionManager {
             .join("\n");
 
           reject(new ProcessError(errorMsg, teamName));
-        }, sessionInitTimeout);
+        }, sessionInitTimeout); // This kill should be immediate (or unnecessary) - the claude --session-id command returns and exists immediately
       });
 
       // Verify session file was created
@@ -635,7 +504,7 @@ export class SessionManager {
 
     try {
       // Initialize the session file first using claude --session-id
-      await this.initializeSessionFile(toTeam, sessionId);
+      await this.initializeSession(toTeam, sessionId);
 
       // Store in database
       const sessionInfo = this.store.create(fromTeam, toTeam, sessionId);

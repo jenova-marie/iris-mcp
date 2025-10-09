@@ -36,22 +36,20 @@ describe("SessionManager", () => {
         idleTimeout: 300000,
         maxProcesses: 5,
         healthCheckInterval: 30000,
+        sessionInitTimeout: 20000, // 20 second timeout for session initialization
       },
       teams: {
         "team-a": {
-          project: teamAPath,
           path: teamAPath,
           description: "Test Team A",
           skipPermissions: true,
         },
         "team-b": {
-          project: teamBPath,
           path: teamBPath,
           description: "Test Team B",
           skipPermissions: true,
         },
         "team-c": {
-          project: teamCPath,
           path: teamCPath,
           description: "Test Team C",
           skipPermissions: false,
@@ -59,7 +57,7 @@ describe("SessionManager", () => {
       },
     };
 
-    manager = new SessionManager(testConfig, testDbPath, true); // Skip actual session file init in tests
+    manager = new SessionManager(testConfig, testDbPath, true); // Skip session file init for unit tests
   });
 
   afterEach(() => {
@@ -95,7 +93,6 @@ describe("SessionManager", () => {
         settings: testConfig.settings,
         teams: {
           "invalid-team": {
-            project: "/nonexistent/path/12345",
             path: "/nonexistent/path/12345",
             description: "Invalid team",
             skipPermissions: true,
@@ -103,7 +100,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const invalidManager = new SessionManager(invalidConfig, testDbPath, true); // Skip actual session file init in tests
+      const invalidManager = new SessionManager(invalidConfig, testDbPath, true); // Skip session file init for unit tests
 
       await expect(invalidManager.initialize()).rejects.toThrow(
         "Project path does not exist",
@@ -408,32 +405,8 @@ describe("SessionManager", () => {
   });
 
   describe("configuration handling", () => {
-    it("should prefer project over path property", async () => {
-      const projectPath = join(tmpdir(), "iris-test-project-preference");
-      mkdirSync(projectPath, { recursive: true });
-
-      const configWithBoth: TeamsConfig = {
-        settings: testConfig.settings,
-        teams: {
-          "test-team": {
-            project: projectPath,
-            path: "/some/other/path", // Should be ignored
-            description: "Test",
-            skipPermissions: true,
-          },
-        },
-      };
-
-      const testManager = new SessionManager(configWithBoth, testDbPath, true); // Skip session file init in tests
-
-      await expect(testManager.initialize()).resolves.not.toThrow();
-
-      testManager.close();
-      rmSync(projectPath, { recursive: true, force: true });
-    });
-
-    it("should fallback to path if project not specified", async () => {
-      const pathValue = join(tmpdir(), "iris-test-path-fallback");
+    it("should accept valid path configuration", async () => {
+      const pathValue = join(tmpdir(), "iris-test-path-config");
       mkdirSync(pathValue, { recursive: true });
 
       const configWithPath: TeamsConfig = {
@@ -447,7 +420,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const testManager = new SessionManager(configWithPath, testDbPath, true); // Skip session file init in tests
+      const testManager = new SessionManager(configWithPath, testDbPath, true); // Skip session file init for unit tests
 
       await expect(testManager.initialize()).resolves.not.toThrow();
 

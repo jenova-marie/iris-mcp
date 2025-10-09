@@ -64,7 +64,7 @@ export class ClaudeProcess extends EventEmitter {
     this.startTime = Date.now();
 
     try {
-      const projectPath = this.teamConfig.project || this.teamConfig.path;
+      const projectPath = this.teamConfig.path;
 
       this.logger.info("Spawning Claude Code process", {
         path: projectPath,

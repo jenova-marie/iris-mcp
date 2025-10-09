@@ -345,7 +345,7 @@ export class SessionManager {
       const { spawn } = await import("child_process");
 
       // Build command args for session creation
-      // Use simple ping command (not stream-json for initialization)
+      // --print requires input from stdin, not as positional argument
       const args = [
         "--session-id", // Create NEW session (not resume)
         sessionId,
@@ -361,8 +361,6 @@ export class SessionManager {
         });
       }
 
-      args.push("ping"); // Simple message to initialize session
-
       // Note: --dangerously-skip-permissions is NOT used during session creation
       // It's only used when resuming sessions with --resume
 
@@ -375,12 +373,15 @@ export class SessionManager {
         cwd: projectPath,
       });
 
-      // Spawn Claude with --session-id and simple ping
-      // No stdin needed - ping is passed as command-line argument
+      // Spawn Claude with --session-id and send ping via stdin
       const claudeProcess = spawn("claude", args, {
         cwd: projectPath,
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe"],
       });
+
+      // Send "ping" message via stdin (required for --print mode)
+      claudeProcess.stdin!.write("ping\n");
+      claudeProcess.stdin!.end();
 
       // Capture any errors
       let spawnError: Error | null = null;

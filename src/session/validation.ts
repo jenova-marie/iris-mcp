@@ -7,6 +7,7 @@
 
 import { existsSync, realpathSync } from "fs";
 import { resolve, normalize } from "path";
+import { randomUUID } from "crypto";
 import { ConfigurationError, ValidationError } from "../utils/errors.js";
 import { Logger } from "../utils/logger.js";
 
@@ -146,7 +147,6 @@ export function validateTeamName(teamName: string): void {
  * Generate secure random UUID v4
  */
 export function generateSecureUUID(): string {
-  const { randomUUID } = require("crypto");
   const uuid = randomUUID();
 
   // Double-check the generated UUID is valid

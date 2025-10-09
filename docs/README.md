@@ -1,4 +1,4 @@
-# Teams MCP: Cross-Project AI Agent Communication System
+# Iris MCP: Cross-Project AI Agent Communication System
 
 **A Revolutionary Model Context Protocol Server for Inter-Codebase Claude Code Collaboration**
 
@@ -6,13 +6,13 @@
 
 ## 🎯 Executive Summary
 
-Teams MCP is a groundbreaking MCP server that enables **direct communication between Claude Code instances across different project directories**. It allows Claude working in Project A to seamlessly coordinate with Claude in Project B through bidirectional stdio streaming, creating the first true cross-codebase AI collaboration system.
+Iris MCP is a groundbreaking MCP server that enables **direct communication between Claude Code instances across different project directories**. It allows Claude working in Project A to seamlessly coordinate with Claude in Project B through bidirectional stdio streaming, creating the first true cross-codebase AI collaboration system.
 
 **The Core Innovation:** Instead of switching contexts manually, you stay in Project A's Claude Code session and say:
 
-> *"Using teams MCP, ask Team Backend what their API versioning strategy is"*
+> *"Using iris MCP, ask Team Backend what their API versioning strategy is"*
 
-Claude A sends the question via Teams MCP → Teams MCP launches Claude B in the backend directory → Claude B analyzes their codebase and responds → Teams MCP relays the answer back → Claude A incorporates it into your conversation.
+Claude A sends the question via Iris MCP → Iris MCP launches Claude B in the backend directory → Claude B analyzes their codebase and responds → Iris MCP relays the answer back → Claude A incorporates it into your conversation.
 
 **This has never been done before.**
 
@@ -32,19 +32,19 @@ Modern software development involves multiple codebases (frontend, backend, mobi
 
 This workflow is **slow, error-prone, and breaks your flow state**.
 
-### The Solution: Teams MCP
+### The Solution: Iris MCP
 
 **Single Command Coordination:**
 
 ```
 You (in Project A): "I'm changing the User model to add 'lastLoginDate'.
-Using teams MCP, coordinate with Team Frontend and Team Backend to update their code."
+Using iris MCP, coordinate with Team Frontend and Team Backend to update their code."
 
 Claude A:
   → Calls teams.send_message("frontend", "User model adding lastLoginDate field...")
   → Calls teams.send_message("backend", "User model adding lastLoginDate field...")
 
-Teams MCP:
+Iris MCP:
   → Launches Claude Code in /projects/team-frontend via stdio streaming
   → Launches Claude Code in /projects/team-backend via stdio streaming
   → Waits for responses from both teams
@@ -66,7 +66,7 @@ Claude A: "All teams coordinated. Frontend and Backend have been updated."
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Teams MCP Server                             │
+│                     Iris MCP Server                             │
 │                   (Message Broker & Orchestrator)                │
 │                                                                   │
 │  ┌────────────────────────────────────────────────────────────┐ │
@@ -116,17 +116,17 @@ Claude A: "All teams coordinated. Frontend and Backend have been updated."
 sequenceDiagram
     participant User
     participant ClaudeA as Claude A (Frontend)
-    participant TeamsMCP as Teams MCP Server
+    participant IrisMCP as Iris MCP Server
     participant ClaudeB as Claude B (Backend)
 
     User->>ClaudeA: Ask Team Backend about API strategy
-    ClaudeA->>TeamsMCP: teams.ask("backend", "What's your API versioning strategy?")
-    TeamsMCP->>TeamsMCP: Spawn: claude --input-format stream-json
-    TeamsMCP->>ClaudeB: {"type":"user","message":"What's your API versioning strategy?"}
+    ClaudeA->>IrisMCP: teams.ask("backend", "What's your API versioning strategy?")
+    IrisMCP->>IrisMCP: Spawn: claude --input-format stream-json
+    IrisMCP->>ClaudeB: {"type":"user","message":"What's your API versioning strategy?"}
     ClaudeB->>ClaudeB: Analyzes backend codebase
-    ClaudeB->>TeamsMCP: {"type":"result","response":"We use semantic versioning..."}
-    TeamsMCP->>TeamsMCP: Terminate Claude B process
-    TeamsMCP->>ClaudeA: Return: "Team Backend says: We use semantic versioning..."
+    ClaudeB->>IrisMCP: {"type":"result","response":"We use semantic versioning..."}
+    IrisMCP->>IrisMCP: Terminate Claude B process
+    IrisMCP->>ClaudeA: Return: "Team Backend says: We use semantic versioning..."
     ClaudeA->>User: "I asked Team Backend and they use semantic versioning..."
 ```
 
@@ -172,7 +172,7 @@ claude --input-format stream-json --output-format stream-json
 
 ### Comparison Matrix
 
-| Feature | Teams MCP | Symphony of One | Claude-Flow | Agent-MCP | Others |
+| Feature | Iris MCP | Symphony of One | Claude-Flow | Agent-MCP | Others |
 |---------|-----------|-----------------|-------------|-----------|--------|
 | **Cross-Project Communication** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Independent Team Contexts** | ✅ | ❌ | ❌ | ❌ | ❌ |
@@ -187,11 +187,11 @@ claude --input-format stream-json --output-format stream-json
 
 ---
 
-## 🔥 What Makes Teams MCP Revolutionary
+## 🔥 What Makes Iris MCP Revolutionary
 
 ### 1. **First True Cross-Codebase Coordination**
 
-All existing solutions work within a **single project boundary**. Teams MCP breaks this limitation by enabling communication between completely independent codebases, each with their own:
+All existing solutions work within a **single project boundary**. Iris MCP breaks this limitation by enabling communication between completely independent codebases, each with their own:
 
 - Directory structure
 - Dependencies and node_modules
@@ -238,7 +238,7 @@ The MCP server handles the orchestration, but the agents communicate like human 
 
 ### 4. **Leverages Existing Claude Code Features**
 
-Teams MCP doesn't reinvent the wheel—it builds on Claude Code's native capabilities:
+Iris MCP doesn't reinvent the wheel—it builds on Claude Code's native capabilities:
 
 - **Stdio streaming** (already supported)
 - **Project-specific MCP servers** (already supported)
@@ -255,7 +255,7 @@ From GitHub Issue [#2929](https://github.com/anthropics/claude-code/issues/2929)
 >
 > Use cases are infinite. Here are some: generalists vs specialists claudes: I could have a specialist claude run on my specific server answering to natural language requests, while a local generalist claude call it, having no clue of the specific API."
 
-**Developers are already asking for this!** Teams MCP delivers it.
+**Developers are already asking for this!** Iris MCP delivers it.
 
 ---
 
@@ -286,7 +286,7 @@ Each team's Claude receives the notification on their next session:
 You (in Frontend): "I'm seeing 500 errors from the API. Ask Team Backend
 what could cause this error response."
 
-Frontend Claude → Teams MCP → Backend Claude analyzes logs and error handlers
+Frontend Claude → Iris MCP → Backend Claude analyzes logs and error handlers
 
 Backend Claude: "The 500 errors occur when the database connection pool is exhausted.
 You should implement exponential backoff retries."
@@ -591,11 +591,11 @@ class StdioManager {
 
 IBM's research on multi-agent systems identified that **"many multi-agent projects struggle with disseminating information between agents and tool output parsing errors, and these impediments can be remedied with MCP."**
 
-However, all existing MCP implementations focus on **single-project contexts**. Teams MCP extends MCP's power to **cross-project coordination**, filling a critical gap in the ecosystem.
+However, all existing MCP implementations focus on **single-project contexts**. Iris MCP extends MCP's power to **cross-project coordination**, filling a critical gap in the ecosystem.
 
 ### Enables True Team-Scale AI
 
-Current AI coding tools operate at the **individual developer** or **single repository** level. Teams MCP scales this to the **team** and **organization** level by enabling:
+Current AI coding tools operate at the **individual developer** or **single repository** level. Iris MCP scales this to the **team** and **organization** level by enabling:
 
 - **Microservices coordination** across service boundaries
 - **Frontend-backend synchronization** without manual coordination
@@ -604,7 +604,7 @@ Current AI coding tools operate at the **individual developer** or **single repo
 
 ### Reduces Context Switching Overhead
 
-Studies show developers lose **23 minutes of productivity** on average when context switching between projects. Teams MCP eliminates this by allowing:
+Studies show developers lose **23 minutes of productivity** on average when context switching between projects. Iris MCP eliminates this by allowing:
 
 - Stay in your current project while coordinating changes
 - No need to explain context to multiple Claude instances
@@ -612,7 +612,7 @@ Studies show developers lose **23 minutes of productivity** on average when cont
 
 ### Foundation for Future Innovations
 
-Teams MCP creates the foundation for:
+Iris MCP creates the foundation for:
 
 - **AI Team Leads**: Meta-agents that orchestrate multiple specialist agents
 - **Autonomous Feature Development**: End-to-end feature implementation across services
@@ -623,7 +623,7 @@ Teams MCP creates the foundation for:
 
 ## 🎉 Conclusion
 
-Teams MCP represents a **paradigm shift** in how AI coding assistants collaborate. By enabling **cross-project communication through stdio streaming**, it solves real developer pain points that no existing solution addresses.
+Iris MCP represents a **paradigm shift** in how AI coding assistants collaborate. By enabling **cross-project communication through stdio streaming**, it solves real developer pain points that no existing solution addresses.
 
 **What makes this revolutionary:**
 
@@ -638,7 +638,7 @@ This isn't just an incremental improvement—it's a **fundamental building block
 **The future of development isn't one AI assistant per developer.**
 **It's one AI team per human team.**
 
-Teams MCP makes that future possible today.
+Iris MCP makes that future possible today.
 
 ---
 

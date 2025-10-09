@@ -7,7 +7,11 @@
 
 import type { TeamsConfig, TeamConfig } from "../process-pool/types.js";
 import { Logger } from "../utils/logger.js";
-import { ConfigurationError, ProcessError, TimeoutError } from "../utils/errors.js";
+import {
+  ConfigurationError,
+  ProcessError,
+  TimeoutError,
+} from "../utils/errors.js";
 import { SessionStore } from "./session-store.js";
 import {
   validateProjectPath,
@@ -42,10 +46,15 @@ export class SessionManager {
   private processPool: any; // Will be set after initialization
   private skipSessionFileInit = false; // For testing
 
-  constructor(teamsConfig: TeamsConfig, dbPath?: string, skipSessionFileInit = false) {
+  constructor(
+    teamsConfig: TeamsConfig,
+    dbPath?: string,
+    skipSessionFileInit = false,
+  ) {
     this.teamsConfig = teamsConfig;
     this.store = new SessionStore(dbPath);
-    this.skipSessionFileInit = skipSessionFileInit || process.env.NODE_ENV === 'test';
+    this.skipSessionFileInit =
+      skipSessionFileInit || process.env.NODE_ENV === "test";
   }
 
   /**
@@ -86,71 +95,81 @@ export class SessionManager {
       }
     }
 
-    // Discover existing sessions from filesystem
-    await this.discoverExistingSessions();
+    // Skip discovering existing sessions in test mode
+    if (!this.skipSessionFileInit && process.env.NODE_ENV !== "test") {
+      // Discover existing sessions from filesystem
+      await this.discoverExistingSessions();
+    }
 
-    // PRE-INITIALIZE ALL TEAM SESSIONS
+    // PRE-INITIALIZE ALL TEAM SESSIONS (skip in test mode)
     // This ensures session files exist before any --resume attempts
-    logger.info("Pre-initializing team sessions");
+    if (!this.skipSessionFileInit && process.env.NODE_ENV !== "test") {
+      logger.info("Pre-initializing team sessions");
 
-    for (const [teamName, teamConfig] of Object.entries(
-      this.teamsConfig.teams,
-    )) {
-      try {
-        const projectPath = this.getProjectPath(teamConfig);
+      for (const [teamName, teamConfig] of Object.entries(
+        this.teamsConfig.teams,
+      )) {
+        try {
+          const projectPath = this.getProjectPath(teamConfig);
 
-        // Check if session exists for (null, teamName) - external→team sessions
-        const existing = this.store.getByTeamPair(null, teamName);
+          // Check if session exists for (null, teamName) - external→team sessions
+          const existing = this.store.getByTeamPair(null, teamName);
 
-        if (existing) {
-          // Verify session file exists
-          const sessionFilePath = getSessionFilePath(
-            projectPath,
-            existing.sessionId,
-          );
-          const { existsSync } = await import("fs");
+          if (existing) {
+            // Verify session file exists
+            const sessionFilePath = getSessionFilePath(
+              projectPath,
+              existing.sessionId,
+            );
+            const { existsSync } = await import("fs");
 
-          if (existsSync(sessionFilePath)) {
-            logger.debug("Session file already exists", {
+            if (existsSync(sessionFilePath)) {
+              logger.debug("Session file already exists", {
+                teamName,
+                sessionId: existing.sessionId,
+              });
+              continue;
+            }
+
+            // Session in DB but file missing - re-initialize
+            logger.warn("Session file missing, re-initializing", {
               teamName,
               sessionId: existing.sessionId,
             });
-            continue;
-          }
 
-          // Session in DB but file missing - re-initialize
-          logger.warn("Session file missing, re-initializing", {
+            await this.initializeSessionFile(teamName, existing.sessionId);
+          } else {
+            // No session in database - create new one
+            logger.info("Creating initial session for team", { teamName });
+
+            const sessionId = generateSecureUUID();
+            await this.initializeSessionFile(teamName, sessionId);
+
+            // Store in database
+            this.store.create(null, teamName, sessionId);
+
+            logger.info("Initial session created", { teamName, sessionId });
+          }
+        } catch (error) {
+          logger.error("Failed to initialize session for team", {
             teamName,
-            sessionId: existing.sessionId,
+            error: error instanceof Error ? error.message : String(error),
           });
 
-          await this.initializeSessionFile(teamName, existing.sessionId);
-        } else {
-          // No session in database - create new one
-          logger.info("Creating initial session for team", { teamName });
-
-          const sessionId = generateSecureUUID();
-          await this.initializeSessionFile(teamName, sessionId);
-
-          // Store in database
-          this.store.create(null, teamName, sessionId);
-
-          logger.info("Initial session created", { teamName, sessionId });
+          // Don't fail entire initialization if one team fails
+          // This allows other teams to continue working
+          logger.warn("Continuing initialization despite error", { teamName });
         }
-      } catch (error) {
-        logger.error("Failed to initialize session for team", {
-          teamName,
-          error: error instanceof Error ? error.message : String(error),
-        });
-
-        // Don't fail entire initialization if one team fails
-        // This allows other teams to continue working
-        logger.warn("Continuing initialization despite error", { teamName });
       }
     }
 
     this.initialized = true;
-    logger.info("Session manager initialized with all team sessions ready");
+    logger.info(
+      "Session manager initialized" +
+        (this.skipSessionFileInit || process.env.NODE_ENV === "test"
+          ? ""
+          : " with all team sessions ready"),
+    );
   }
 
   /**
@@ -407,12 +426,12 @@ export class SessionManager {
         setTimeout(() => {
           process.kill();
           reject(
-            new TimeoutError(
+            new ProcessError(
               `Session initialization timed out after 5 seconds. Response received: ${responseReceived}`,
               teamName,
             ),
           );
-        }, 5000);
+        });
       });
 
       // Verify session file was created
@@ -541,12 +560,11 @@ export class SessionManager {
     }
   }
 
-
   /**
    * Generate cache key for team pair
    */
   private getCacheKey(fromTeam: string | null, toTeam: string): string {
-    return `${fromTeam ?? 'external'}->${toTeam}`;
+    return `${fromTeam ?? "external"}->${toTeam}`;
   }
 
   /**

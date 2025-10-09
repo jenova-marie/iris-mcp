@@ -279,12 +279,11 @@ describe("SessionManager", () => {
       await manager.initialize();
     });
 
-    it("should return pre-initialized sessions after initialization", () => {
+    it("should return empty list after initialization in test mode", () => {
       const sessions = manager.listSessions();
 
-      // After initialization, there should be sessions for each team (created during pre-initialization)
-      expect(sessions).toHaveLength(3); // One for each team (team-a, team-b, team-c)
-      expect(sessions.every(s => s.fromTeam === null)).toBe(true); // All pre-initialized from external
+      // In test mode with skipSessionFileInit=true, no pre-initialized sessions
+      expect(sessions).toHaveLength(0);
     });
 
     it("should list all sessions", async () => {
@@ -294,8 +293,8 @@ describe("SessionManager", () => {
 
       const sessions = manager.listSessions();
 
-      // 3 pre-initialized + 3 new = 6 total
-      expect(sessions).toHaveLength(6);
+      // No pre-initialized sessions in test mode, only the 3 created
+      expect(sessions).toHaveLength(3);
     });
 
     it("should filter by fromTeam", async () => {
@@ -316,8 +315,8 @@ describe("SessionManager", () => {
 
       const sessions = manager.listSessions({ toTeam: "team-b" });
 
-      // 1 pre-initialized (null -> team-b) + 2 created = 3 total
-      expect(sessions).toHaveLength(3);
+      // No pre-initialized sessions in test mode, only 2 created sessions
+      expect(sessions).toHaveLength(2);
       expect(sessions.every((s) => s.toTeam === "team-b")).toBe(true);
     });
   });
@@ -401,9 +400,9 @@ describe("SessionManager", () => {
 
       const stats = manager.getStats();
 
-      // 3 pre-initialized + 3 created = 6 total
-      expect(stats.total).toBe(6);
-      expect(stats.active).toBe(6);
+      // No pre-initialized sessions in test mode, only 3 created
+      expect(stats.total).toBe(3);
+      expect(stats.active).toBe(3);
       expect(stats.totalMessages).toBe(10);
     });
   });

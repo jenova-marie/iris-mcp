@@ -4,5 +4,18 @@
     "maxProcesses": 10,
     "healthCheckInterval": 30000
   },
-  "teams": {}
+  "teams": {
+    "iris-mcp": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
+      "description": "Iris MCP team - points to itself for testing",
+      "skipPermissions": true,
+      "color": "#E91E63"
+    },
+    "test-team": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/tests/test-team",
+      "description": "Iris MCP test team - points to a testing team",
+      "skipPermissions": true,
+      "color": "#4CAF50"
+    }
+  }
 }

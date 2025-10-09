@@ -40,10 +40,12 @@ export class SessionManager {
   private cacheMaxAge = 60000; // 1 minute cache TTL
   private cacheTimestamps = new Map<string, number>();
   private processPool: any; // Will be set after initialization
+  private skipSessionFileInit = false; // For testing
 
-  constructor(teamsConfig: TeamsConfig, dbPath?: string) {
+  constructor(teamsConfig: TeamsConfig, dbPath?: string, skipSessionFileInit = false) {
     this.teamsConfig = teamsConfig;
     this.store = new SessionStore(dbPath);
+    this.skipSessionFileInit = skipSessionFileInit || process.env.NODE_ENV === 'test';
   }
 
   /**
@@ -298,6 +300,15 @@ export class SessionManager {
       projectPath,
     });
 
+    // Skip actual file initialization in test mode
+    if (this.skipSessionFileInit) {
+      logger.debug("Skipping session file initialization in test mode", {
+        teamName,
+        sessionId,
+      });
+      return;
+    }
+
     try {
       const { spawn } = await import("child_process");
 
@@ -306,44 +317,39 @@ export class SessionManager {
         "--session-id", // Create NEW session (not resume)
         sessionId,
         "--print", // Non-interactive mode
-        "--input-format",
-        "stream-json",
-        "--output-format",
-        "stream-json",
+        "ping", // Simple ping message to initialize the session
       ];
 
-      if (teamConfig.skipPermissions) {
-        args.push("--dangerously-skip-permissions");
-      }
+      // Note: --dangerously-skip-permissions is NOT used during session creation
+      // It's only used when resuming sessions with --resume
 
-      // Spawn Claude with --session-id
+      // Log the exact command being run
+      logger.debug("Spawning claude with args", {
+        teamName,
+        sessionId,
+        args,
+        cwd: projectPath,
+      });
+
+      // Spawn Claude with --session-id and ping message
       const process = spawn("claude", args, {
         cwd: projectPath,
         stdio: ["pipe", "pipe", "pipe"],
       });
 
+      // Close stdin immediately since we're not sending any input
+      process.stdin!.end();
+
       // Capture any errors
       let error: Error | null = null;
       process.on("error", (err) => {
+        logger.error("Process error during spawn", {
+          teamName,
+          sessionId,
+          error: err.message,
+        });
         error = err;
       });
-
-      // Send initialization ping to create conversation
-      const initMessage =
-        JSON.stringify({
-          type: "user",
-          message: {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Session initialized",
-              },
-            ],
-          },
-        }) + "\n";
-
-      process.stdin!.write(initMessage);
 
       // Wait for process to complete
       await new Promise<void>((resolve, reject) => {
@@ -352,12 +358,26 @@ export class SessionManager {
         // Listen for stdout data (response from Claude)
         process.stdout!.on("data", (data) => {
           const output = data.toString();
-          logger.debug("Session init response", { teamName, sessionId, output });
+          logger.debug("Session init stdout", {
+            teamName,
+            sessionId,
+            output: output.substring(0, 200),
+          });
 
           // If we got any response, consider it successful
-          if (output.includes('"type"')) {
+          if (output.length > 0) {
             responseReceived = true;
           }
+        });
+
+        // Listen for stderr data (errors from Claude)
+        process.stderr!.on("data", (data) => {
+          const errorOutput = data.toString();
+          logger.warn("Session init stderr", {
+            teamName,
+            sessionId,
+            error: errorOutput,
+          });
         });
 
         process.on("exit", (code) => {
@@ -383,18 +403,16 @@ export class SessionManager {
           }
         });
 
-        // Timeout after 15 seconds
+        // Timeout after 5 seconds
         setTimeout(() => {
-          if (!responseReceived) {
-            process.kill();
-            reject(
-              new TimeoutError(
-                "Session initialization timed out after 15 seconds",
-                teamName,
-              ),
-            );
-          }
-        }, 15000);
+          process.kill();
+          reject(
+            new TimeoutError(
+              `Session initialization timed out after 5 seconds. Response received: ${responseReceived}`,
+              teamName,
+            ),
+          );
+        }, 5000);
       });
 
       // Verify session file was created

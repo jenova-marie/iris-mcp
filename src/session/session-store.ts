@@ -239,6 +239,21 @@ export class SessionStore {
   }
 
   /**
+   * Reset message count for a session
+   */
+  resetMessageCount(sessionId: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET message_count = 0
+      WHERE session_id = ?
+    `);
+
+    stmt.run(sessionId);
+
+    logger.debug("Reset message count", { sessionId });
+  }
+
+  /**
    * Update session status
    */
   updateStatus(sessionId: string, status: SessionStatus): void {
@@ -309,6 +324,60 @@ export class SessionStore {
       archived: row.archived || 0,
       totalMessages: row.total_messages || 0,
     };
+  }
+
+  /**
+   * Execute operations in a transaction
+   * Provides atomic batch operations
+   */
+  transaction<T>(fn: () => T): T {
+    const transaction = this.db.transaction(fn);
+    return transaction();
+  }
+
+  /**
+   * Batch create multiple sessions
+   */
+  createBatch(
+    sessions: Array<{
+      fromTeam: string | null;
+      toTeam: string;
+      sessionId: string;
+    }>,
+  ): SessionInfo[] {
+    return this.transaction(() => {
+      const results: SessionInfo[] = [];
+      for (const session of sessions) {
+        const info = this.create(
+          session.fromTeam,
+          session.toTeam,
+          session.sessionId,
+        );
+        results.push(info);
+      }
+      return results;
+    });
+  }
+
+  /**
+   * Batch update session status
+   */
+  updateStatusBatch(
+    updates: Array<{ sessionId: string; status: SessionStatus }>,
+  ): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET status = ?
+      WHERE session_id = ?
+    `);
+
+    this.transaction(() => {
+      for (const update of updates) {
+        stmt.run(update.status, update.sessionId);
+      }
+    });
+
+    logger.info("Batch updated session statuses", { count: updates.length });
   }
 
   /**

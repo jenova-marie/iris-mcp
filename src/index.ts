@@ -7,109 +7,65 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import express from 'express';
+import { Command } from 'commander';
 
 import { getConfigManager } from "./config/teams-config.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
-import { NotificationQueue } from "./notifications/queue.js";
+// import { MessageQueue } from "./messages/queue.js";
 import { SessionManager } from "./session/session-manager.js";
+import { IrisOrchestrator } from "./iris.js";
 import { Logger } from "./utils/logger.js";
-import {
-  teamsAsk,
-  teamsSendMessage,
-  teamsNotify,
-  teamsGetStatus,
-} from "./tools/index.js";
+import { say } from "./mcp/index.js";
+// TODO: teams_get_status needs to be moved/renamed
 
 const logger = new Logger('server');
 
 // MCP Tool Definitions
 const TOOLS: Tool[] = [
   {
-    name: "teams_ask",
+    name: 'teams_request',
     description:
-      "Ask a team a question and wait for a synchronous response. Use this for direct Q&A where you need an immediate answer.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description:
-            'Name of the team to ask (e.g., "frontend", "backend", "mobile")',
-        },
-        question: {
-          type: "string",
-          description: "The question to ask the team",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team asking the question",
-        },
-        timeout: {
-          type: "number",
-          description: "Optional timeout in milliseconds (default: 30000)",
-        },
-      },
-      required: ["team", "question"],
-    },
-  },
-  {
-    name: 'teams_send_message',
-    description:
-      'Send a message to another team. Can optionally wait for a response or fire-and-forget.',
+      'Unified tool for team communication. Supports three modes: ' +
+      '1) Synchronous request (waitForResponse=true): Send message and wait for response. ' +
+      '2) Asynchronous request (waitForResponse=false): Send without waiting. ' +
+      '3) Persistent notification (persist=true): Fire-and-forget to persistent queue.',
     inputSchema: {
       type: 'object',
       properties: {
+        toTeam: {
+          type: 'string',
+          description: 'Name of the team to send message to (e.g., "frontend", "backend", "mobile")',
+        },
+        message: {
+          type: 'string',
+          description: 'The message content to send',
+        },
         fromTeam: {
           type: 'string',
           description: 'Optional: Name of the team sending the message',
         },
-        toTeam: {
-          type: 'string',
-          description: 'Name of the team to send the message to',
-        },
-        message: {
-          type: 'string',
-          description: 'The message to send',
-        },
         waitForResponse: {
           type: 'boolean',
-          description: 'Whether to wait for a response (default: true)',
+          description: 'Wait for response (default: true). Ignored if persist=true.',
         },
         timeout: {
           type: 'number',
-          description: 'Optional timeout in milliseconds (default: 30000)',
+          description: 'Optional timeout in milliseconds (default: 30000). Only used when waitForResponse=true.',
         },
-      },
-      required: ['toTeam', 'message'],
-    },
-  },
-  {
-    name: 'teams_notify',
-    description:
-      'Send a fire-and-forget notification to a team. The notification is queued and will be delivered when the team next checks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        fromTeam: {
-          type: 'string',
-          description: 'Optional: Name of the team sending the notification',
-        },
-        toTeam: {
-          type: 'string',
-          description: 'Name of the team to notify',
-        },
-        message: {
-          type: 'string',
-          description: 'The notification message',
+        persist: {
+          type: 'boolean',
+          description: 'Use persistent queue for fire-and-forget (default: false). When true, message is queued in SQLite.',
         },
         ttlDays: {
           type: 'number',
-          description: 'Optional: How many days before notification expires (default: 30)',
+          description: 'Optional: TTL in days for persistent notifications (default: 30). Only used when persist=true.',
         },
       },
       required: ['toTeam', 'message'],
@@ -140,7 +96,8 @@ class IrisMcpServer {
   private configManager: ReturnType<typeof getConfigManager>;
   private sessionManager: SessionManager;
   private processPool: ClaudeProcessPool;
-  private notificationQueue: NotificationQueue;
+  // private messageQueue: MessageQueue;
+  private iris: IrisOrchestrator;
 
   constructor() {
     this.server = new Server(
@@ -165,10 +122,12 @@ class IrisMcpServer {
     this.processPool = new ClaudeProcessPool(
       this.configManager,
       config.settings,
-      this.sessionManager,
     );
 
-    this.notificationQueue = new NotificationQueue();
+    // this.messageQueue = new MessageQueue();
+
+    // Initialize Iris orchestrator (BLL)
+    this.iris = new IrisOrchestrator(this.sessionManager, this.processPool);
 
     // Set up MCP handlers
     this.setupHandlers();
@@ -194,41 +153,13 @@ class IrisMcpServer {
 
       try {
         switch (name) {
-          case 'teams_ask':
+          case 'teams_request':
             return {
               content: [
                 {
                   type: 'text',
                   text: JSON.stringify(
-                    await teamsAsk(args as any, this.processPool),
-                    null,
-                    2
-                  ),
-                },
-              ],
-            };
-
-          case 'teams_send_message':
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(
-                    await teamsSendMessage(args as any, this.processPool),
-                    null,
-                    2
-                  ),
-                },
-              ],
-            };
-
-          case 'teams_notify':
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(
-                    await teamsNotify(args as any, this.notificationQueue),
+                    await say(args as any, this.iris),
                     null,
                     2
                   ),
@@ -237,23 +168,25 @@ class IrisMcpServer {
             };
 
           case 'teams_get_status':
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: JSON.stringify(
-                    await teamsGetStatus(
-                      args as any,
-                      this.processPool,
-                      this.notificationQueue,
-                      this.configManager
-                    ),
-                    null,
-                    2
-                  ),
-                },
-              ],
-            };
+            // TODO: Re-implement teams_get_status
+            throw new Error('teams_get_status not yet migrated to mcp/');
+            // return {
+            //   content: [
+            //     {
+            //       type: 'text',
+            //       text: JSON.stringify(
+            //         await teamsGetStatus(
+            //           args as any,
+            //           this.processPool,
+            //           // this.messageQueue,
+            //           this.configManager
+            //         ),
+            //         null,
+            //         2
+            //       ),
+            //     },
+            //   ],
+            // };
 
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -296,16 +229,89 @@ class IrisMcpServer {
     });
   }
 
-  async run(): Promise<void> {
+
+  async run(transport: 'stdio' | 'http' = 'stdio', port: number = 1615): Promise<void> {
     // Initialize session manager
     logger.info("Initializing session manager...");
     await this.sessionManager.initialize();
     logger.info("Session manager initialized");
 
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
+    if (transport === 'http') {
+      // HTTP transport mode using StreamableHTTPServerTransport
+      const app = express();
+      app.use(express.json());
 
-    logger.info("Iris MCP Server running on stdio");
+      // Store transports for stateless mode (one per request)
+      const transports = new Map<string, StreamableHTTPServerTransport>();
+
+      // Handle MCP requests with proper SDK transport (POST for JSON-RPC, GET for SSE)
+      app.all('/mcp', async (req, res) => {
+        logger.debug('Received HTTP request', {
+          method: req.method,
+          body: req.body,
+          headers: req.headers
+        });
+
+        try {
+          // Create a new transport for each request (stateless mode)
+          const requestId = Math.random().toString(36).substring(7);
+          const httpTransport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined, // Stateless mode
+            enableJsonResponse: true,
+          });
+
+          transports.set(requestId, httpTransport);
+
+          // Clean up when connection closes
+          res.on('close', () => {
+            transports.delete(requestId);
+            httpTransport.close();
+          });
+
+          // Connect the transport to our server
+          await this.server.connect(httpTransport);
+
+          // Handle the request (works for both POST and GET)
+          await httpTransport.handleRequest(req, res, req.body);
+        } catch (error) {
+          logger.error('Error handling MCP request:', error);
+          if (!res.headersSent) {
+            res.status(500).json({
+              jsonrpc: '2.0',
+              error: {
+                code: -32603,
+                message: 'Internal server error'
+              },
+              id: req.body?.id || null
+            });
+          }
+        }
+      });
+
+      // Health check endpoint
+      app.get('/health', (req, res) => {
+        res.json({
+          status: 'ok',
+          transport: 'http',
+          server: '@iris-mcp/server',
+          version: '1.0.0'
+        });
+      });
+
+      app.listen(port, () => {
+        logger.info(`Iris MCP Server running on HTTP port ${port}`);
+        logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
+        logger.info(`Health check: http://localhost:${port}/health`);
+      }).on('error', (error) => {
+        logger.error('HTTP server error:', error);
+        process.exit(1);
+      });
+    } else {
+      // Stdio transport mode (default)
+      const stdioTransport = new StdioServerTransport();
+      await this.server.connect(stdioTransport);
+      logger.info("Iris MCP Server running on stdio");
+    }
 
     // Graceful shutdown
     process.on("SIGINT", () => this.shutdown());
@@ -317,7 +323,7 @@ class IrisMcpServer {
 
     try {
       await this.processPool.terminateAll();
-      this.notificationQueue.close();
+      // this.messageQueue.close();
       this.sessionManager.close();
 
       logger.info("Shutdown complete");
@@ -329,10 +335,36 @@ class IrisMcpServer {
   }
 }
 
-// Start the server
+// Start the server with command-line argument parsing
 if (import.meta.url === `file://${process.argv[1]}`) {
+  const program = new Command();
+
+  program
+    .name('iris-mcp')
+    .description('Iris MCP Server - Cross-project Claude Code coordination')
+    .version('1.0.0')
+    .option('-t, --transport <type>', 'Transport type (stdio or http)', 'stdio')
+    .option('-p, --port <number>', 'HTTP server port (default: 1615)', '1615')
+    .parse(process.argv);
+
+  const options = program.opts();
+  const transport = options.transport as 'stdio' | 'http';
+  const port = parseInt(options.port, 10);
+
+  // Validate transport type
+  if (transport !== 'stdio' && transport !== 'http') {
+    logger.error(`Invalid transport type: ${transport}. Must be 'stdio' or 'http'`);
+    process.exit(1);
+  }
+
+  // Validate port number
+  if (transport === 'http' && (isNaN(port) || port < 1 || port > 65535)) {
+    logger.error(`Invalid port number: ${options.port}. Must be between 1 and 65535`);
+    process.exit(1);
+  }
+
   const server = new IrisMcpServer();
-  server.run().catch((error) => {
+  server.run(transport, port).catch((error) => {
     logger.error('Fatal error', error);
     process.exit(1);
   });

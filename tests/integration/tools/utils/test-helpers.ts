@@ -3,21 +3,23 @@
  * Provides common setup, teardown, and configuration
  */
 
-import { ClaudeProcessPool } from '../../../../src/process-pool/pool-manager.js';
-import { TeamsConfigManager } from '../../../../src/config/teams-config.js';
-import { NotificationQueue } from '../../../../src/notifications/queue.js';
-import { SessionManager } from '../../../../src/session/session-manager.js';
-import type { ProcessPoolConfig } from '../../../../src/process-pool/types.js';
-import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { ClaudeProcessPool } from "../../../../src/process-pool/pool-manager.js";
+import { TeamsConfigManager } from "../../../../src/config/teams-config.js";
+// import { NotificationQueue } from "../../../../src/notifications/queue.js";
+import { SessionManager } from "../../../../src/session/session-manager.js";
+import { IrisOrchestrator } from "../../../../src/iris.js";
+import type { ProcessPoolConfig } from "../../../../src/process-pool/types.js";
+import { writeFileSync, unlinkSync, existsSync } from "fs";
 
 /**
  * Test fixture containing all dependencies for MCP tools
  */
 export interface TestFixture {
   pool: ClaudeProcessPool;
+  iris: IrisOrchestrator;
   configManager: TeamsConfigManager;
   sessionManager: SessionManager;
-  notificationQueue: NotificationQueue;
+  // notificationQueue: NotificationQueue;
   configPath: string;
   dbPath: string;
   sessionDbPath: string;
@@ -31,21 +33,22 @@ export const DEFAULT_TEST_CONFIG = {
     idleTimeout: 300000,
     maxProcesses: 5,
     healthCheckInterval: 30000,
+    sessionInitTimeout: 30000,
   },
   teams: {
-    'frontend': {
+    frontend: {
       path: process.cwd(),
-      description: 'Frontend team',
+      description: "Frontend team",
       skipPermissions: true,
     },
-    'backend': {
+    backend: {
       path: process.cwd(),
-      description: 'Backend team',
+      description: "Backend team",
       skipPermissions: true,
     },
-    'mobile': {
+    mobile: {
       path: process.cwd(),
-      description: 'Mobile team',
+      description: "Mobile team",
       skipPermissions: true,
     },
   },
@@ -54,7 +57,9 @@ export const DEFAULT_TEST_CONFIG = {
 /**
  * Create test fixture with all dependencies
  */
-export async function createTestFixture(testName: string): Promise<TestFixture> {
+export async function createTestFixture(
+  testName: string,
+): Promise<TestFixture> {
   const configPath = `./test-${testName}-teams.json`;
   const dbPath = `./test-${testName}-notifications.db`;
   const sessionDbPath = `./test-${testName}-sessions.db`;
@@ -68,7 +73,7 @@ export async function createTestFixture(testName: string): Promise<TestFixture> 
 
   // Create session manager (with skipSessionFileInit = true for tests)
   const teamsConfig = configManager.getConfig();
-  const sessionManager = new SessionManager(teamsConfig, sessionDbPath, true);
+  const sessionManager = new SessionManager(teamsConfig, sessionDbPath);
 
   // Initialize session manager before using it
   await sessionManager.initialize();
@@ -78,17 +83,22 @@ export async function createTestFixture(testName: string): Promise<TestFixture> 
     idleTimeout: 300000,
     maxProcesses: 5,
     healthCheckInterval: 30000,
+    sessionInitTimeout: 30000,
   };
-  const pool = new ClaudeProcessPool(configManager, poolConfig, sessionManager);
+  const pool = new ClaudeProcessPool(configManager, poolConfig);
 
-  // Create notification queue
-  const notificationQueue = new NotificationQueue(dbPath);
+  // Create Iris orchestrator
+  const iris = new IrisOrchestrator(sessionManager, pool);
+
+  // // Create notification queue - DISABLED
+  // const notificationQueue = new NotificationQueue(dbPath);
 
   return {
     pool,
+    iris,
     configManager,
     sessionManager,
-    notificationQueue,
+    // notificationQueue,
     configPath,
     dbPath,
     sessionDbPath,
@@ -109,13 +119,13 @@ export async function cleanupTestFixture(fixture: TestFixture): Promise<void> {
     fixture.sessionManager.close();
   }
 
-  // Clean up notification queue
-  if (fixture.notificationQueue) {
-    fixture.notificationQueue.close();
-  }
+  // // Clean up notification queue - DISABLED
+  // if (fixture.notificationQueue) {
+  //   fixture.notificationQueue.close();
+  // }
 
   // Small delay to ensure connections are fully closed
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 100));
 
   // Clean up files (including SQLite WAL files)
   const filesToClean = [

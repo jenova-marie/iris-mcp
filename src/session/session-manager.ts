@@ -6,11 +6,11 @@
  */
 
 import type { TeamsConfig, TeamConfig } from "../process-pool/types.js";
+import { ClaudeProcess } from "../process-pool/claude-process.js";
 import { Logger } from "../utils/logger.js";
 import {
   ConfigurationError,
   ProcessError,
-  TimeoutError,
 } from "../utils/errors.js";
 import { SessionStore } from "./session-store.js";
 import {
@@ -43,24 +43,10 @@ export class SessionManager {
   private sessionCache = new Map<string, SessionInfo>();
   private cacheMaxAge = 60000; // 1 minute cache TTL
   private cacheTimestamps = new Map<string, number>();
-  private processPool: any; // Will be set after initialization
-  private skipSessionFileInit = false; // For unit tests only
 
-  constructor(
-    teamsConfig: TeamsConfig,
-    dbPath?: string,
-    skipSessionFileInit = false, // Explicit control for unit tests
-  ) {
+  constructor(teamsConfig: TeamsConfig, dbPath?: string) {
     this.teamsConfig = teamsConfig;
     this.store = new SessionStore(dbPath);
-    this.skipSessionFileInit = skipSessionFileInit;
-  }
-
-  /**
-   * Set the process pool reference for bidirectional integration
-   */
-  setProcessPool(pool: any): void {
-    this.processPool = pool;
   }
 
   /**
@@ -136,8 +122,12 @@ export class SessionManager {
           // Generate fresh UUID
           const newSessionId = generateSecureUUID();
 
-          // Create new session file with new UUID
-          await this.initializeSession(teamName, newSessionId);
+          // Create new session file with new UUID using ClaudeProcess static method
+          await ClaudeProcess.initializeSessionFile(
+            teamConfig,
+            newSessionId,
+            this.teamsConfig.settings.sessionInitTimeout,
+          );
 
           // Delete old database entry
           this.store.delete(existing.sessionId);
@@ -157,7 +147,12 @@ export class SessionManager {
           });
 
           const sessionId = generateSecureUUID();
-          await this.initializeSession(teamName, sessionId);
+          // Create session file using ClaudeProcess static method
+          await ClaudeProcess.initializeSessionFile(
+            teamConfig,
+            sessionId,
+            this.teamsConfig.settings.sessionInitTimeout,
+          );
 
           // Store in database
           this.store.create(null, teamName, sessionId);
@@ -176,10 +171,7 @@ export class SessionManager {
     }
 
     this.initialized = true;
-    logger.info(
-      "Session manager initialized" +
-        (this.skipSessionFileInit ? "" : " with all team sessions ready"),
-    );
+    logger.info("Session manager initialized with all team sessions ready");
   }
 
   /**
@@ -187,284 +179,6 @@ export class SessionManager {
    */
   private getProjectPath(teamConfig: TeamConfig): string {
     return teamConfig.path;
-  }
-
-  /**
-   * Initialize a session using claude --session-id
-   * This creates the actual .jsonl file in ~/.claude/projects/
-   */
-  private async initializeSession(
-    teamName: string,
-    sessionId: string,
-  ): Promise<void> {
-    const teamConfig = this.teamsConfig.teams[teamName];
-    if (!teamConfig) {
-      throw new ConfigurationError(`Unknown team: ${teamName}`);
-    }
-
-    const projectPath = this.getProjectPath(teamConfig);
-
-    // Get timeout from team config or fall back to global settings
-    const sessionInitTimeout =
-      teamConfig.sessionInitTimeout ??
-      this.teamsConfig.settings.sessionInitTimeout;
-
-    logger.info("Initializing session file", {
-      teamName,
-      sessionId,
-      projectPath,
-      sessionInitTimeout,
-    });
-
-    try {
-      const { spawn } = await import("child_process");
-
-      // Build command args for session creation
-      const args = [
-        "--session-id", // Create NEW session (not resume)
-        sessionId,
-        "--print", // Non-interactive mode
-        "ping", // REQUIRED Add a ping command to create session conversation
-      ];
-
-      // Use absolute path to claude binary to avoid PATH resolution issues
-      const claudePath = "/Users/jenova/.asdf/installs/nodejs/22.16.0/bin/claude";
-
-      // Log the exact command being run
-      const command = `${claudePath} ${args.join(" ")}`;
-      logger.info("Spawning claude process", {
-        teamName,
-        sessionId,
-        command,
-        cwd: projectPath,
-      });
-
-      // Spawn Claude
-      const claudeProcess = spawn(claudePath, args, {
-        cwd: projectPath,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: process.env, // Inherit environment
-      });
-
-      // Close stdin immediately - we're not sending input, just need EOF
-      claudeProcess.stdin!.end();
-
-      // Capture any errors
-      let spawnError: Error | null = null;
-      let stdoutData = "";
-      let stderrData = "";
-      let debugLogPath: string | null = null;
-
-      claudeProcess.on("error", (err) => {
-        logger.error("Process spawn error", {
-          teamName,
-          sessionId,
-          error: err.message,
-          stack: err.stack,
-        });
-        spawnError = err;
-      });
-
-      // Wait for process to complete
-      await new Promise<void>((resolve, reject) => {
-        let responseReceived = false;
-
-        // Listen for stdout data (response from Claude)
-        claudeProcess.stdout!.on("data", (data) => {
-          const output = data.toString();
-          stdoutData += output;
-
-          logger.debug("Session init stdout", {
-            teamName,
-            sessionId,
-            output: output.substring(0, 500),
-          });
-
-          // If we got any response, consider it successful
-          if (output.length > 0) {
-            responseReceived = true;
-          }
-        });
-
-        // Listen for stderr data (errors from Claude)
-        claudeProcess.stderr!.on("data", (data) => {
-          const errorOutput = data.toString();
-          stderrData += errorOutput;
-
-          // Capture debug log path if present
-          const logPathMatch = errorOutput.match(/Logging to: (.+)/);
-          if (logPathMatch && !debugLogPath) {
-            debugLogPath = logPathMatch[1].trim();
-            logger.info("Claude debug logs available at", {
-              teamName,
-              sessionId,
-              debugLogPath,
-            });
-          }
-
-          // Log stderr in real-time for debugging
-          logger.info("Session init stderr", {
-            teamName,
-            sessionId,
-            stderr: errorOutput,
-          });
-        });
-
-        claudeProcess.on("exit", (code) => {
-          if (spawnError) {
-            logger.error("Process exited with spawn error", {
-              teamName,
-              sessionId,
-              code,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-              stdout: stdoutData.substring(0, 1000),
-              stderr: stderrData.substring(0, 1000),
-            });
-            reject(spawnError);
-          } else if (code !== 0 && code !== 143) {
-            // 143 is SIGTERM which is ok
-            logger.error(
-              "Session initialization failed with non-zero exit code",
-              {
-                teamName,
-                sessionId,
-                code,
-                command: `claude ${args.join(" ")}`,
-                cwd: projectPath,
-                stdoutLength: stdoutData.length,
-                stderrLength: stderrData.length,
-                stdout: stdoutData,
-                stderr: stderrData,
-                debugLogPath,
-              },
-            );
-
-            const errorMsg = [
-              `Session initialization failed with exit code ${code}`,
-              debugLogPath ? `Debug logs: ${debugLogPath}` : null,
-              `stderr: ${stderrData}`,
-            ]
-              .filter(Boolean)
-              .join("\n");
-
-            reject(new ProcessError(errorMsg, teamName));
-          } else if (!responseReceived) {
-            logger.error(
-              "Session initialization completed but no response received",
-              {
-                teamName,
-                sessionId,
-                code,
-                command: `${claudePath} ${args.join(" ")}`,
-                cwd: projectPath,
-                stdoutLength: stdoutData.length,
-                stderrLength: stderrData.length,
-                stdout: stdoutData,
-                stderr: stderrData,
-                debugLogPath,
-              },
-            );
-
-            const errorMsg = [
-              "Session initialization completed but no response received",
-              debugLogPath ? `Debug logs: ${debugLogPath}` : null,
-              `stderr: ${stderrData}`,
-            ]
-              .filter(Boolean)
-              .join("\n");
-
-            reject(new ProcessError(errorMsg, teamName));
-          } else if (!stdoutData.toLowerCase().includes("pong")) {
-            // Verify we got the expected "pong" response to our "ping"
-            logger.error("Session initialized but did not receive 'pong' response", {
-              teamName,
-              sessionId,
-              code,
-              command: `${claudePath} ${args.join(" ")}`,
-              cwd: projectPath,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-              stdout: stdoutData,
-              stderr: stderrData,
-              debugLogPath,
-            });
-
-            const errorMsg = [
-              "Session initialized but did not receive expected 'pong' response",
-              `Received: ${stdoutData.substring(0, 200)}`,
-              debugLogPath ? `Debug logs: ${debugLogPath}` : null,
-            ]
-              .filter(Boolean)
-              .join("\n");
-
-            reject(new ProcessError(errorMsg, teamName));
-          } else {
-            logger.info(
-              "Session initialization process completed successfully",
-              {
-                teamName,
-                sessionId,
-                code,
-                stdoutLength: stdoutData.length,
-                stderrLength: stderrData.length,
-                response: stdoutData.substring(0, 100),
-              },
-            );
-            resolve();
-          }
-        });
-
-        // Timeout after configured duration
-        setTimeout(() => {
-          logger.error("Session initialization timed out", {
-            teamName,
-            sessionId,
-            timeout: sessionInitTimeout,
-            responseReceived,
-            command: `claude ${args.join(" ")}`,
-            cwd: projectPath,
-            stdoutLength: stdoutData.length,
-            stderrLength: stderrData.length,
-            stdout: stdoutData,
-            stderr: stderrData,
-            debugLogPath,
-          });
-          claudeProcess.kill();
-
-          const errorMsg = [
-            `Session initialization timed out after ${sessionInitTimeout}ms.`,
-            `Response received: ${responseReceived}`,
-            debugLogPath ? `Debug logs: ${debugLogPath}` : null,
-            `stderr: ${stderrData}`,
-          ]
-            .filter(Boolean)
-            .join("\n");
-
-          reject(new ProcessError(errorMsg, teamName));
-        }, sessionInitTimeout); // This kill should be immediate (or unnecessary) - the claude --session-id command returns and exists immediately
-      });
-
-      // Verify session file was created
-      const sessionFilePath = getSessionFilePath(projectPath, sessionId);
-      const { existsSync } = await import("fs");
-
-      if (!existsSync(sessionFilePath)) {
-        throw new ProcessError(
-          `Session file was not created at ${sessionFilePath}`,
-          teamName,
-        );
-      }
-
-      logger.info("Session file initialized successfully", {
-        teamName,
-        sessionId,
-        filePath: sessionFilePath,
-      });
-    } catch (error) {
-      logger.error("Failed to initialize session file", error);
-      throw error;
-    }
   }
 
   /**
@@ -534,8 +248,17 @@ export class SessionManager {
     });
 
     try {
-      // Initialize the session file first using claude --session-id
-      await this.initializeSession(toTeam, sessionId);
+      // Initialize the session file using ClaudeProcess static method
+      const teamConfig = this.teamsConfig.teams[toTeam];
+      const sessionInitTimeout =
+        teamConfig.sessionInitTimeout ??
+        this.teamsConfig.settings.sessionInitTimeout;
+
+      await ClaudeProcess.initializeSessionFile(
+        teamConfig,
+        sessionId,
+        sessionInitTimeout,
+      );
 
       // Store in database
       const sessionInfo = this.store.create(fromTeam, toTeam, sessionId);
@@ -711,7 +434,10 @@ export class SessionManager {
 
   /**
    * Compact a session to reduce context size
-   * Sends /compact command to running Claude process if available
+   * Updates database metadata only - caller must send /compact command to process if needed
+   *
+   * NOTE: This method only updates session metadata. To actually compact a running process,
+   * the caller should use PoolManager.sendCommandToSession(sessionId, "/compact").
    */
   async compactSession(sessionId: string): Promise<void> {
     this.ensureInitialized();
@@ -722,7 +448,7 @@ export class SessionManager {
       return;
     }
 
-    logger.info("Starting session compaction", {
+    logger.info("Compacting session metadata", {
       sessionId,
       fromTeam: session.fromTeam,
       toTeam: session.toTeam,
@@ -734,36 +460,11 @@ export class SessionManager {
     this.invalidateCache(session.fromTeam, session.toTeam);
 
     try {
-      // Send /compact command to running process if available
-      if (this.processPool) {
-        try {
-          const response = await this.processPool.sendCommandToSession(
-            sessionId,
-            "/compact",
-          );
-          if (response) {
-            logger.info("Compaction command sent successfully", {
-              sessionId,
-              response: response.substring(0, 100),
-            });
-          }
-        } catch (error) {
-          logger.warn("Failed to send compact command to process", {
-            sessionId,
-            error: error instanceof Error ? error.message : String(error),
-            note: "Continuing with metadata update only",
-          });
-        }
-      } else {
-        // Simulate compaction delay if no pool available
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-
       // Reset message count and update status
       this.store.resetMessageCount(sessionId);
       this.store.updateStatus(sessionId, "active");
 
-      logger.info("Session compaction completed", { sessionId });
+      logger.info("Session metadata compaction completed", { sessionId });
     } catch (error) {
       logger.error("Session compaction failed", {
         sessionId,

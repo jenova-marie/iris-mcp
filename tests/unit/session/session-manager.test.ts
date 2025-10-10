@@ -5,7 +5,7 @@
  * as documented in docs/SESSION.md
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { existsSync, unlinkSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -19,9 +19,12 @@ describe("SessionManager", () => {
   let testProjectPaths: string[] = [];
 
   beforeEach(() => {
+    // Mock initializeSession to avoid spawning real Claude processes in unit tests
+    vi.spyOn(SessionManager.prototype as any, "initializeSession").mockResolvedValue(undefined);
+
     // Create temporary test project directories
-    const teamAPath = join(tmpdir(), "iris-test-team-a");
-    const teamBPath = join(tmpdir(), "iris-test-team-b");
+    const teamAPath = join(tmpdir(), "iris-test-team-alpha");
+    const teamBPath = join(tmpdir(), "iris-test-team-beta");
     const teamCPath = join(tmpdir(), "iris-test-team-c");
 
     testProjectPaths = [teamAPath, teamBPath, teamCPath];
@@ -39,12 +42,12 @@ describe("SessionManager", () => {
         sessionInitTimeout: 20000, // 20 second timeout for session initialization
       },
       teams: {
-        "team-a": {
+        "team-alpha": {
           path: teamAPath,
           description: "Test Team A",
           skipPermissions: true,
         },
-        "team-b": {
+        "team-beta": {
           path: teamBPath,
           description: "Test Team B",
           skipPermissions: true,
@@ -57,10 +60,13 @@ describe("SessionManager", () => {
       },
     };
 
-    manager = new SessionManager(testConfig, testDbPath, true); // Skip session file init for unit tests
+    manager = new SessionManager(testConfig, testDbPath);
   });
 
   afterEach(() => {
+    // Restore mocks
+    vi.restoreAllMocks();
+
     // Clean up
     manager.close();
 
@@ -100,7 +106,10 @@ describe("SessionManager", () => {
         },
       };
 
-      const invalidManager = new SessionManager(invalidConfig, testDbPath, true); // Skip session file init for unit tests
+      const invalidManager = new SessionManager(
+        invalidConfig,
+        testDbPath,
+      );
 
       await expect(invalidManager.initialize()).rejects.toThrow(
         "Project path does not exist",
@@ -118,7 +127,7 @@ describe("SessionManager", () => {
       await manager.initialize();
 
       // Should not throw when calling methods that require initialization
-      expect(() => manager.getSession(null, "team-a")).not.toThrow();
+      expect(() => manager.getSession(null, "team-alpha")).not.toThrow();
     });
   });
 
@@ -128,11 +137,14 @@ describe("SessionManager", () => {
     });
 
     it("should create new session for team pair", async () => {
-      const session = await manager.getOrCreateSession("team-a", "team-b");
+      const session = await manager.getOrCreateSession(
+        "team-alpha",
+        "team-beta",
+      );
 
       expect(session).toBeDefined();
-      expect(session.fromTeam).toBe("team-a");
-      expect(session.toTeam).toBe("team-b");
+      expect(session.fromTeam).toBe("team-alpha");
+      expect(session.toTeam).toBe("team-beta");
       expect(session.sessionId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
       ); // UUID v4 format
@@ -141,38 +153,50 @@ describe("SessionManager", () => {
     });
 
     it("should create session with null fromTeam", async () => {
-      const session = await manager.getOrCreateSession(null, "team-b");
+      const session = await manager.getOrCreateSession(null, "team-beta");
 
       expect(session.fromTeam).toBe(null);
-      expect(session.toTeam).toBe("team-b");
+      expect(session.toTeam).toBe("team-beta");
     });
 
     it("should reuse existing session for same team pair", async () => {
-      const session1 = await manager.getOrCreateSession("team-a", "team-b");
-      const session2 = await manager.getOrCreateSession("team-a", "team-b");
+      const session1 = await manager.getOrCreateSession(
+        "team-alpha",
+        "team-beta",
+      );
+      const session2 = await manager.getOrCreateSession(
+        "team-alpha",
+        "team-beta",
+      );
 
       expect(session1.sessionId).toBe(session2.sessionId);
       expect(session1.id).toBe(session2.id);
     });
 
     it("should create different sessions for different team pairs", async () => {
-      const sessionAB = await manager.getOrCreateSession("team-a", "team-b");
-      const sessionBA = await manager.getOrCreateSession("team-b", "team-a");
+      const sessionAB = await manager.getOrCreateSession(
+        "team-alpha",
+        "team-beta",
+      );
+      const sessionBA = await manager.getOrCreateSession(
+        "team-beta",
+        "team-alpha",
+      );
 
       expect(sessionAB.sessionId).not.toBe(sessionBA.sessionId);
-      expect(sessionAB.fromTeam).toBe("team-a");
-      expect(sessionBA.fromTeam).toBe("team-b");
+      expect(sessionAB.fromTeam).toBe("team-alpha");
+      expect(sessionBA.fromTeam).toBe("team-beta");
     });
 
     it("should throw error for unknown toTeam", async () => {
       await expect(
-        manager.getOrCreateSession("team-a", "nonexistent"),
+        manager.getOrCreateSession("team-alpha", "nonexistent"),
       ).rejects.toThrow("Unknown team");
     });
 
     it("should throw error for unknown fromTeam", async () => {
       await expect(
-        manager.getOrCreateSession("nonexistent", "team-a"),
+        manager.getOrCreateSession("nonexistent", "team-alpha"),
       ).rejects.toThrow("Unknown team");
     });
 
@@ -180,7 +204,7 @@ describe("SessionManager", () => {
       const uninitializedManager = new SessionManager(testConfig, testDbPath);
 
       await expect(
-        uninitializedManager.getOrCreateSession("team-a", "team-b"),
+        uninitializedManager.getOrCreateSession("team-alpha", "team-beta"),
       ).rejects.toThrow("not initialized");
 
       uninitializedManager.close();
@@ -193,7 +217,7 @@ describe("SessionManager", () => {
     });
 
     it("should create session with generated UUID", async () => {
-      const session = await manager.createSession("team-a", "team-b");
+      const session = await manager.createSession("team-alpha", "team-beta");
 
       expect(session.sessionId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
@@ -201,19 +225,19 @@ describe("SessionManager", () => {
     });
 
     it("should store session in database", async () => {
-      const created = await manager.createSession("team-a", "team-b");
+      const created = await manager.createSession("team-alpha", "team-beta");
 
-      const retrieved = manager.getSession("team-a", "team-b");
+      const retrieved = manager.getSession("team-alpha", "team-beta");
 
       expect(retrieved).toBeDefined();
       expect(retrieved?.sessionId).toBe(created.sessionId);
     });
 
     it("should handle null fromTeam", async () => {
-      const session = await manager.createSession(null, "team-b");
+      const session = await manager.createSession(null, "team-beta");
 
       expect(session.fromTeam).toBe(null);
-      expect(session.toTeam).toBe("team-b");
+      expect(session.toTeam).toBe("team-beta");
     });
   });
 
@@ -223,26 +247,26 @@ describe("SessionManager", () => {
     });
 
     it("should return null for non-existent session", () => {
-      const session = manager.getSession("team-a", "team-b");
+      const session = manager.getSession("team-alpha", "team-beta");
 
       expect(session).toBe(null);
     });
 
     it("should retrieve existing session", async () => {
-      const created = await manager.createSession("team-a", "team-b");
+      const created = await manager.createSession("team-alpha", "team-beta");
 
-      const retrieved = manager.getSession("team-a", "team-b");
+      const retrieved = manager.getSession("team-alpha", "team-beta");
 
       expect(retrieved).toBeDefined();
       expect(retrieved?.sessionId).toBe(created.sessionId);
     });
 
     it("should distinguish between different team pairs", async () => {
-      await manager.createSession("team-a", "team-b");
-      await manager.createSession("team-b", "team-a");
+      await manager.createSession("team-alpha", "team-beta");
+      await manager.createSession("team-beta", "team-alpha");
 
-      const ab = manager.getSession("team-a", "team-b");
-      const ba = manager.getSession("team-b", "team-a");
+      const ab = manager.getSession("team-alpha", "team-beta");
+      const ba = manager.getSession("team-beta", "team-alpha");
 
       expect(ab?.sessionId).not.toBe(ba?.sessionId);
     });
@@ -260,14 +284,14 @@ describe("SessionManager", () => {
     });
 
     it("should retrieve session by ID", async () => {
-      const created = await manager.createSession("team-a", "team-b");
+      const created = await manager.createSession("team-alpha", "team-beta");
 
       const retrieved = manager.getSessionById(created.sessionId);
 
       expect(retrieved).toBeDefined();
       expect(retrieved?.sessionId).toBe(created.sessionId);
-      expect(retrieved?.fromTeam).toBe("team-a");
-      expect(retrieved?.toTeam).toBe("team-b");
+      expect(retrieved?.fromTeam).toBe("team-alpha");
+      expect(retrieved?.toTeam).toBe("team-beta");
     });
   });
 
@@ -276,45 +300,48 @@ describe("SessionManager", () => {
       await manager.initialize();
     });
 
-    it("should return empty list after initialization in test mode", () => {
+    it("should return pre-initialized sessions after init", () => {
       const sessions = manager.listSessions();
 
-      // In test mode with skipSessionFileInit=true, no pre-initialized sessions
-      expect(sessions).toHaveLength(0);
+      // Initialize creates one session per team (null -> teamName)
+      expect(sessions).toHaveLength(3);
+      expect(sessions.every((s) => s.fromTeam === null)).toBe(true);
     });
 
     it("should list all sessions", async () => {
-      await manager.createSession("team-a", "team-b");
-      await manager.createSession("team-b", "team-a");
+      await manager.createSession("team-alpha", "team-beta");
+      await manager.createSession("team-beta", "team-alpha");
       await manager.createSession(null, "team-c");
 
       const sessions = manager.listSessions();
 
-      // No pre-initialized sessions in test mode, only the 3 created
-      expect(sessions).toHaveLength(3);
+      // 3 from init (null→team-alpha, null→team-beta, null→team-c)
+      // 3 from test (team-alpha→team-beta, team-beta→team-alpha, null→team-c duplicate)
+      // createSession() doesn't check for duplicates
+      expect(sessions).toHaveLength(6);
     });
 
     it("should filter by fromTeam", async () => {
-      await manager.createSession("team-a", "team-b");
-      await manager.createSession("team-a", "team-c");
-      await manager.createSession("team-b", "team-a");
+      await manager.createSession("team-alpha", "team-beta");
+      await manager.createSession("team-alpha", "team-c");
+      await manager.createSession("team-beta", "team-alpha");
 
-      const sessions = manager.listSessions({ fromTeam: "team-a" });
+      const sessions = manager.listSessions({ fromTeam: "team-alpha" });
 
       expect(sessions).toHaveLength(2);
-      expect(sessions.every((s) => s.fromTeam === "team-a")).toBe(true);
+      expect(sessions.every((s) => s.fromTeam === "team-alpha")).toBe(true);
     });
 
     it("should filter by toTeam", async () => {
-      await manager.createSession("team-a", "team-b");
-      await manager.createSession("team-c", "team-b");
-      await manager.createSession("team-b", "team-a");
+      await manager.createSession("team-alpha", "team-beta");
+      await manager.createSession("team-c", "team-beta");
+      await manager.createSession("team-beta", "team-alpha");
 
-      const sessions = manager.listSessions({ toTeam: "team-b" });
+      const sessions = manager.listSessions({ toTeam: "team-beta" });
 
-      // No pre-initialized sessions in test mode, only 2 created sessions
-      expect(sessions).toHaveLength(2);
-      expect(sessions.every((s) => s.toTeam === "team-b")).toBe(true);
+      // 1 from init (null→team-beta) + 2 created (team-alpha→team-beta, team-c→team-beta)
+      expect(sessions).toHaveLength(3);
+      expect(sessions.every((s) => s.toTeam === "team-beta")).toBe(true);
     });
   });
 
@@ -324,7 +351,7 @@ describe("SessionManager", () => {
     });
 
     it("should update last_used_at timestamp", async () => {
-      const session = await manager.createSession("team-a", "team-b");
+      const session = await manager.createSession("team-alpha", "team-beta");
       const originalTimestamp = session.lastUsedAt.getTime();
 
       // Wait a bit
@@ -343,7 +370,7 @@ describe("SessionManager", () => {
     });
 
     it("should increment message count", async () => {
-      const session = await manager.createSession("team-a", "team-b");
+      const session = await manager.createSession("team-alpha", "team-beta");
 
       manager.incrementMessageCount(session.sessionId, 1);
 
@@ -352,7 +379,7 @@ describe("SessionManager", () => {
     });
 
     it("should accumulate message counts", async () => {
-      const session = await manager.createSession("team-a", "team-b");
+      const session = await manager.createSession("team-alpha", "team-beta");
 
       manager.incrementMessageCount(session.sessionId, 3);
       manager.incrementMessageCount(session.sessionId, 5);
@@ -368,7 +395,7 @@ describe("SessionManager", () => {
     });
 
     it("should delete session from database", async () => {
-      const session = await manager.createSession("team-a", "team-b");
+      const session = await manager.createSession("team-alpha", "team-beta");
 
       await manager.deleteSession(session.sessionId, false);
 
@@ -389,17 +416,17 @@ describe("SessionManager", () => {
     });
 
     it("should return session statistics", async () => {
-      await manager.createSession("team-a", "team-b");
-      await manager.createSession("team-b", "team-a");
+      await manager.createSession("team-alpha", "team-beta");
+      await manager.createSession("team-beta", "team-alpha");
 
-      const session = await manager.createSession("team-a", "team-c");
+      const session = await manager.createSession("team-alpha", "team-c");
       manager.incrementMessageCount(session.sessionId, 10);
 
       const stats = manager.getStats();
 
-      // No pre-initialized sessions in test mode, only 3 created
-      expect(stats.total).toBe(3);
-      expect(stats.active).toBe(3);
+      // 3 from init + 3 created = 6 total
+      expect(stats.total).toBe(6);
+      expect(stats.active).toBe(6);
       expect(stats.totalMessages).toBe(10);
     });
   });
@@ -420,7 +447,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const testManager = new SessionManager(configWithPath, testDbPath, true); // Skip session file init for unit tests
+      const testManager = new SessionManager(configWithPath, testDbPath);
 
       await expect(testManager.initialize()).resolves.not.toThrow();
 

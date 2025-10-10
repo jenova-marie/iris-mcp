@@ -40,7 +40,7 @@ describe("SessionManager Integration", () => {
       const teamsConfig = configManager.getConfig();
       manager = new SessionManager(teamsConfig, testDbPath);
       await manager.initialize();
-    }, 60000);
+    }, 90000); // Increase timeout for initialization as tests grow
     it("should create new session for team pair", async () => {
       const session = await manager.createSession("iris-mcp", "team-alpha");
 

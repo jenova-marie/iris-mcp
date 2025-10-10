@@ -31,7 +31,11 @@ describe("SessionStore Integration", () => {
   describe("database persistence", () => {
     it("should persist sessions across store instances", () => {
       // Create session in first store instance
-      const session = store.create("team-a", "team-b", "persistent-session-id");
+      const session = store.create(
+        "team-alpha",
+        "team-beta",
+        "persistent-session-id",
+      );
       expect(session.sessionId).toBe("persistent-session-id");
 
       // Close first instance
@@ -41,18 +45,18 @@ describe("SessionStore Integration", () => {
       const store2 = new SessionStore(testDbPath);
 
       // Should find the persisted session
-      const retrieved = store2.getByTeamPair("team-a", "team-b");
+      const retrieved = store2.getByTeamPair("team-alpha", "team-beta");
       expect(retrieved).toBeDefined();
       expect(retrieved?.sessionId).toBe("persistent-session-id");
-      expect(retrieved?.fromTeam).toBe("team-a");
-      expect(retrieved?.toTeam).toBe("team-b");
+      expect(retrieved?.fromTeam).toBe("team-alpha");
+      expect(retrieved?.toTeam).toBe("team-beta");
 
       store2.close();
     });
 
     it("should persist metadata updates across instances", () => {
       const sessionId = "metadata-persist-test";
-      store.create("team-a", "team-b", sessionId);
+      store.create("team-alpha", "team-beta", sessionId);
 
       // Update metadata
       store.incrementMessageCount(sessionId, 5);
@@ -79,7 +83,7 @@ describe("SessionStore Integration", () => {
   describe("WAL mode verification", () => {
     it("should enable WAL journal mode", () => {
       // WAL mode should create -wal and -shm files on first write
-      store.create("team-a", "team-b", "wal-test-session");
+      store.create("team-alpha", "team-beta", "wal-test-session");
 
       // Force a checkpoint to ensure WAL file is created
       store.close();
@@ -117,7 +121,7 @@ describe("SessionStore Integration", () => {
 
     it("should handle rapid metadata updates", () => {
       const sessionId = "rapid-update-test";
-      store.create("team-a", "team-b", sessionId);
+      store.create("team-alpha", "team-beta", sessionId);
 
       // Rapid updates
       for (let i = 0; i < 100; i++) {
@@ -132,7 +136,18 @@ describe("SessionStore Integration", () => {
 
   describe("query performance", () => {
     it("should efficiently query large number of sessions", () => {
-      const teams = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa'];
+      const teams = [
+        "alpha",
+        "beta",
+        "gamma",
+        "delta",
+        "epsilon",
+        "zeta",
+        "eta",
+        "theta",
+        "iota",
+        "kappa",
+      ];
       let sessionCount = 0;
 
       // Create all possible team pair combinations (avoiding duplicates)
@@ -162,11 +177,7 @@ describe("SessionStore Integration", () => {
     it("should efficiently query by session ID", () => {
       // Create many unique sessions
       for (let i = 0; i < 100; i++) {
-        store.create(
-          `team-from-${i}`,
-          `team-to-${i}`,
-          `session-${i}`,
-        );
+        store.create(`team-from-${i}`, `team-to-${i}`, `session-${i}`);
       }
 
       const startTime = Date.now();
@@ -185,7 +196,7 @@ describe("SessionStore Integration", () => {
   describe("edge cases", () => {
     it("should handle very long session IDs", () => {
       const longSessionId = "a".repeat(500);
-      const session = store.create("team-a", "team-b", longSessionId);
+      const session = store.create("team-alpha", "team-beta", longSessionId);
 
       expect(session.sessionId).toBe(longSessionId);
 
@@ -212,7 +223,7 @@ describe("SessionStore Integration", () => {
 
     it("should handle large message counts", () => {
       const sessionId = "large-count-session";
-      store.create("team-a", "team-b", sessionId);
+      store.create("team-alpha", "team-beta", sessionId);
 
       // Increment to large number
       store.incrementMessageCount(sessionId, 1000000);
@@ -224,21 +235,23 @@ describe("SessionStore Integration", () => {
 
   describe("data integrity", () => {
     it("should maintain referential integrity for unique constraints", () => {
-      store.create("team-a", "team-b", "session-1");
+      store.create("team-alpha", "team-beta", "session-1");
 
       // Duplicate session ID should fail
       expect(() => store.create("team-c", "team-d", "session-1")).toThrow();
     });
 
     it("should maintain team pair uniqueness", () => {
-      store.create("team-a", "team-b", "session-1");
+      store.create("team-alpha", "team-beta", "session-1");
 
       // Duplicate team pair should fail
-      expect(() => store.create("team-a", "team-b", "session-2")).toThrow();
+      expect(() =>
+        store.create("team-alpha", "team-beta", "session-2"),
+      ).toThrow();
     });
 
     it("should correctly handle null fromTeam in unique constraint", () => {
-      store.create(null, "team-b", "session-1");
+      store.create(null, "team-beta", "session-1");
       store.create(null, "team-c", "session-2");
 
       // Should allow multiple null fromTeams to different toTeams
@@ -247,8 +260,8 @@ describe("SessionStore Integration", () => {
 
       // Note: SQLite allows multiple NULL values in UNIQUE constraints
       // This is standard SQL behavior - NULL is not equal to NULL
-      // So multiple (NULL, 'team-b') pairs are actually allowed
-      const session3 = store.create(null, "team-b", "session-3");
+      // So multiple (NULL, 'team-beta') pairs are actually allowed
+      const session3 = store.create(null, "team-beta", "session-3");
       expect(session3).toBeDefined();
       expect(session3.sessionId).toBe("session-3");
 
@@ -261,7 +274,7 @@ describe("SessionStore Integration", () => {
   describe("statistics accuracy", () => {
     it("should provide accurate statistics for complex data", () => {
       // Create diverse session data
-      store.create("team-a", "team-b", "session-1");
+      store.create("team-alpha", "team-beta", "session-1");
       store.incrementMessageCount("session-1", 10);
 
       store.create("team-c", "team-d", "session-2");

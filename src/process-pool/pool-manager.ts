@@ -7,7 +7,6 @@ import { EventEmitter } from "events";
 import { ClaudeProcess } from "./claude-process.js";
 import type { ProcessPoolStatus, ProcessPoolConfig } from "./types.js";
 import { TeamsConfigManager } from "../config/teams-config.js";
-import { SessionManager } from "../session/session-manager.js";
 import { Logger } from "../utils/logger.js";
 import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
 
@@ -21,7 +20,6 @@ export class ClaudeProcessPool extends EventEmitter {
   constructor(
     private configManager: TeamsConfigManager,
     private config: ProcessPoolConfig,
-    private sessionManager: SessionManager,
   ) {
     super();
     this.startHealthCheck();
@@ -48,10 +46,12 @@ export class ClaudeProcessPool extends EventEmitter {
    * Get or create a process for a team
    *
    * @param teamName - The team to get/create process for
+   * @param sessionId - The session ID to use for this process
    * @param fromTeam - The requesting team (null for external requests)
    */
   async getOrCreateProcess(
     teamName: string,
+    sessionId: string,
     fromTeam: string | null = null,
   ): Promise<ClaudeProcess> {
     // Check if team exists in configuration
@@ -60,16 +60,10 @@ export class ClaudeProcessPool extends EventEmitter {
       throw new TeamNotFoundError(teamName);
     }
 
-    // Get or create session for this team pair
-    const session = await this.sessionManager.getOrCreateSession(
-      fromTeam,
-      teamName,
-    );
-
     this.logger.debug("Using session for team pair", {
       fromTeam,
       toTeam: teamName,
-      sessionId: session.sessionId,
+      sessionId,
     });
 
     // Generate pool key for this team pair
@@ -81,11 +75,7 @@ export class ClaudeProcessPool extends EventEmitter {
     // Return existing process if available
     const existing = this.processes.get(poolKey);
     if (existing && existing.getMetrics().status !== "stopped") {
-      this.logger.debug("Using existing process", { poolKey, sessionId: session.sessionId });
-
-      // Record session usage
-      this.sessionManager.recordUsage(session.sessionId);
-
+      this.logger.debug("Using existing process", { poolKey, sessionId });
       return existing;
     }
 
@@ -98,14 +88,14 @@ export class ClaudeProcessPool extends EventEmitter {
     this.logger.info("Creating new process", {
       poolKey,
       teamName,
-      sessionId: session.sessionId,
+      sessionId,
     });
 
     const process = new ClaudeProcess(
       teamName,
       teamConfig,
       teamConfig.idleTimeout || this.config.idleTimeout,
-      session.sessionId,
+      sessionId,
     );
 
     // Set up event forwarding
@@ -113,22 +103,17 @@ export class ClaudeProcessPool extends EventEmitter {
     process.on("terminated", (data) => {
       this.emit("process-terminated", data);
       this.processes.delete(poolKey);
-      this.sessionToProcess.delete(session.sessionId);
+      this.sessionToProcess.delete(sessionId);
       this.removeFromAccessOrder(poolKey);
     });
     process.on("exited", (data) => {
       this.emit("process-exited", data);
       this.processes.delete(poolKey);
-      this.sessionToProcess.delete(session.sessionId);
+      this.sessionToProcess.delete(sessionId);
       this.removeFromAccessOrder(poolKey);
     });
     process.on("error", (data) => this.emit("process-error", data));
-    process.on("message-sent", (data) => {
-      this.emit("message-sent", data);
-
-      // Increment message count for session
-      this.sessionManager.incrementMessageCount(session.sessionId);
-    });
+    process.on("message-sent", (data) => this.emit("message-sent", data));
     process.on("message-response", (data) =>
       this.emit("message-response", data),
     );
@@ -138,11 +123,8 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Add to pool with pool key
     this.processes.set(poolKey, process);
-    this.sessionToProcess.set(session.sessionId, poolKey);
+    this.sessionToProcess.set(sessionId, poolKey);
     this.updateAccessOrder(poolKey);
-
-    // Record session usage
-    this.sessionManager.recordUsage(session.sessionId);
 
     return process;
   }
@@ -151,17 +133,19 @@ export class ClaudeProcessPool extends EventEmitter {
    * Send a message to a team
    *
    * @param teamName - The team to send message to
+   * @param sessionId - The session ID to use
    * @param message - The message content
    * @param timeout - Optional timeout in ms
    * @param fromTeam - The requesting team (null for external requests)
    */
   async sendMessage(
     teamName: string,
+    sessionId: string,
     message: string,
     timeout?: number,
     fromTeam: string | null = null,
   ): Promise<string> {
-    const process = await this.getOrCreateProcess(teamName, fromTeam);
+    const process = await this.getOrCreateProcess(teamName, sessionId, fromTeam);
     return process.sendMessage(message, timeout);
   }
 

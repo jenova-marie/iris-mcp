@@ -9,6 +9,7 @@
 
 import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
+import { existsSync } from "fs";
 import type {
   ProcessMessage,
   ProcessStatus,
@@ -43,6 +44,268 @@ export class ClaudeProcess extends EventEmitter {
   ) {
     super();
     this.logger = new Logger(`process:${teamName}`);
+  }
+
+  /**
+   * Initialize a session file using claude --session-id
+   * This creates the actual .jsonl file in ~/.claude/projects/
+   *
+   * This is a static method that can be called without a ClaudeProcess instance.
+   * Used by SessionManager during startup to create session files for all teams.
+   *
+   * @param teamConfig - Team configuration containing path
+   * @param sessionId - UUID for the session
+   * @param sessionInitTimeout - Optional timeout in ms (default: 30000)
+   */
+  static async initializeSessionFile(
+    teamConfig: TeamConfig,
+    sessionId: string,
+    sessionInitTimeout = 30000,
+  ): Promise<void> {
+    const logger = new Logger(`session-init:${teamConfig.path}`);
+    const projectPath = teamConfig.path;
+
+    logger.info("Initializing session file", {
+      sessionId,
+      projectPath,
+      sessionInitTimeout,
+    });
+
+    try {
+      // Build command args for session creation
+      const args = [
+        "--session-id", // Create NEW session (not resume)
+        sessionId,
+        "--print", // Non-interactive mode
+        "ping", // REQUIRED: Add a ping command to create session conversation
+      ];
+
+      // Use absolute path to claude binary to avoid PATH resolution issues
+      const claudePath =
+        "/Users/jenova/.asdf/installs/nodejs/22.16.0/bin/claude";
+
+      // Log the exact command being run
+      const command = `${claudePath} ${args.join(" ")}`;
+      logger.info("Spawning claude process", {
+        sessionId,
+        command,
+        cwd: projectPath,
+      });
+
+      // Spawn Claude
+      const claudeProcess = spawn(claudePath, args, {
+        cwd: projectPath,
+        stdio: ["pipe", "pipe", "pipe"],
+        env: process.env, // Inherit environment
+      });
+
+      // Close stdin immediately - we're not sending input, just need EOF
+      claudeProcess.stdin!.end();
+
+      // Capture any errors
+      let spawnError: Error | null = null;
+      let stdoutData = "";
+      let stderrData = "";
+      let debugLogPath: string | null = null;
+
+      claudeProcess.on("error", (err) => {
+        logger.error("Process spawn error", {
+          sessionId,
+          error: err.message,
+          stack: err.stack,
+        });
+        spawnError = err;
+      });
+
+      // Wait for process to complete
+      await new Promise<void>((resolve, reject) => {
+        let responseReceived = false;
+        let timeoutHandle: NodeJS.Timeout | null = null;
+
+        // Listen for stdout data (response from Claude)
+        claudeProcess.stdout!.on("data", (data) => {
+          const output = data.toString();
+          stdoutData += output;
+
+          logger.debug("Session init stdout", {
+            sessionId,
+            output: output.substring(0, 500),
+          });
+
+          // If we got any response, consider it successful
+          if (output.length > 0) {
+            responseReceived = true;
+          }
+        });
+
+        // Listen for stderr data (errors from Claude)
+        claudeProcess.stderr!.on("data", (data) => {
+          const errorOutput = data.toString();
+          stderrData += errorOutput;
+
+          // Capture debug log path if present
+          const logPathMatch = errorOutput.match(/Logging to: (.+)/);
+          if (logPathMatch && !debugLogPath) {
+            debugLogPath = logPathMatch[1].trim();
+            logger.info("Claude debug logs available at", {
+              sessionId,
+              debugLogPath,
+            });
+          }
+
+          // Log stderr in real-time for debugging
+          logger.info("Session init stderr", {
+            sessionId,
+            stderr: errorOutput,
+          });
+        });
+
+        claudeProcess.on("exit", (code) => {
+          // Clear timeout immediately to prevent spurious timeout errors
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+          }
+
+          if (spawnError) {
+            logger.error("Process exited with spawn error", {
+              sessionId,
+              code,
+              stdoutLength: stdoutData.length,
+              stderrLength: stderrData.length,
+              stdout: stdoutData.substring(0, 1000),
+              stderr: stderrData.substring(0, 1000),
+            });
+            reject(spawnError);
+          } else if (code !== 0 && code !== 143) {
+            // 143 is SIGTERM which is ok
+            logger.error(
+              "Session initialization failed with non-zero exit code",
+              {
+                sessionId,
+                code,
+                command: `claude ${args.join(" ")}`,
+                cwd: projectPath,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                stdout: stdoutData,
+                stderr: stderrData,
+                debugLogPath,
+              },
+            );
+
+            const errorMsg = [
+              `Session initialization failed with exit code ${code}`,
+              debugLogPath ? `Debug logs: ${debugLogPath}` : null,
+              `stderr: ${stderrData}`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+            reject(new ProcessError(errorMsg, projectPath));
+          } else if (!responseReceived) {
+            logger.error(
+              "Session initialization completed but no response received",
+              {
+                sessionId,
+                code,
+                command: `${claudePath} ${args.join(" ")}`,
+                cwd: projectPath,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                stdout: stdoutData,
+                stderr: stderrData,
+                debugLogPath,
+              },
+            );
+
+            const errorMsg = [
+              "Session initialization completed but no response received",
+              debugLogPath ? `Debug logs: ${debugLogPath}` : null,
+              `stderr: ${stderrData}`,
+            ]
+              .filter(Boolean)
+              .join("\n");
+
+            reject(new ProcessError(errorMsg, projectPath));
+          } else {
+            // Accept any response - session file creation is what matters
+            logger.info(
+              "Session initialization process completed successfully",
+              {
+                sessionId,
+                code,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                response: stdoutData.substring(0, 100),
+              },
+            );
+            resolve();
+          }
+        });
+
+        // Timeout after configured duration
+        timeoutHandle = setTimeout(() => {
+          timeoutHandle = null; // Clear reference
+          logger.error("Session initialization timed out", {
+            sessionId,
+            timeout: sessionInitTimeout,
+            responseReceived,
+            command: `claude ${args.join(" ")}`,
+            cwd: projectPath,
+            stdoutLength: stdoutData.length,
+            stderrLength: stderrData.length,
+            stdout: stdoutData,
+            stderr: stderrData,
+            debugLogPath,
+          });
+          claudeProcess.kill();
+
+          const errorMsg = [
+            `Session initialization timed out after ${sessionInitTimeout}ms.`,
+            `Response received: ${responseReceived}`,
+            debugLogPath ? `Debug logs: ${debugLogPath}` : null,
+            `stderr: ${stderrData}`,
+          ]
+            .filter(Boolean)
+            .join("\n");
+
+          reject(new ProcessError(errorMsg, projectPath));
+        }, sessionInitTimeout);
+      });
+
+      // Verify session file was created
+      const sessionFilePath = ClaudeProcess.getSessionFilePath(
+        projectPath,
+        sessionId,
+      );
+
+      if (!existsSync(sessionFilePath)) {
+        throw new ProcessError(
+          `Session file was not created at ${sessionFilePath}`,
+          projectPath,
+        );
+      }
+
+      logger.info("Session file initialized successfully", {
+        sessionId,
+        filePath: sessionFilePath,
+      });
+    } catch (error) {
+      logger.error("Failed to initialize session file", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get the path to a session file
+   * Helper method for determining where Claude stores session files
+   */
+  static getSessionFilePath(projectPath: string, sessionId: string): string {
+    // Claude stores sessions in ~/.claude/projects/{escaped-path}/{sessionId}.jsonl
+    const homedir = process.env.HOME || process.env.USERPROFILE || "";
+    const escapedPath = projectPath.replace(/\//g, "-");
+    return `${homedir}/.claude/projects/${escapedPath}/${sessionId}.jsonl`;
   }
 
   /**

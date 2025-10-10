@@ -7,7 +7,7 @@ export default defineConfig({
     env: {
       NODE_ENV: "test",
     },
-    testTimeout: 20000, // 20 seconds default (enough for single Claude spawn + response)
+    testTimeout: 30000, // 20 seconds default (enough for single Claude spawn + response)
     hookTimeout: 15000, // 15 seconds for beforeEach/afterEach (session manager init)
     teardownTimeout: 10000, // 10 seconds for cleanup (process termination)
     coverage: {

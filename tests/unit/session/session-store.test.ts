@@ -40,7 +40,7 @@ describe("SessionStore", () => {
 
     it("should create tables and indexes", () => {
       // Query table info to verify schema exists
-      const session = store.create("team-a", "team-b", "test-uuid");
+      const session = store.create("team-alpha", "team-beta", "test-uuid");
       expect(session).toBeDefined();
       expect(session.id).toBeGreaterThan(0);
     });
@@ -71,22 +71,24 @@ describe("SessionStore", () => {
 
     it("should enforce unique sessionId constraint", () => {
       const sessionId = "duplicate-uuid";
-      store.create("team-a", "team-b", sessionId);
+      store.create("team-alpha", "team-beta", sessionId);
 
       // Attempting to create with same sessionId should throw
       expect(() => store.create("team-c", "team-d", sessionId)).toThrow();
     });
 
     it("should enforce unique team pair constraint", () => {
-      store.create("team-a", "team-b", "session-1");
+      store.create("team-alpha", "team-beta", "session-1");
 
       // Attempting to create same team pair should throw
-      expect(() => store.create("team-a", "team-b", "session-2")).toThrow();
+      expect(() =>
+        store.create("team-alpha", "team-beta", "session-2"),
+      ).toThrow();
     });
 
     it("should allow different team pairs", () => {
-      const session1 = store.create("team-a", "team-b", "session-1");
-      const session2 = store.create("team-b", "team-a", "session-2");
+      const session1 = store.create("team-alpha", "team-beta", "session-1");
+      const session2 = store.create("team-beta", "team-alpha", "session-2");
 
       expect(session1.sessionId).toBe("session-1");
       expect(session2.sessionId).toBe("session-2");
@@ -122,11 +124,11 @@ describe("SessionStore", () => {
     });
 
     it("should distinguish between different team pairs", () => {
-      store.create("team-a", "team-b", "session-ab");
-      store.create("team-b", "team-a", "session-ba");
+      store.create("team-alpha", "team-beta", "session-ab");
+      store.create("team-beta", "team-alpha", "session-ba");
 
-      const ab = store.getByTeamPair("team-a", "team-b");
-      const ba = store.getByTeamPair("team-b", "team-a");
+      const ab = store.getByTeamPair("team-alpha", "team-beta");
+      const ba = store.getByTeamPair("team-beta", "team-alpha");
 
       expect(ab?.sessionId).toBe("session-ab");
       expect(ba?.sessionId).toBe("session-ba");
@@ -135,14 +137,14 @@ describe("SessionStore", () => {
 
   describe("getBySessionId", () => {
     it("should retrieve session by session ID", () => {
-      store.create("team-a", "team-b", "unique-session-id");
+      store.create("team-alpha", "team-beta", "unique-session-id");
 
       const retrieved = store.getBySessionId("unique-session-id");
 
       expect(retrieved).toBeDefined();
       expect(retrieved?.sessionId).toBe("unique-session-id");
-      expect(retrieved?.fromTeam).toBe("team-a");
-      expect(retrieved?.toTeam).toBe("team-b");
+      expect(retrieved?.fromTeam).toBe("team-alpha");
+      expect(retrieved?.toTeam).toBe("team-beta");
     });
 
     it("should return null for non-existent session ID", () => {
@@ -219,7 +221,7 @@ describe("SessionStore", () => {
 
   describe("updateLastUsed", () => {
     it("should update last_used_at timestamp", async () => {
-      const session = store.create("team-a", "team-b", "session-update");
+      const session = store.create("team-alpha", "team-beta", "session-update");
       const originalTimestamp = session.lastUsedAt.getTime();
 
       // Wait a bit to ensure different timestamp
@@ -234,7 +236,7 @@ describe("SessionStore", () => {
 
   describe("incrementMessageCount", () => {
     it("should increment message count by 1 by default", () => {
-      store.create("team-a", "team-b", "session-count");
+      store.create("team-alpha", "team-beta", "session-count");
 
       store.incrementMessageCount("session-count");
 
@@ -243,7 +245,7 @@ describe("SessionStore", () => {
     });
 
     it("should increment message count by specified amount", () => {
-      store.create("team-a", "team-b", "session-count-multi");
+      store.create("team-alpha", "team-beta", "session-count-multi");
 
       store.incrementMessageCount("session-count-multi", 5);
 
@@ -252,7 +254,7 @@ describe("SessionStore", () => {
     });
 
     it("should accumulate message counts", () => {
-      store.create("team-a", "team-b", "session-accumulate");
+      store.create("team-alpha", "team-beta", "session-accumulate");
 
       store.incrementMessageCount("session-accumulate", 3);
       store.incrementMessageCount("session-accumulate", 2);
@@ -265,7 +267,7 @@ describe("SessionStore", () => {
 
   describe("updateStatus", () => {
     it("should update session status", () => {
-      store.create("team-a", "team-b", "session-status");
+      store.create("team-alpha", "team-beta", "session-status");
 
       store.updateStatus("session-status", "compact_pending");
 
@@ -281,7 +283,7 @@ describe("SessionStore", () => {
 
   describe("delete", () => {
     it("should delete session by session ID", () => {
-      store.create("team-a", "team-b", "session-delete");
+      store.create("team-alpha", "team-beta", "session-delete");
 
       let session = store.getBySessionId("session-delete");
       expect(session).toBeDefined();
@@ -295,23 +297,23 @@ describe("SessionStore", () => {
 
   describe("deleteByTeamPair", () => {
     it("should delete session by team pair", () => {
-      store.create("team-a", "team-b", "session-pair-delete");
+      store.create("team-alpha", "team-beta", "session-pair-delete");
 
-      let session = store.getByTeamPair("team-a", "team-b");
+      let session = store.getByTeamPair("team-alpha", "team-beta");
       expect(session).toBeDefined();
 
-      store.deleteByTeamPair("team-a", "team-b");
+      store.deleteByTeamPair("team-alpha", "team-beta");
 
-      session = store.getByTeamPair("team-a", "team-b");
+      session = store.getByTeamPair("team-alpha", "team-beta");
       expect(session).toBe(null);
     });
 
     it("should handle null fromTeam", () => {
-      store.create(null, "team-b", "session-null-delete");
+      store.create(null, "team-beta", "session-null-delete");
 
-      store.deleteByTeamPair(null, "team-b");
+      store.deleteByTeamPair(null, "team-beta");
 
-      const session = store.getByTeamPair(null, "team-b");
+      const session = store.getByTeamPair(null, "team-beta");
       expect(session).toBe(null);
     });
   });
@@ -327,7 +329,7 @@ describe("SessionStore", () => {
     });
 
     it("should count total sessions", () => {
-      store.create("team-a", "team-b", "session-1");
+      store.create("team-alpha", "team-beta", "session-1");
       store.create("team-c", "team-d", "session-2");
 
       const stats = store.getStats();
@@ -336,7 +338,7 @@ describe("SessionStore", () => {
     });
 
     it("should count sessions by status", () => {
-      store.create("team-a", "team-b", "session-1");
+      store.create("team-alpha", "team-beta", "session-1");
       store.create("team-c", "team-d", "session-2");
       store.create("team-e", "team-f", "session-3");
 
@@ -351,7 +353,7 @@ describe("SessionStore", () => {
     });
 
     it("should sum total messages across all sessions", () => {
-      store.create("team-a", "team-b", "session-1");
+      store.create("team-alpha", "team-beta", "session-1");
       store.create("team-c", "team-d", "session-2");
 
       store.incrementMessageCount("session-1", 10);

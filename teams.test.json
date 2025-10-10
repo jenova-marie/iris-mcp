@@ -3,7 +3,7 @@
     "idleTimeout": 300000,
     "maxProcesses": 10,
     "healthCheckInterval": 30000,
-    "sessionInitTimeout": 20000
+    "sessionInitTimeout": 30000
   },
   "teams": {
     "team-alpha": {

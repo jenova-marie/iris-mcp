@@ -1,1 +1,0 @@
-{"settings":{"idleTimeout":300000,"maxProcesses":20,"healthCheckInterval":30000,"sessionInitTimeout":20000},"teams":{"frontend":{"path":"./test-project-dir","description":"Frontend team","skipPermissions":true,"color":"#61dafb"},"backend":{"path":"./test-project-dir","description":"Backend team"}}}

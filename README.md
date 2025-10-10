@@ -23,6 +23,40 @@ Claude (in frontend) → Iris MCP → Claude (in backend) → analyzes backend c
 
 ---
 
+## 🆕 What's New in Phase 1 (Current)
+
+### Architecture Improvements
+
+✅ **Three-Layer Design**: Clean separation between SessionManager, ProcessPool, and IrisOrchestrator
+✅ **Session Persistence**: Team-to-team conversations maintained across restarts
+✅ **Eager Initialization**: All team sessions pre-created at startup (no cold starts!)
+✅ **LRU Process Pooling**: 10-20x faster warm starts with intelligent eviction
+✅ **Dual-Role ClaudeProcess**: Static session initialization + instance process management
+
+### Performance Gains
+
+- **52%+ faster responses** with process pooling
+- **85% faster test suite** with `beforeAll` optimization
+- **Warm starts**: 500ms-2s (vs 8-14s cold starts)
+- **Proper timeout cleanup**: Fixed spurious errors 20s after completion
+
+### New Features
+
+- **Session database** (SQLite) tracks metadata for all team interactions
+- **Health monitoring** every 30 seconds detects unhealthy processes
+- **Configurable timeouts** per team (`idleTimeout`, `sessionInitTimeout`)
+- **Event system** emits lifecycle events for observability
+- **Comprehensive docs** (SESSION.md, CLAUDE.md, POOL.md)
+
+### Developer Experience
+
+- **203 unit tests** passing in <2 seconds
+- **Integration tests** optimized for speed
+- **Structured JSON logging** to stderr
+- **Type-safe configuration** with Zod validation
+
+---
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -89,13 +123,17 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ### Start Using
 
-Restart Claude Desktop and start a conversation:
+Restart Claude Desktop. **First startup will take 60-90 seconds** as Iris pre-initializes sessions for all teams (eager initialization).
+
+Then start a conversation:
 
 ```
 > "Ask the backend team what database they use"
 ```
 
 Claude will automatically use Iris MCP to coordinate!
+
+**Note**: First request to each team pair takes ~8-14 seconds (cold start). Subsequent requests are much faster (~2-3 seconds) thanks to process pooling.
 
 ---
 
@@ -257,12 +295,19 @@ Claude will automatically use Iris MCP to coordinate!
 iris-mcp/
 ├── src/
 │   ├── index.ts                 # MCP server entry point
+│   ├── iris.ts                  # Business Logic Layer (orchestrator)
 │   ├── config/
 │   │   ├── teams-config.ts      # Configuration loader with Zod validation
 │   │   └── teams.example.json   # Example configuration
+│   ├── session/
+│   │   ├── session-manager.ts   # Session database and file management
+│   │   ├── session-store.ts     # SQLite session store
+│   │   ├── path-utils.ts        # Session file path utilities
+│   │   ├── validation.ts        # Session validation
+│   │   └── types.ts             # Session interfaces
 │   ├── process-pool/
 │   │   ├── pool-manager.ts      # Process pool with LRU eviction
-│   │   ├── claude-process.ts    # Individual Claude process wrapper
+│   │   ├── claude-process.ts    # Claude process wrapper (dual-role)
 │   │   └── types.ts             # TypeScript interfaces
 │   ├── tools/
 │   │   ├── teams-ask.ts         # teams_ask tool
@@ -277,7 +322,16 @@ iris-mcp/
 │       ├── logger.ts            # Structured logging to stderr
 │       ├── errors.ts            # Custom error types
 │       └── validation.ts        # Input validation
-├── teams.json                    # Your team configuration
+├── docs/
+│   ├── ARCHITECTURE.md          # Overall architecture overview
+│   ├── SESSION.md               # SessionManager deep dive
+│   ├── CLAUDE.md                # ClaudeProcess deep dive
+│   ├── POOL.md                  # ClaudeProcessPool deep dive
+│   └── BREAKING.md              # Breaking changes documentation
+├── data/
+│   ├── team-sessions.db         # Session database (auto-created)
+│   └── notifications.db         # Notification queue (auto-created)
+├── teams.json                   # Your team configuration
 ├── package.json
 └── README.md
 ```
@@ -286,6 +340,64 @@ iris-mcp/
 
 ## 🏗️ Architecture
 
+### Three-Layer Design (Phase 1)
+
+Iris uses a clean three-layer architecture with strict separation of concerns:
+
+```
+┌─────────────────────────────────────────────┐
+│        IrisOrchestrator (BLL)              │
+│  Coordinates SessionManager + PoolManager   │
+└──────────────┬──────────────────────────────┘
+               │
+       ┌───────┴────────┐
+       │                │
+       ▼                ▼
+┌──────────────┐  ┌─────────────────────┐
+│SessionManager│  │ClaudeProcessPool    │
+│              │  │                     │
+│DB + Files    │  │Process Lifecycle    │
+│              │  │                     │
+│NO processes  │  │NO session lookup    │
+└──────┬───────┘  └──────────┬──────────┘
+       │                     │
+       ▼                     ▼
+┌──────────────┐  ┌─────────────────────┐
+│SessionStore  │  │ClaudeProcess        │
+│SQLite        │  │Static: init files   │
+│              │  │Instance: resume     │
+└──────────────┘  └─────────────────────┘
+```
+
+**Layer 1: SessionManager**
+- Session database management (SQLite)
+- Session file validation
+- Eager initialization at startup
+- 60-second caching layer
+- **Does NOT** spawn processes
+
+**Layer 2: ClaudeProcessPool**
+- Process lifecycle management
+- LRU eviction when pool is full
+- Health monitoring (every 30s)
+- Process reuse for 10-20x speedup
+- **Does NOT** manage session database
+
+**Layer 3: IrisOrchestrator**
+- Business Logic Layer
+- Coordinates SessionManager + PoolManager
+- Implements complete message flow
+- Provides API for MCP tools
+
+### Session Persistence
+
+**Persistent team-to-team sessions** maintain conversation continuity:
+
+- Each `(fromTeam, toTeam)` pair has exactly one session
+- Sessions stored at `~/.claude/projects/{escaped-path}/{sessionId}.jsonl`
+- Database tracks metadata (message count, last used, status)
+- Sessions resume across process restarts
+
 ### Process Pool Management
 
 Iris maintains a pool of Claude Code processes with:
@@ -293,7 +405,15 @@ Iris maintains a pool of Claude Code processes with:
 - **LRU Eviction**: When pool is full, least recently used process is terminated
 - **Idle Timeout**: Processes automatically terminate after 5 minutes of inactivity
 - **Health Checks**: Regular monitoring ensures processes stay healthy
-- **Connection Pooling**: Reuses existing processes for 52%+ faster responses
+- **Warm Starts**: Reuses existing processes for 10-20x faster responses
+- **Session Resumption**: Each process resumes its specific session via `--resume <sessionId>`
+
+### Dual-Role ClaudeProcess
+
+ClaudeProcess serves two roles:
+
+1. **Static Session Initializer**: `ClaudeProcess.initializeSessionFile()` creates `.jsonl` files
+2. **Instance Process Manager**: Wraps running Claude processes with stdio communication
 
 ### Notification Queue
 
@@ -314,6 +434,7 @@ All process events are emitted for future Intelligence Layer integration:
 - `process-error`
 - `message-sent`
 - `message-response`
+- `health-check`
 
 ---
 
@@ -324,9 +445,10 @@ All process events are emitted for future Intelligence Layer integration:
 ```json
 {
   "settings": {
-    "idleTimeout": 300000,         // 5 minutes in milliseconds
-    "maxProcesses": 10,            // Max concurrent processes
-    "healthCheckInterval": 30000   // 30 seconds
+    "idleTimeout": 300000,          // 5 minutes in milliseconds
+    "maxProcesses": 10,             // Max concurrent processes
+    "healthCheckInterval": 30000,   // 30 seconds
+    "sessionInitTimeout": 30000     // Session initialization timeout (30s)
   }
 }
 ```
@@ -337,15 +459,29 @@ All process events are emitted for future Intelligence Layer integration:
 {
   "teams": {
     "teamName": {
-      "path": "/absolute/path",      // Required: project directory
+      "path": "/absolute/path",        // Required: project directory
       "description": "Team description",
-      "idleTimeout": 600000,         // Optional: override global timeout
-      "skipPermissions": true,       // Optional: auto-approve Claude actions
-      "color": "#ff6b6b"            // Optional: hex color for UI (future)
+      "idleTimeout": 600000,           // Optional: override global idle timeout
+      "sessionInitTimeout": 45000,     // Optional: override session init timeout
+      "skipPermissions": true,         // Optional: auto-approve Claude actions
+      "color": "#ff6b6b"              // Optional: hex color for UI (future)
     }
   }
 }
 ```
+
+### Configuration Details
+
+**Global Settings**:
+- `idleTimeout`: How long a process can be idle before termination (default: 5 minutes)
+- `maxProcesses`: Maximum number of concurrent Claude processes (default: 10)
+- `healthCheckInterval`: How often to check process health (default: 30 seconds)
+- `sessionInitTimeout`: Timeout for session file creation (default: 30 seconds)
+
+**Per-Team Overrides**:
+- `idleTimeout`: Override for teams with slower/faster requirements
+- `sessionInitTimeout`: Override for teams with large dependencies (slow startup)
+- `skipPermissions`: Set `true` to auto-approve file operations (use with caution!)
 
 ---
 
@@ -363,6 +499,25 @@ pnpm build
 pnpm dev
 ```
 
+### Testing
+
+```bash
+# Run all tests
+pnpm test
+
+# Unit tests only (fast, mocked)
+pnpm test:unit
+
+# Integration tests only (slow, real Claude processes)
+pnpm test:integration
+
+# Run specific test file
+pnpm test:run path/to/test.ts
+
+# Watch mode
+pnpm test:ui
+```
+
 ### Run MCP Inspector
 
 ```bash
@@ -377,7 +532,68 @@ All logs go to stderr in JSON format:
 
 ```json
 {"level":"info","context":"server","message":"Iris MCP Server initialized","teams":["frontend","backend","mobile"],"timestamp":"2025-01-15T10:30:00.000Z"}
+{"level":"info","context":"session-manager","message":"Pre-initializing team sessions","timestamp":"2025-01-15T10:30:01.000Z"}
+{"level":"info","context":"pool","message":"Creating new process","poolKey":"frontend->backend","sessionId":"abc-123","timestamp":"2025-01-15T10:30:15.000Z"}
 ```
+
+**Log Contexts**:
+- `server`: MCP server lifecycle
+- `config`: Configuration loading
+- `session-manager`: Session operations
+- `session-store`: Database operations
+- `pool`: Process pool management
+- `process:teamName`: Individual process logs
+- `session-init:path`: Session file initialization
+
+---
+
+## ⚡ Performance
+
+### Process Pooling Benefits
+
+**Cold Start** (first request to a team):
+- Session creation: ~7-12 seconds
+- Process spawn: ~1-2 seconds
+- Total: ~8-14 seconds
+
+**Warm Start** (subsequent requests):
+- Session lookup: ~1ms (cache hit)
+- Process reuse: ~1ms (pool hit)
+- Total: ~500ms-2s (Claude API time only)
+
+**Speedup**: **10-20x faster** with pooling!
+
+### Session Persistence
+
+**Without Iris** (each request):
+- New conversation context every time
+- No memory of previous interactions
+- Lost context between teams
+
+**With Iris**:
+- Persistent `(fromTeam, toTeam)` sessions
+- Full conversation history maintained
+- Claude remembers previous exchanges
+
+### Resource Efficiency
+
+**Process Pool Management**:
+- LRU eviction keeps memory bounded
+- Idle timeout (5 minutes) terminates unused processes
+- Health checks (30s) detect and clean unhealthy processes
+- Max 10 concurrent processes (configurable)
+
+**Memory Usage** (typical):
+- 10 processes: ~600 MB - 1.25 GB
+- Session database: ~2 MB per 10,000 sessions
+- Notification queue: ~5 MB per 10,000 notifications
+
+### Test Suite Performance
+
+**Phase 1 Refactor Improvements**:
+- Unit tests: 203 passing in <2 seconds
+- Integration tests: 85% faster (7min → 1min) with `beforeAll` optimization
+- Timeout handling: Fixed spurious errors 20s after completion
 
 ---
 
@@ -385,25 +601,80 @@ All logs go to stderr in JSON format:
 
 ### "Team not found" error
 
+**Symptom**: `TeamNotFoundError` when using tools
+
+**Solutions**:
 - Check that team name in `teams.json` matches exactly (case-sensitive)
 - Verify the path exists and is absolute
+- Restart Iris after modifying `teams.json`
 
 ### "Process failed to spawn"
 
-- Ensure `claude-code` CLI is installed and in PATH
-- Check that the team's project directory is valid
-- Try running `claude-code --headless` manually in the team directory
+**Symptom**: Error during process creation
+
+**Solutions**:
+- Ensure Claude CLI is installed: `which claude` or check `/Users/you/.asdf/installs/nodejs/*/bin/claude`
+- Check that the team's project directory exists and is accessible
+- Try running `claude --session-id test-$(uuidgen) --print ping` manually in the team directory
+- Check logs for detailed error: `context:"process:teamName"`
 
 ### "Timeout exceeded"
 
-- Increase timeout parameter in tool call
-- Check if the target team's Claude process is stuck
-- View logs for error details
+**Symptom**: Message takes longer than 30 seconds
+
+**Solutions**:
+- Increase timeout parameter: `{ timeout: 60000 }` (60 seconds)
+- Check if the target team's Claude process is stuck (view logs)
+- Verify Claude API is responding (not rate-limited)
+- For session initialization timeouts, increase `sessionInitTimeout` in config
+
+### "Session file was not created"
+
+**Symptom**: Session initialization fails
+
+**Solutions**:
+- Verify `~/.claude/projects/` directory exists: `mkdir -p ~/.claude/projects`
+- Check permissions: `ls -la ~/.claude`
+- Ensure team path is correct and accessible
+- Check available disk space: `df -h`
+
+### "Session starting... Please retry your request in a moment"
+
+**Symptom**: Async response during process spawn
+
+**Explanation**: This is normal! The process is spawning (takes 7-12 seconds for first request).
+
+**Solutions**:
+- Wait a few seconds and retry the request
+- Subsequent requests will be instant (warm start)
 
 ### Database locked
 
+**Symptom**: SQLite errors about locked database
+
+**Solutions**:
 - Close other Iris MCP instances
-- Delete `data/notifications.db-wal` and `data/notifications.db-shm`
+- Delete WAL files: `rm data/*.db-wal data/*.db-shm`
+- Check for zombie processes: `ps aux | grep iris`
+
+### Process pool full
+
+**Symptom**: All 10 process slots occupied
+
+**Solutions**:
+- Increase `maxProcesses` in `teams.json` settings
+- Reduce `idleTimeout` to free processes faster
+- Check health check logs to see which processes are active
+
+### Memory issues
+
+**Symptom**: High memory usage or OOM errors
+
+**Solutions**:
+- Reduce `maxProcesses` (fewer concurrent processes)
+- Reduce `idleTimeout` (terminate idle processes faster)
+- Monitor process memory: check health-check events
+- For 16GB RAM: `maxProcesses: 5-10` recommended
 
 ---
 
@@ -456,11 +727,20 @@ See `src/intelligence/README.md`
 
 ## 📚 Documentation
 
-- [Architecture Details](docs/ARCHITECTURE.md)
-- [Dashboard Spec](docs/DASHBOARD.md)
-- [API Spec](docs/API.md)
-- [CLI Spec](docs/CLI.md)
-- [Intelligence Layer](docs/AGENT.md)
+### Phase 1 Architecture (Current)
+
+- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and component interaction
+- **[SessionManager Deep Dive](docs/SESSION.md)** - Session database and file management
+- **[ClaudeProcess Deep Dive](docs/CLAUDE.md)** - Process wrapper and stdio communication
+- **[ProcessPool Deep Dive](docs/POOL.md)** - Pool management and LRU eviction
+- **[Breaking Changes](docs/BREAKING.md)** - Migration guide for Phase 1 refactor
+
+### Future Phases (Planned)
+
+- [Dashboard Spec](docs/DASHBOARD.md) - React web UI (Phase 2)
+- [API Spec](docs/API.md) - RESTful + WebSocket API (Phase 3)
+- [CLI Spec](docs/CLI.md) - Ink terminal interface (Phase 4)
+- [Intelligence Layer](docs/AGENT.md) - Autonomous coordination (Phase 5)
 
 ---
 

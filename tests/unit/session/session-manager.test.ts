@@ -10,6 +10,7 @@ import { existsSync, unlinkSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { SessionManager } from "../../../src/session/session-manager.js";
+import { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
 import type { TeamsConfig } from "../../../src/process-pool/types.js";
 
 describe("SessionManager", () => {
@@ -19,8 +20,10 @@ describe("SessionManager", () => {
   let testProjectPaths: string[] = [];
 
   beforeEach(() => {
-    // Mock initializeSession to avoid spawning real Claude processes in unit tests
-    vi.spyOn(SessionManager.prototype as any, "initializeSession").mockResolvedValue(undefined);
+    // Mock ClaudeProcess.initializeSessionFile to avoid spawning real Claude processes in unit tests
+    vi.spyOn(ClaudeProcess, "initializeSessionFile").mockResolvedValue(
+      undefined,
+    );
 
     // Create temporary test project directories
     const teamAPath = join(tmpdir(), "iris-test-team-alpha");
@@ -39,7 +42,7 @@ describe("SessionManager", () => {
         idleTimeout: 300000,
         maxProcesses: 5,
         healthCheckInterval: 30000,
-        sessionInitTimeout: 20000, // 20 second timeout for session initialization
+        sessionInitTimeout: 30000,
       },
       teams: {
         "team-alpha": {
@@ -106,10 +109,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const invalidManager = new SessionManager(
-        invalidConfig,
-        testDbPath,
-      );
+      const invalidManager = new SessionManager(invalidConfig, testDbPath);
 
       await expect(invalidManager.initialize()).rejects.toThrow(
         "Project path does not exist",

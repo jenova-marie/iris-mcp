@@ -45,34 +45,5 @@ describe("SessionManager.initialize()", () => {
 
     // Verify manager is initialized
     expect(manager).toBeDefined();
-
-    // TODO: Add assertions to verify sessions were created
-    // - Check database has entries for both teams
-    // - Check session files exist on disk
-    // - Verify session metadata is correct
   }, 60000);
-
-  it("should fail fast if team config is invalid", async () => {
-    // Create manager with invalid config
-    const invalidConfig = {
-      settings: {
-        idleTimeout: 300000,
-        maxProcesses: 10,
-        healthCheckInterval: 30000,
-      },
-      teams: {
-        "invalid-team": {
-          path: "/path/does/not/exist",
-          description: "Invalid team with bad path",
-        },
-      },
-    };
-
-    const badManager = new SessionManager(invalidConfig, testDbPath);
-
-    // Should throw during initialization
-    await expect(badManager.initialize()).rejects.toThrow();
-
-    badManager.close();
-  }, 30000);
 });

@@ -34,37 +34,56 @@
                           │ MCP Protocol (stdio/JSON-RPC)
                           │
 ┌─────────────────────────▼────────────────────────────────────────┐
-│              Teams MCP Server (Node.js Process)                   │
+│              Iris MCP Server (Node.js Process)                    │
 │                                                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  MCP Server Core                                            │ │
+│  ┌─────────────────── LAYER 1: MCP TRANSPORT ─────────────────┐ │
+│  │  MCP Server Core (index.ts)                                 │ │
 │  │  • Protocol Handler (JSON-RPC 2.0)                          │ │
 │  │  • Tool Registry (teams_ask, teams_send_message, etc.)     │ │
 │  │  • Request/Response Management                              │ │
 │  └────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  Claude Process Pool Manager                                │ │
-│  │  • Connection Pool (up to 10 active processes)              │ │
-│  │  • Idle Timeout Management (default: 5 minutes)             │ │
-│  │  • Health Check System                                       │ │
-│  │  • Message Queue per Process                                │ │
+│                            │                                      │
+│                            ▼                                      │
+│  ┌──────────────── LAYER 2: BUSINESS LOGIC ───────────────────┐ │
+│  │  IrisOrchestrator (iris.ts)                                 │ │
+│  │  • sendMessage() - coordinates session + process            │ │
+│  │  • ask() - convenience wrapper                              │ │
+│  │  • getStatus() - aggregates stats                           │ │
+│  │  • Handles "Session starting..." async logic                │ │
+│  │  • Tracks usage (recordUsage, incrementMessageCount)        │ │
 │  └────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  Team Registry                                               │ │
-│  │  teams.json: {                                              │ │
-│  │    "frontend": "/projects/acme-frontend",                   │ │
-│  │    "backend": "/projects/acme-backend"                      │ │
-│  │  }                                                          │ │
-│  └────────────────────────────────────────────────────────────┘ │
-│                                                                   │
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  Notification Queue (SQLite)                                │ │
-│  │  • Persistent async message storage                         │ │
-│  │  • Pending notifications per team                           │ │
-│  │  • Message status tracking                                  │ │
-│  └────────────────────────────────────────────────────────────┘ │
+│                   ┌────────┴────────┐                             │
+│                   ▼                 ▼                             │
+│  ┌───────── LAYER 3: INFRASTRUCTURE ──────────────────────────┐ │
+│  │                                                              │ │
+│  │  ┌────────────────────────────────────────────────────┐   │ │
+│  │  │  SessionManager (session/session-manager.ts)        │   │ │
+│  │  │  • SQLite database (team_sessions table)            │   │ │
+│  │  │  • Session lifecycle (create, compact, track)       │   │ │
+│  │  │  • getOrCreateSession(fromTeam, toTeam) → sessionId │   │ │
+│  │  │  • Calls ClaudeProcess.initializeSessionFile()      │   │ │
+│  │  └────────────────────────────────────────────────────┘   │ │
+│  │                                                              │ │
+│  │  ┌────────────────────────────────────────────────────┐   │ │
+│  │  │  ClaudeProcessPool (process-pool/pool-manager.ts)  │   │ │
+│  │  │  • Process lifecycle management                     │   │ │
+│  │  │  • getOrCreateProcess(team, sessionId, fromTeam)    │   │ │
+│  │  │  • LRU eviction (maxProcesses=10)                   │   │ │
+│  │  │  • Health checks every 30s                          │   │ │
+│  │  └────────────────────────────────────────────────────┘   │ │
+│  │                                                              │ │
+│  │  ┌────────────────────────────────────────────────────┐   │ │
+│  │  │  NotificationQueue (notifications/queue.ts)         │   │ │
+│  │  │  • SQLite persistent queue                          │   │ │
+│  │  │  • Fire-and-forget messages                         │   │ │
+│  │  └────────────────────────────────────────────────────┘   │ │
+│  │                                                              │ │
+│  │  ┌────────────────────────────────────────────────────┐   │ │
+│  │  │  Team Registry (teams.json)                         │   │ │
+│  │  │  { "frontend": "/projects/acme-frontend",           │   │ │
+│  │  │    "backend": "/projects/acme-backend" }            │   │ │
+│  │  └────────────────────────────────────────────────────┘   │ │
+│  └──────────────────────────────────────────────────────────┘ │
 └───────────┬────────────────┬────────────────┬───────────────────┘
             │                │                │
             │ stdio streams  │ stdio streams  │ stdio streams
@@ -73,27 +92,36 @@
 │ Claude Code Instance │  │  Claude Code │  │  Claude Code      │
 │   Team: Frontend     │  │ Team: Backend│  │  Team: Mobile     │
 │                      │  │              │  │                   │
-│ Process Pool Entry:  │  │ Process Pool │  │ Process Pool      │
-│ • PID: 12345         │  │ Entry:       │  │ Entry:            │
-│ • Status: idle       │  │ • PID: 12346 │  │ • PID: 12347      │
+│ Session File:        │  │ Session File:│  │ Session File:     │
+│ ~/.claude/projects/  │  │ ~/.claude/   │  │ ~/.claude/        │
+│   {path}/a1b2c3.jsonl│  │   {path}/    │  │   {path}/         │
+│                      │  │   d4e5f6.jsonl│  │   g7h8i9.jsonl   │
+│ Process Pool Entry:  │  │              │  │                   │
+│ • PID: 12345         │  │ Process Pool │  │ Process Pool      │
+│ • Status: idle       │  │ Entry:       │  │ Entry:            │
+│ • SessionId: a1b2c3  │  │ • PID: 12346 │  │ • PID: 12347      │
 │ • Idle Timer: 3m     │  │ • Status:    │  │ • Status: idle    │
-│ • Message Queue: []  │  │   processing │  │ • Idle Timer: 4m  │
-│                      │  │ • Idle Timer:│  │ • Message Queue:  │
-│ Working Directory:   │  │   paused     │  │   []              │
-│ /projects/acme-      │  │ • Message    │  │                   │
-│   frontend/          │  │   Queue: [1] │  │ Working Dir:      │
-│                      │  │              │  │ /projects/acme-   │
-│ Context:             │  │ Working Dir: │  │   mobile/         │
-│ • .claude/           │  │ /projects/   │  │                   │
-│ • package.json       │  │  acme-       │  │ Context:          │
-│ • node_modules       │  │  backend/    │  │ • .claude/        │
-│ • MCP servers        │  │              │  │ • Podfile         │
-│   (Figma, etc.)      │  │ Context:     │  │ • Swift packages  │
-│                      │  │ • .claude/   │  │ • MCP servers     │
-│ stdin/stdout:        │  │ • DB schemas │  │   (iOS sim, etc.) │
-│ [open pipes]         │  │ • API docs   │  │                   │
-│                      │  │ • MCP servers│  │ stdin/stdout:     │
-│                      │  │   (Postgres) │  │ [open pipes]      │
+│ • Message Queue: []  │  │   processing │  │ • SessionId: g7h8 │
+│                      │  │ • SessionId: │  │ • Idle Timer: 4m  │
+│ Working Directory:   │  │   d4e5f6     │  │ • Message Queue:  │
+│ /projects/acme-      │  │ • Idle Timer:│  │   []              │
+│   frontend/          │  │   paused     │  │                   │
+│                      │  │ • Message    │  │ Working Dir:      │
+│ Context:             │  │   Queue: [1] │  │ /projects/acme-   │
+│ • .claude/           │  │              │  │   mobile/         │
+│ • package.json       │  │ Working Dir: │  │                   │
+│ • node_modules       │  │ /projects/   │  │ Context:          │
+│ • MCP servers        │  │  acme-       │  │ • .claude/        │
+│   (Figma, etc.)      │  │  backend/    │  │ • Podfile         │
+│                      │  │              │  │ • Swift packages  │
+│ stdin/stdout:        │  │ Context:     │  │ • MCP servers     │
+│ [open pipes]         │  │ • .claude/   │  │   (iOS sim, etc.) │
+│                      │  │ • DB schemas │  │                   │
+│                      │  │ • API docs   │  │ stdin/stdout:     │
+│                      │  │ • MCP servers│  │ [open pipes]      │
+│                      │  │   (Postgres) │  │                   │
+│                      │  │ stdin/stdout:│  │                   │
+│                      │  │ [open pipes] │  │                   │
 └──────────────────────┘  └──────────────┘  └───────────────────┘
 ```
 
@@ -108,35 +136,66 @@ User in Frontend Claude
          │
          │ MCP Tool Call: teams_ask("backend", "What's your API versioning?")
          ▼
-    Teams MCP Server
+    MCP Server (index.ts)
          │
-         │ 1. Check process pool for "backend"
-         │ 2. Process exists? → Reuse (fast!)
-         │    Process missing? → Spawn new instance
+         │ Tool handler receives request
          ▼
-    Process Pool Manager
+    IrisOrchestrator.ask(fromTeam, "backend", question, timeout)
+         │
+         ▼
+    SessionManager.getOrCreateSession(fromTeam, "backend")
+         │
+         ├─ Check SQLite: SELECT * WHERE from_team=? AND to_team=?
+         │
+         ├─ Session Exists?
+         │  └─ Return sessionId from database
+         │
+         └─ Session Missing?
+            ├─ Generate new UUID sessionId
+            ├─ Call ClaudeProcess.initializeSessionFile(teamConfig, sessionId)
+            │  ├─ spawn('claude', ['--session-id', sessionId, '--print', 'ping'])
+            │  ├─ Wait for session file: ~/.claude/projects/{path}/{sessionId}.jsonl
+            │  └─ Session file created ✓
+            ├─ Store session in SQLite: INSERT INTO team_sessions(...)
+            └─ Return sessionId
+         │
+         ▼
+    PoolManager.getOrCreateProcess("backend", sessionId, fromTeam)
+         │
+         ├─ Check process pool for "backend"
          │
          ├─ Existing Process Found (PID 12346)
+         │  ├─ Health check: process.isHealthy() → true
          │  ├─ Reset idle timer
-         │  ├─ Add message to queue
-         │  └─ Process immediately (no other messages)
+         │  └─ Return process
          │
-         └─ OR Create New Process
+         └─ Process Missing?
+            ├─ Check pool size >= maxProcesses?
+            │  └─ Yes: Find LRU process and terminate
             ├─ spawn('claude', ['--input-format', 'stream-json', ...])
             ├─ Set working directory: /projects/acme-backend
             ├─ Setup stdin/stdout pipes
             ├─ Register in pool
             └─ Start idle timer (5 minutes)
          │
-         ▼
-    Send Message via stdin
          │
-         │ Write: {"type":"user","message":"What's your API versioning?","session_id":"..."}
+         ▼
+    Check Process Status
+         │
+         ├─ Process status == "spawning"?
+         │  └─ Yes: Return "Session starting... Please retry in a moment."
+         │
+         └─ Process ready → Continue
+         │
+         ▼
+    ClaudeProcess.sendMessage(message, timeout)
+         │
+         │ Write to stdin: {"type":"user","message":"What's your API versioning?","session_id":"..."}
          │
          ▼
     Claude Backend Instance
          │
-         │ 1. Receives message
+         │ 1. Receives message via stdin
          │ 2. Analyzes backend codebase
          │ 3. Reads API documentation
          │ 4. Formulates response
@@ -147,15 +206,24 @@ User in Frontend Claude
          │ Stream: {"type":"result","response":"We use semantic versioning..."}
          │
          ▼
-    Process Pool Manager
+    ClaudeProcess
          │
          │ 1. Capture stdout
          │ 2. Parse JSON response
          │ 3. Resolve promise
          │ 4. Restart idle timer
+         │ 5. Return response to IrisOrchestrator
          │
          ▼
-    Teams MCP Server
+    IrisOrchestrator
+         │
+         │ 1. Receive response from ClaudeProcess
+         │ 2. SessionManager.recordUsage(sessionId)
+         │ 3. SessionManager.incrementMessageCount(sessionId)
+         │ 4. Return response to MCP server
+         │
+         ▼
+    MCP Server (index.ts)
          │
          │ Format response for MCP protocol
          │
@@ -167,6 +235,121 @@ User in Frontend Claude
          ▼
     User sees response
 ```
+
+### Five-Phase Product Roadmap
+
+Iris MCP is architected for **progressive enhancement** across five phases. Phase 1 is currently implemented, with foundational dependencies already installed for future phases.
+
+#### ✅ Phase 1: Core MCP Server (CURRENT)
+
+**Status:** Complete
+**Focus:** MCP protocol + process pooling + session management
+
+**Key Features:**
+- MCP tools for team coordination (`teams_ask`, `teams_send_message`, `teams_notify`, `teams_get_status`)
+- Process pooling with LRU eviction (52% performance improvement)
+- Session management with SQLite persistence
+- Health checks and idle timeout management
+- Three-layer architecture (Transport → BLL → Infrastructure)
+
+**Architecture:**
+```
+MCP Client → index.ts → IrisOrchestrator → (SessionManager + PoolManager) → ClaudeProcess
+```
+
+#### 🚧 Phase 2: Web Dashboard
+
+**Status:** Planned
+**Focus:** Real-time monitoring and visualization
+
+**Key Features:**
+- React SPA for monitoring team interactions
+- Real-time process metrics (active sessions, pool status, message counts)
+- Session timeline visualization
+- Team performance analytics
+- Process health monitoring dashboard
+
+**Architecture Addition:**
+```
+src/dashboard/
+├── server.ts          # Express server
+├── routes/            # API endpoints
+└── components/        # React components (shared with Phase 4 CLI)
+```
+
+**Tech Stack:** React ^18.2.0, Express ^4.18.2, Socket.io ^4.7.5
+
+#### 🔮 Phase 3: HTTP/WebSocket API
+
+**Status:** Planned
+**Focus:** External integrations and programmatic access
+
+**Key Features:**
+- RESTful HTTP endpoints (`POST /teams/:team/ask`, `GET /teams/:team/status`)
+- WebSocket for real-time notifications
+- API key authentication
+- Rate limiting per client
+- OpenAPI/Swagger documentation
+
+**Architecture Addition:**
+```
+src/api/
+├── server.ts          # HTTP/WebSocket server
+├── routes/            # REST endpoints
+├── middleware/        # Auth, rate limiting
+└── websocket/         # Real-time events
+```
+
+**Tech Stack:** Express ^4.18.2, Socket.io ^4.7.5, ws ^8.18.0
+
+#### 🔮 Phase 4: CLI Interface
+
+**Status:** Planned
+**Focus:** Terminal-based team coordination
+
+**Key Features:**
+- `iris ask <team> <question>` - Ask team synchronously
+- `iris send <team> <message>` - Send async message
+- `iris status` - View all team statuses
+- `iris watch <team>` - Monitor team activity
+- Interactive TUI with real-time updates
+
+**Architecture Addition:**
+```
+src/cli/
+├── index.ts           # CLI entry point
+├── commands/          # Command handlers
+└── components/        # Ink components (React for terminals)
+```
+
+**Tech Stack:** Commander ^12.1.0, Ink ^5.0.1 (React for CLI)
+
+#### 🔮 Phase 5: Intelligence Layer
+
+**Status:** Planned
+**Focus:** Autonomous coordination and meta-cognitive abilities
+
+**Key Features:**
+- Loop detection (prevent circular team requests)
+- Smart routing (route questions to most relevant team)
+- Autonomous task delegation
+- Cross-team dependency analysis
+- Self-aware system monitoring
+
+**Architecture Addition:**
+```
+src/intelligence/
+├── loop-detector.ts       # Circular request prevention
+├── smart-router.ts        # ML-based team routing
+├── task-delegator.ts      # Autonomous delegation
+└── meta-cognitive.ts      # Self-awareness layer
+```
+
+**Why Event-Driven Architecture:**
+The current event system (`process-spawned`, `message-sent`, `process-error`, etc.) provides the foundation for Phase 5 intelligence. The Intelligence Layer will observe these events to build meta-cognitive awareness and enable autonomous coordination.
+
+**Critical Design Decision:**
+All dependencies for phases 1-5 are installed upfront (React, Express, Ink, Commander, Socket.io) to avoid breaking changes during incremental rollout. Only Phase 1 functionality is currently implemented.
 
 ---
 
@@ -190,14 +373,32 @@ User in Frontend Claude
 **Responsibilities:**
 - Spawn and manage Claude Code processes
 - Maintain connection pool with idle timeout
-- Route messages to appropriate processes
+- Route messages to appropriate processes (requires sessionId)
 - Handle process lifecycle (spawn, kill, restart)
 - Queue management per process
+- LRU eviction when maxProcesses exceeded
 
 **Key Classes:**
-- `ClaudeProcessPool` - Pool management
-- `ClaudeProcess` - Individual process wrapper
+- `ClaudeProcessPool` - Pool management with session-aware spawning
+- `ClaudeProcess` - Individual process wrapper with static session initialization
 - `ProcessConfig` - Configuration per team
+
+**Key Signatures (Updated):**
+```typescript
+// Now requires sessionId parameter (breaking change from original)
+async getOrCreateProcess(
+  teamName: string,
+  sessionId: string,         // NEW: Required for session-aware spawning
+  fromTeam: string | null
+): Promise<ClaudeProcess>
+
+// Static method for session file initialization
+static async ClaudeProcess.initializeSessionFile(
+  teamConfig: TeamConfig,
+  sessionId: string,
+  sessionInitTimeout?: number
+): Promise<void>
+```
 
 ### 3. Team Registry
 
@@ -254,6 +455,102 @@ CREATE TABLE notifications (
 
 CREATE INDEX idx_team_status ON notifications(team_name, status);
 ```
+
+### 5. IrisOrchestrator (Business Logic Layer)
+
+**Responsibilities:**
+- Coordinate SessionManager and PoolManager
+- Orchestrate team-to-team messaging
+- Handle "Session starting..." async responses
+- Track session usage and message counts
+- Provide unified API for tool handlers
+
+**Key Methods:**
+- `sendMessage(fromTeam, toTeam, message, options)` - Main coordination method
+- `ask(fromTeam, toTeam, question, timeout)` - Synchronous Q&A wrapper
+- `getStatus()` - Aggregate session + process statistics
+- `shutdown()` - Graceful shutdown coordination
+
+**Architecture Pattern:**
+```
+MCP Tools → IrisOrchestrator → {
+  SessionManager.getOrCreateSession() → sessionId
+  PoolManager.getOrCreateProcess(teamName, sessionId, fromTeam) → process
+  Process.sendMessage() → response
+  SessionManager.recordUsage()
+  SessionManager.incrementMessageCount()
+}
+```
+
+### 6. SessionManager (Session Database Layer)
+
+**Responsibilities:**
+- Manage persistent team-to-team sessions
+- SQLite database with session metadata
+- Session file creation via `ClaudeProcess.initializeSessionFile()`
+- Session lifecycle management
+- Usage tracking and analytics
+
+**Key Classes:**
+- `SessionManager` - Main session orchestrator
+- `SessionStore` - SQLite database wrapper
+- Path utilities for session file management
+- Validation helpers
+
+**Session Lifecycle:**
+
+1. **Startup Discovery:**
+   - Validate all team project paths
+   - Scan for existing session files
+   - Sync database with filesystem
+
+2. **Session Initialization:**
+   - Generate UUID for new session
+   - Call `ClaudeProcess.initializeSessionFile(teamConfig, sessionId)`
+   - Static method spawns: `claude --session-id <uuid> --print ping`
+   - Wait for session file creation at: `~/.claude/projects/{escaped-path}/{uuid}.jsonl`
+   - Store metadata in SQLite
+
+3. **Session Usage:**
+   - `getOrCreateSession(fromTeam, toTeam)` returns sessionId
+   - Session files accumulate conversation history
+   - Database tracks: created_at, last_used_at, message_count, status
+
+**SQLite Schema:**
+```sql
+CREATE TABLE team_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  from_team TEXT,              -- NULL for external clients
+  to_team TEXT NOT NULL,
+  session_id TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  last_used_at INTEGER NOT NULL,
+  message_count INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'active',
+  UNIQUE(from_team, to_team)   -- One session per team pair
+);
+
+CREATE INDEX idx_team_sessions_from_to ON team_sessions(from_team, to_team);
+CREATE INDEX idx_team_sessions_session_id ON team_sessions(session_id);
+```
+
+**Session File Structure:**
+```
+~/.claude/projects/
+├── -Users-dev-projects-frontend/
+│   ├── a1b2c3d4-e5f6-7890-abcd-ef1234567890.jsonl   # Session file
+│   └── f9e8d7c6-b5a4-3210-9876-543210fedcba.jsonl
+├── -Users-dev-projects-backend/
+│   └── d4e5f6g7-h8i9-j0k1-l2m3-n4o5p6q7r8s9.jsonl
+```
+
+Each session file contains the full conversation history in JSONL format, allowing Claude to resume context across process restarts.
+
+**Why Sessions Matter:**
+- **Persistent Context:** Conversation history survives process termination
+- **Performance:** Reuse existing sessions instead of cold starts
+- **Team Pairing:** One session per (fromTeam, toTeam) pair ensures isolated conversations
+- **Analytics:** Track message counts and usage patterns per team pair
 
 ---
 
@@ -569,51 +866,87 @@ class ClaudeProcess {
 ## 📁 Project Structure
 
 ```
-teams-mcp/
+iris-mcp/
 ├── package.json
 ├── tsconfig.json
-├── .env.example
 ├── README.md
-├── bin/
-│   └── teams-mcp.ts                 # CLI entry point
+├── BREAKING.md                      # Breaking changes documentation
+├── CLAUDE.md                        # Project instructions for Claude Code
+├── teams.json                       # Team registry configuration
 ├── src/
-│   ├── index.ts                     # Main server entry
-│   ├── server.ts                    # MCP server setup
-│   ├── config/
-│   │   ├── teams-config.ts          # Configuration loader
-│   │   └── teams.example.json       # Example team registry
+│   ├── index.ts                     # MCP server entry + tool registration
+│   ├── iris.ts                      # 🆕 IrisOrchestrator (Business Logic Layer)
+│   │
+│   ├── session/                     # 🆕 Session Management Layer
+│   │   ├── session-manager.ts       # Main session orchestrator
+│   │   ├── session-store.ts         # SQLite database wrapper
+│   │   ├── path-utils.ts            # Session file path utilities
+│   │   ├── validation.ts            # Session validation helpers
+│   │   ├── metrics.ts               # Session analytics
+│   │   └── types.ts                 # Session type definitions
+│   │
 │   ├── process-pool/
-│   │   ├── pool-manager.ts          # ClaudeProcessPool class
-│   │   ├── claude-process.ts        # ClaudeProcess wrapper
-│   │   └── types.ts                 # TypeScript interfaces
+│   │   ├── pool-manager.ts          # ClaudeProcessPool (now session-aware)
+│   │   ├── claude-process.ts        # ClaudeProcess + static initializeSessionFile()
+│   │   └── types.ts                 # Process type definitions
+│   │
+│   ├── config/
+│   │   └── teams-config.ts          # Configuration loader + hot-reload
+│   │
 │   ├── tools/
-│   │   ├── teams-ask.ts             # teams_ask implementation
-│   │   ├── teams-send-message.ts    # teams_send_message implementation
-│   │   ├── teams-notify.ts          # teams_notify implementation
-│   │   ├── teams-get-status.ts      # teams_get_status implementation
-│   │   └── index.ts                 # Tool registry
+│   │   ├── teams-ask.ts             # teams_ask (uses IrisOrchestrator)
+│   │   ├── teams-send-message.ts    # teams_send_message (uses IrisOrchestrator)
+│   │   ├── teams-notify.ts          # teams_notify (notification queue)
+│   │   ├── teams-get-status.ts      # teams_get_status
+│   │   └── index.ts                 # Tool exports
+│   │
 │   ├── notifications/
-│   │   ├── queue.ts                 # SQLite notification queue
-│   │   ├── schema.sql               # Database schema
-│   │   └── types.ts                 # Notification types
+│   │   └── queue.ts                 # SQLite persistent notification queue
+│   │
 │   └── utils/
-│       ├── logger.ts                # Logging utility
-│       ├── validation.ts            # Input validation
-│       └── errors.ts                # Custom error types
+│       ├── logger.ts                # Structured JSON logging to stderr
+│       ├── validation.ts            # Input validation (teams, messages, timeouts)
+│       └── errors.ts                # Custom error hierarchy
+│
 ├── tests/
 │   ├── unit/
-│   │   ├── process-pool.test.ts
-│   │   ├── claude-process.test.ts
-│   │   └── tools.test.ts
+│   │   ├── session/
+│   │   │   └── session-manager.test.ts
+│   │   ├── process-pool/
+│   │   │   └── pool-manager.test.ts
+│   │   └── tools/
+│   │       ├── teams-ask.test.ts
+│   │       └── teams-send-message.test.ts
 │   ├── integration/
-│   │   ├── stdio-communication.test.ts
-│   │   └── end-to-end.test.ts
+│   │   ├── session/
+│   │   │   └── session-manager.test.ts  # Uses beforeAll pattern
+│   │   ├── process/
+│   │   │   ├── claude-process.test.ts
+│   │   │   └── pool-manager.test.ts
+│   │   └── tools/
+│   │       └── mcp-tools.test.ts
 │   └── fixtures/
 │       └── mock-teams.json
+│
+├── data/                            # SQLite databases (gitignored)
+│   ├── team-sessions.db             # Session metadata
+│   └── notifications.db             # Notification queue
+│
+├── docs/
+│   ├── ARCHITECTURE.md              # This file
+│   ├── SESSION.md                   # Session management deep dive
+│   └── future/                      # Future phase documentation
+│
 └── dist/                            # Compiled output (gitignored)
     ├── index.js
     └── ...
 ```
+
+**Key Changes from Original Design:**
+- **🆕 iris.ts:** Business Logic Layer for orchestration
+- **🆕 session/:** Complete session management subsystem
+- **Updated:** Process pool now session-aware (requires sessionId)
+- **Updated:** Tools use IrisOrchestrator instead of direct pool access
 
 ---
 
@@ -699,78 +1032,340 @@ teams-mcp/
 ```typescript
 #!/usr/bin/env node
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { getConfigManager } from './config/teams-config.js';
 import { ClaudeProcessPool } from './process-pool/pool-manager.js';
-import { TeamsConfig } from './config/teams-config.js';
-import { registerTools } from './tools/index.js';
+import { SessionManager } from './session/session-manager.js';
+import { IrisOrchestrator } from './iris.js';
 import { NotificationQueue } from './notifications/queue.js';
 import { Logger } from './utils/logger.js';
+import { teamsAsk, teamsSendMessage, teamsNotify, teamsGetStatus } from './tools/index.js';
 
-const logger = new Logger('main');
+const logger = new Logger('server');
 
-async function startServer() {
-  try {
-    // Load configuration
-    const config = await TeamsConfig.load();
-    logger.info('Configuration loaded', {
-      teams: Object.keys(config.teams).length
-    });
+class IrisMcpServer {
+  private server: Server;
+  private configManager: ReturnType<typeof getConfigManager>;
+  private sessionManager: SessionManager;
+  private processPool: ClaudeProcessPool;
+  private notificationQueue: NotificationQueue;
+  private iris: IrisOrchestrator;
 
-    // Initialize process pool
-    const processPool = new ClaudeProcessPool({
-      idleTimeout: config.settings.idleTimeout,
+  constructor() {
+    this.server = new Server(
+      { name: "@iris-mcp/server", version: "1.0.0" },
+      { capabilities: { tools: {} } }
+    );
+
+    // Initialize components
+    this.configManager = getConfigManager();
+    const config = this.configManager.load();
+
+    // LAYER 3: Infrastructure
+    this.sessionManager = new SessionManager(config);
+    this.processPool = new ClaudeProcessPool(this.configManager, config.settings);
+    this.notificationQueue = new NotificationQueue();
+
+    // LAYER 2: Business Logic
+    this.iris = new IrisOrchestrator(this.sessionManager, this.processPool);
+
+    // LAYER 1: MCP Transport
+    this.setupHandlers();
+    this.setupEventListeners();
+
+    logger.info('Iris MCP Server initialized', {
+      teams: Object.keys(config.teams),
       maxProcesses: config.settings.maxProcesses,
-      healthCheckInterval: config.settings.healthCheckInterval
+    });
+  }
+
+  private setupHandlers(): void {
+    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
+      return { tools: TOOLS };
     });
 
-    // Initialize notification queue
-    const notificationQueue = new NotificationQueue();
+    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
 
-    // Create MCP server
-    const server = new McpServer({
-      name: 'teams-mcp',
-      version: '1.0.0'
+      switch (name) {
+        case 'teams_ask':
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(await teamsAsk(args as any, this.iris), null, 2),
+            }],
+          };
+
+        case 'teams_send_message':
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(await teamsSendMessage(args as any, this.iris), null, 2),
+            }],
+          };
+
+        case 'teams_notify':
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(await teamsNotify(args as any, this.notificationQueue), null, 2),
+            }],
+          };
+
+        case 'teams_get_status':
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(await teamsGetStatus(args as any, this.iris, this.configManager), null, 2),
+            }],
+          };
+
+        default:
+          throw new Error(`Unknown tool: ${name}`);
+      }
     });
+  }
 
-    // Register all tools
-    registerTools(server, {
-      processPool,
-      notificationQueue,
-      config
-    });
-
-    // Start health checks
-    processPool.startHealthChecks();
+  async run() {
+    // Initialize sessions (pre-create session files for all teams)
+    await this.sessionManager.initialize();
 
     // Handle graceful shutdown
     process.on('SIGINT', async () => {
-      logger.info('Shutting down Teams MCP server...');
-      await processPool.terminateAll();
-      notificationQueue.close();
-      process.exit(0);
-    });
-
-    process.on('SIGTERM', async () => {
-      logger.info('Received SIGTERM, shutting down...');
-      await processPool.terminateAll();
-      notificationQueue.close();
+      logger.info('Shutting down Iris MCP server...');
+      await this.iris.shutdown();
+      this.notificationQueue.close();
       process.exit(0);
     });
 
     // Connect to stdio transport
     const transport = new StdioServerTransport();
-    await server.connect(transport);
+    await this.server.connect(transport);
 
-    logger.info('Teams MCP server running');
-
-  } catch (error) {
-    logger.error('Failed to start server', error);
-    process.exit(1);
+    logger.info('Iris MCP server running');
   }
 }
 
-startServer();
+// Start server
+const server = new IrisMcpServer();
+server.run().catch((error) => {
+  logger.error('Failed to start server', error);
+  process.exit(1);
+});
+```
+
+**Key Changes:**
+- **Three-layer initialization:** Infrastructure → BLL → Transport
+- **SessionManager:** Manages session database and file creation
+- **IrisOrchestrator:** Coordinates SessionManager + PoolManager
+- **Session pre-initialization:** `sessionManager.initialize()` creates session files on startup
+- **Tool handlers:** Now pass `this.iris` instead of `this.processPool`
+
+### src/iris.ts (Business Logic Layer)
+
+```typescript
+import { SessionManager } from "./session/session-manager.js";
+import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
+import { Logger } from "./utils/logger.js";
+
+const logger = new Logger("iris");
+
+export interface SendMessageOptions {
+  timeout?: number;
+  waitForResponse?: boolean;
+}
+
+export class IrisOrchestrator {
+  constructor(
+    private sessionManager: SessionManager,
+    private processPool: ClaudeProcessPool,
+  ) {}
+
+  /**
+   * Send a message from one team to another
+   * Orchestrates: Session lookup → Process spawn → Message send → Usage tracking
+   */
+  async sendMessage(
+    fromTeam: string | null,
+    toTeam: string,
+    message: string,
+    options: SendMessageOptions = {},
+  ): Promise<string> {
+    const { timeout = 30000, waitForResponse = true } = options;
+
+    // Step 1: Get or create session for team pair
+    const session = await this.sessionManager.getOrCreateSession(fromTeam, toTeam);
+
+    logger.debug("Session obtained", { sessionId: session.sessionId });
+
+    // Step 2: Get or create process with session ID
+    const process = await this.processPool.getOrCreateProcess(
+      toTeam,
+      session.sessionId,
+      fromTeam,
+    );
+
+    // Step 3: Check if process is still spawning
+    const metrics = process.getMetrics();
+    if (metrics.status === "spawning") {
+      logger.info("Process is spawning, returning early");
+      return "Session starting... Please retry your request in a moment.";
+    }
+
+    if (!waitForResponse) {
+      // Fire-and-forget mode
+      process.sendMessage(message, timeout).catch((error) => {
+        logger.error("Fire-and-forget message failed", { error });
+      });
+
+      this.sessionManager.recordUsage(session.sessionId);
+      this.sessionManager.incrementMessageCount(session.sessionId);
+
+      return "Message sent (fire-and-forget mode)";
+    }
+
+    // Step 4: Send message and wait for response
+    const response = await process.sendMessage(message, timeout);
+
+    // Step 5: Track session usage and message count
+    this.sessionManager.recordUsage(session.sessionId);
+    this.sessionManager.incrementMessageCount(session.sessionId);
+
+    return response;
+  }
+
+  /**
+   * Ask a question (convenience wrapper for sendMessage)
+   */
+  async ask(
+    fromTeam: string | null,
+    toTeam: string,
+    question: string,
+    timeout?: number,
+  ): Promise<string> {
+    return this.sendMessage(fromTeam, toTeam, question, {
+      timeout,
+      waitForResponse: true,
+    });
+  }
+
+  /**
+   * Get system status (sessions + processes)
+   */
+  getStatus() {
+    const sessionStats = this.sessionManager.getStats();
+    const poolStatus = this.processPool.getStatus();
+
+    return {
+      sessions: { total: sessionStats.total, active: sessionStats.active },
+      processes: { total: poolStatus.totalProcesses, maxProcesses: poolStatus.maxProcesses },
+    };
+  }
+
+  /**
+   * Graceful shutdown
+   */
+  async shutdown(): Promise<void> {
+    logger.info("Shutting down Iris orchestrator");
+    await this.processPool.terminateAll();
+    this.sessionManager.close();
+  }
+}
+```
+
+### src/session/session-manager.ts (Excerpt)
+
+```typescript
+import { SessionStore } from "./session-store.js";
+import { ClaudeProcess } from "../process-pool/claude-process.js";
+import type { TeamsConfig, SessionInfo } from "./types.js";
+
+export class SessionManager {
+  private store: SessionStore;
+  private teamsConfig: TeamsConfig;
+  private sessionCache = new Map<string, SessionInfo>();
+
+  constructor(teamsConfig: TeamsConfig, dbPath?: string) {
+    this.teamsConfig = teamsConfig;
+    this.store = new SessionStore(dbPath);
+  }
+
+  /**
+   * Initialize: Pre-create session files for all teams
+   */
+  async initialize(): Promise<void> {
+    for (const [teamName, teamConfig] of Object.entries(this.teamsConfig.teams)) {
+      const existing = this.store.getByTeamPair(null, teamName);
+
+      if (!existing) {
+        const sessionId = generateSecureUUID();
+
+        // Call static method to create session file
+        await ClaudeProcess.initializeSessionFile(
+          teamConfig,
+          sessionId,
+          this.teamsConfig.settings.sessionInitTimeout,
+        );
+
+        // Store in database
+        this.store.create({
+          fromTeam: null,
+          toTeam: teamName,
+          sessionId,
+          createdAt: Date.now(),
+          lastUsedAt: Date.now(),
+        });
+      }
+    }
+  }
+
+  /**
+   * Get or create session for team pair
+   */
+  async getOrCreateSession(
+    fromTeam: string | null,
+    toTeam: string,
+  ): Promise<SessionInfo> {
+    // Check database
+    const existing = this.store.getByTeamPair(fromTeam, toTeam);
+    if (existing) return existing;
+
+    // Create new session
+    const sessionId = generateSecureUUID();
+    const teamConfig = this.teamsConfig.teams[toTeam];
+
+    await ClaudeProcess.initializeSessionFile(
+      teamConfig,
+      sessionId,
+      this.teamsConfig.settings.sessionInitTimeout,
+    );
+
+    return this.store.create({
+      fromTeam,
+      toTeam,
+      sessionId,
+      createdAt: Date.now(),
+      lastUsedAt: Date.now(),
+    });
+  }
+
+  recordUsage(sessionId: string): void {
+    this.store.updateLastUsed(sessionId, Date.now());
+  }
+
+  incrementMessageCount(sessionId: string): void {
+    this.store.incrementMessageCount(sessionId);
+  }
+
+  getStats() {
+    return this.store.getStats();
+  }
+
+  close() {
+    this.store.close();
+  }
+}
 ```
 
 ### src/process-pool/types.ts
@@ -807,27 +1402,87 @@ export interface ProcessMetrics {
 }
 ```
 
-### src/process-pool/claude-process.ts
+### src/process-pool/claude-process.ts (Excerpt)
 
 ```typescript
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
+import { existsSync } from 'fs';
 import { ProcessMessage, ProcessStatus, TeamConfig } from './types.js';
 import { Logger } from '../utils/logger.js';
 
 export class ClaudeProcess extends EventEmitter {
-  private child: ChildProcess;
-  private teamName: string;
-  private teamConfig: TeamConfig;
-  private idleTimer: NodeJS.Timeout | null = null;
-  private idleTimeout: number;
-  private messageQueue: ProcessMessage[] = [];
-  private currentMessage: ProcessMessage | null = null;
-  private status: ProcessStatus = 'spawning';
-  private lastUsed: number = Date.now();
-  private messagesProcessed: number = 0;
-  private spawnTime: number = Date.now();
-  private logger: Logger;
+  // Instance fields and constructor (same as before)...
+
+  /**
+   * 🆕 STATIC METHOD: Initialize session file
+   * Creates a session JSONL file for a team using claude --session-id command
+   */
+  static async initializeSessionFile(
+    teamConfig: TeamConfig,
+    sessionId: string,
+    sessionInitTimeout = 30000,
+  ): Promise<void> {
+    const logger = new Logger(`session-init:${sessionId.slice(0, 8)}`);
+
+    return new Promise((resolve, reject) => {
+      let timeoutHandle: NodeJS.Timeout | null = null;
+      let responseReceived = false;
+
+      // Spawn: claude --session-id <uuid> --print ping
+      const args = ['--session-id', sessionId, '--print', 'ping'];
+      if (teamConfig.skipPermissions) {
+        args.push('--dangerously-skip-permissions');
+      }
+
+      const claudeProcess = spawn('claude', args, {
+        cwd: teamConfig.path,
+        stdio: ['inherit', 'pipe', 'pipe'],
+      });
+
+      // Compute session file path
+      const homedir = process.env.HOME || process.env.USERPROFILE || '';
+      const escapedPath = teamConfig.path.replace(/\\//g, '-');
+      const sessionFilePath = `${homedir}/.claude/projects/${escapedPath}/${sessionId}.jsonl`;
+
+      // Timeout handler with proper cleanup
+      timeoutHandle = setTimeout(() => {
+        timeoutHandle = null;
+        if (!responseReceived) {
+          logger.error('Session initialization timeout');
+          claudeProcess.kill();
+          reject(new ProcessError(`Session initialization timeout for ${sessionId}`));
+        }
+      }, sessionInitTimeout);
+
+      // Watch for any stdout response
+      claudeProcess.stdout?.on('data', (data) => {
+        responseReceived = true;
+
+        // Verify session file exists
+        if (existsSync(sessionFilePath)) {
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+            timeoutHandle = null;
+          }
+          claudeProcess.kill();
+          logger.info('Session file created', { sessionFilePath });
+          resolve();
+        }
+      });
+
+      claudeProcess.on('exit', (code) => {
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+          timeoutHandle = null;
+        }
+
+        if (code !== 0 && !responseReceived) {
+          reject(new ProcessError(`Session init exited with code ${code}`));
+        }
+      });
+    });
+  }
 
   constructor(
     teamName: string,
@@ -1033,21 +1688,22 @@ export class ClaudeProcess extends EventEmitter {
 }
 ```
 
-### src/process-pool/pool-manager.ts
+### src/process-pool/pool-manager.ts (Excerpt)
 
 ```typescript
 import { ClaudeProcess } from './claude-process.js';
-import { ProcessPoolConfig, TeamConfig } from './types.js';
+import { ProcessPoolConfig } from './types.js';
 import { Logger } from '../utils/logger.js';
 
 export class ClaudeProcessPool {
   private processes: Map<string, ClaudeProcess> = new Map();
   private config: ProcessPoolConfig;
-  private teamConfigs: Map<string, TeamConfig> = new Map();
-  private healthCheckInterval: NodeJS.Timeout | null = null;
   private logger: Logger;
 
-  constructor(config: ProcessPoolConfig) {
+  constructor(
+    private configManager: ReturnType<typeof getConfigManager>,
+    config: ProcessPoolConfig
+  ) {
     this.config = config;
     this.logger = new Logger('process-pool');
   }
@@ -1058,14 +1714,21 @@ export class ClaudeProcessPool {
     }
   }
 
-  async getOrCreateProcess(teamName: string): Promise<ClaudeProcess> {
+  /**
+   * 🆕 Now requires sessionId parameter (breaking change)
+   */
+  async getOrCreateProcess(
+    teamName: string,
+    sessionId: string,           // NEW: Required for session-aware spawning
+    fromTeam: string | null = null
+  ): Promise<ClaudeProcess> {
     // Check if process already exists
     if (this.processes.has(teamName)) {
       const process = this.processes.get(teamName)!;
 
       // Health check
       if (process.isHealthy()) {
-        this.logger.debug('Reusing existing process', { teamName });
+        this.logger.debug('Reusing existing process', { teamName, sessionId });
         process.resetIdleTimer();
         return process;
       } else {
@@ -1074,7 +1737,7 @@ export class ClaudeProcessPool {
       }
     }
 
-    // Check process limit
+    // Check process limit (LRU eviction)
     if (this.processes.size >= this.config.maxProcesses) {
       const lru = this.findLeastRecentlyUsed();
       this.logger.info('Process limit reached, terminating LRU', {
@@ -1084,7 +1747,7 @@ export class ClaudeProcessPool {
       await this.terminateProcess(lru);
     }
 
-    // Create new process
+    // Create new process with session context
     return await this.createProcess(teamName);
   }
 
@@ -1393,56 +2056,88 @@ npx @modelcontextprotocol/inspector dist/index.js
 
 ### Unit Tests Example
 
+**Testing Tool Handlers (with IrisOrchestrator mock):**
+
 ```typescript
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { ClaudeProcessPool } from '../src/process-pool/pool-manager.js';
+import { describe, it, expect, vi } from 'vitest';
+import { teamsAsk } from '../src/tools/teams-ask.js';
+import type { IrisOrchestrator } from '../src/iris.js';
 
-describe('ClaudeProcessPool', () => {
-  let pool: ClaudeProcessPool;
+describe('teams_ask', () => {
+  it('should call iris.ask() with correct parameters', async () => {
+    // Mock IrisOrchestrator
+    const mockIris = {
+      ask: vi.fn().mockResolvedValue('Test response'),
+    } as unknown as IrisOrchestrator;
 
+    const result = await teamsAsk(
+      { team: 'backend', question: 'What is your API version?', fromTeam: 'frontend' },
+      mockIris
+    );
+
+    expect(mockIris.ask).toHaveBeenCalledWith(
+      'frontend',  // fromTeam
+      'backend',   // toTeam
+      'What is your API version?',  // question
+      30000        // default timeout
+    );
+    expect(result.response).toBe('Test response');
+  });
+});
+```
+
+**Testing SessionManager (with ClaudeProcess static mock):**
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { SessionManager } from '../src/session/session-manager.js';
+import { ClaudeProcess } from '../src/process-pool/claude-process.js';
+
+describe('SessionManager', () => {
   beforeEach(() => {
-    pool = new ClaudeProcessPool({
-      idleTimeout: 5000,
-      maxProcesses: 3,
-      healthCheckInterval: 1000
-    });
-
-    pool.setTeamConfigs({
-      'team-alpha': {
-        path: '/tmp/test-project',
-        description: 'Test team',
-        skipPermissions: true
-      }
-    });
+    // Mock static method
+    vi.spyOn(ClaudeProcess, 'initializeSessionFile').mockResolvedValue();
   });
 
-  afterEach(async () => {
-    await pool.terminateAll();
+  it('should initialize session file for new session', async () => {
+    const manager = new SessionManager(mockConfig, ':memory:');
+
+    const session = await manager.getOrCreateSession(null, 'team-alpha');
+
+    expect(ClaudeProcess.initializeSessionFile).toHaveBeenCalledWith(
+      expect.objectContaining({ path: '/projects/team-alpha' }),
+      expect.stringMatching(/^[0-9a-f-]{36}$/),  // UUID format
+      30000
+    );
+    expect(session.sessionId).toBeDefined();
+  });
+});
+```
+
+**Integration Tests (using beforeAll for performance):**
+
+```typescript
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { SessionManager } from '../src/session/session-manager.js';
+
+describe('SessionManager Integration', () => {
+  let manager: SessionManager;
+
+  // Use beforeAll instead of beforeEach (85% faster)
+  beforeAll(async () => {
+    manager = new SessionManager(config, ':memory:');
+    await manager.initialize();  // Pre-create all session files once
+  }, 120000);  // 2 minute timeout for initialization
+
+  afterAll(() => {
+    manager.close();
   });
 
-  it('should create a new process', async () => {
-    const process = await pool.getOrCreateProcess('team-alpha');
-    expect(process).toBeDefined();
-    expect(process.isHealthy()).toBe(true);
-  });
+  it('should return existing session for team pair', async () => {
+    const session1 = await manager.getOrCreateSession(null, 'team-alpha');
+    const session2 = await manager.getOrCreateSession(null, 'team-alpha');
 
-  it('should reuse existing process', async () => {
-    const process1 = await pool.getOrCreateProcess('team-alpha');
-    const process2 = await pool.getOrCreateProcess('team-alpha');
-    expect(process1).toBe(process2);
-  });
-
-  it('should enforce max process limit', async () => {
-    await pool.getOrCreateProcess('team1');
-    await pool.getOrCreateProcess('team2');
-    await pool.getOrCreateProcess('team3');
-
-    const status = pool.getStatus();
-    expect(status.totalProcesses).toBe(3);
-
-    // This should terminate LRU process
-    await pool.getOrCreateProcess('team4');
-    expect(status.totalProcesses).toBe(3);
+    expect(session1.sessionId).toBe(session2.sessionId);
   });
 });
 ```

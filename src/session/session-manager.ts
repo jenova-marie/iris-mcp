@@ -505,6 +505,35 @@ export class SessionManager {
   }
 
   /**
+   * Reset session manager to initialized state
+   * Clears internal caches and state but preserves database and session files
+   * Useful for testing to reset to a known initialized state
+   */
+  reset(): void {
+    if (!this.initialized) {
+      logger.warn("Attempting to reset uninitialized SessionManager");
+      return;
+    }
+
+    logger.info("Resetting SessionManager to clean initialized state");
+
+    // Clear all caches
+    this.clearCache();
+
+    // Clear internal session cache
+    this.sessionCache.clear();
+    this.cacheTimestamps.clear();
+
+    // Note: We do NOT:
+    // - Close or reset the database (store remains connected)
+    // - Delete session files from disk
+    // - Clear the sessions from database
+    // - Set initialized to false (remains initialized)
+
+    logger.info("SessionManager reset complete - initialized state preserved");
+  }
+
+  /**
    * Close session manager and database
    */
   close(): void {

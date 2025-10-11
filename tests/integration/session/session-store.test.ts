@@ -11,7 +11,7 @@ import { SessionStore } from "../../../src/session/session-store.js";
 
 describe("SessionStore Integration", () => {
   let store: SessionStore;
-  const testDbPath = "./test-integration-session-store.db";
+  const testDbPath = "./tests/data/test-integration-session-store.db";
 
   beforeEach(() => {
     store = new SessionStore(testDbPath);

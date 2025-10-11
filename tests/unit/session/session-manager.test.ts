@@ -16,7 +16,7 @@ import type { TeamsConfig } from "../../../src/process-pool/types.js";
 describe("SessionManager", () => {
   let manager: SessionManager;
   let testConfig: TeamsConfig;
-  const testDbPath = "./test-session-manager.db";
+  const testDbPath = "./tests/data/test-session-manager.db";
   let testProjectPaths: string[] = [];
 
   beforeEach(() => {

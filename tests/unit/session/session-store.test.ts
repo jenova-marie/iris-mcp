@@ -12,7 +12,7 @@ import type { SessionInfo } from "../../../src/session/types.js";
 
 describe("SessionStore", () => {
   let store: SessionStore;
-  const testDbPath = "./test-session-store.db";
+  const testDbPath = "./tests/data/test-session-store.db";
 
   beforeEach(() => {
     // Create fresh store for each test

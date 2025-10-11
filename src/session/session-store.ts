@@ -7,7 +7,7 @@
 
 import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { dirname, resolve } from "path";
 import { Logger } from "../utils/logger.js";
 import type {
   SessionInfo,
@@ -25,20 +25,23 @@ export class SessionStore {
   private db: Database.Database;
 
   constructor(dbPath = "./data/team-sessions.db") {
+    // Convert to absolute path to ensure database is created in correct location
+    const absoluteDbPath = resolve(dbPath);
+
     // Ensure data directory exists
-    const dataDir = dirname(dbPath);
+    const dataDir = dirname(absoluteDbPath);
     if (!existsSync(dataDir)) {
       mkdirSync(dataDir, { recursive: true });
     }
 
     // Open database
-    this.db = new Database(dbPath);
+    this.db = new Database(absoluteDbPath);
     this.db.pragma("journal_mode = WAL");
 
     // Initialize schema
     this.initializeSchema();
 
-    logger.info("Session store initialized", { dbPath });
+    logger.info("Session store initialized", { dbPath: absoluteDbPath });
   }
 
   /**

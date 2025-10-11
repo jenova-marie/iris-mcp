@@ -72,6 +72,9 @@ export interface TellOutput {
 
   /** Expiration timestamp (only when persist=true) */
   expiresAt?: number;
+
+  /** Task ID (only when async=true and using AsyncQueue) */
+  taskId?: string;
 }
 
 export async function tell(
@@ -145,11 +148,61 @@ export async function tell(
     validateTimeout(timeout);
   }
 
-  logger.info("Sending request to team", {
+  // Mode 3: Asynchronous request (use AsyncQueue)
+  if (!waitForResponse) {
+    // Check if team is awake first
+    if (!iris.isAwake(fromTeam || null, toTeam)) {
+      logger.warn("Team is asleep, cannot enqueue async message", {
+        fromTeam,
+        toTeam,
+      });
+
+      return {
+        from: fromTeam,
+        to: toTeam,
+        message,
+        response: "Team is asleep. Use 'wake' action first.",
+        timestamp: Date.now(),
+        async: true,
+      };
+    }
+
+    // Clear cache if requested (before enqueueing)
+    if (clearCache) {
+      await iris.clearOutputCache(toTeam);
+      logger.debug("Output cache cleared before async tell", { toTeam });
+    }
+
+    // Enqueue to AsyncQueue for processing
+    try {
+      const taskId = iris.getAsyncQueue().enqueue({
+        type: "tell",
+        fromTeam: fromTeam || null,
+        toTeam,
+        content: message,
+        timeout,
+      });
+
+      logger.info("Task enqueued to AsyncQueue", { taskId, toTeam });
+
+      return {
+        from: fromTeam,
+        to: toTeam,
+        message,
+        timestamp: Date.now(),
+        async: true,
+        taskId, // Include taskId for tracking
+      };
+    } catch (error) {
+      logger.error("Failed to enqueue async message", error);
+      throw error;
+    }
+  }
+
+  // Mode 2: Synchronous request (wait for response)
+  logger.info("Sending synchronous request to team", {
     from: fromTeam,
     to: toTeam,
-    waitForResponse,
-    persist: false,
     clearCache,
   });
 
@@ -164,36 +217,22 @@ export async function tell(
 
     const response = await iris.sendMessage(fromTeam || null, toTeam, message, {
       timeout,
-      waitForResponse,
+      waitForResponse: true,
     });
 
     const duration = Date.now() - startTime;
 
-    if (waitForResponse) {
-      // Mode 2: Synchronous request (wait for response)
-      logger.info("Received response from team", { toTeam, duration });
+    logger.info("Received response from team", { toTeam, duration });
 
-      return {
-        from: fromTeam,
-        to: toTeam,
-        message,
-        response,
-        duration,
-        timestamp: Date.now(),
-        async: false,
-      };
-    } else {
-      // Mode 3: Asynchronous request (no wait)
-      logger.info("Request queued (async)", { toTeam });
-
-      return {
-        from: fromTeam,
-        to: toTeam,
-        message,
-        timestamp: Date.now(),
-        async: true,
-      };
-    }
+    return {
+      from: fromTeam,
+      to: toTeam,
+      message,
+      response,
+      duration,
+      timestamp: Date.now(),
+      async: false,
+    };
   } catch (error) {
     logger.error("Failed to send request to team", error);
     throw error;

@@ -57,6 +57,9 @@ export interface CommandOutput {
 
   /** Whether this was an async request */
   async: boolean;
+
+  /** Task ID (only when async=true and using AsyncQueue) */
+  taskId?: string;
 }
 
 export async function command(
@@ -92,11 +95,74 @@ export async function command(
   // Build the full command string
   const fullCommand = args ? `/${commandName} ${args}` : `/${commandName}`;
 
-  logger.info("Sending command to team", {
+  // Async mode: Use AsyncQueue
+  if (!waitForResponse) {
+    // Check if team is awake first
+    if (!iris.isAwake(fromTeam || null, team)) {
+      logger.warn("Team is asleep, cannot enqueue async command", {
+        fromTeam,
+        team,
+        command: fullCommand,
+      });
+
+      return {
+        team,
+        command: fullCommand,
+        response: "Team is asleep. Use 'wake' action first.",
+        success: false,
+        timestamp: Date.now(),
+        async: true,
+      };
+    }
+
+    // Enqueue to AsyncQueue for processing
+    try {
+      const taskId = iris.getAsyncQueue().enqueue({
+        type: "command",
+        fromTeam: fromTeam || null,
+        toTeam: team,
+        content: commandName, // Just the command name (without slash)
+        args: args, // Optional arguments
+        timeout,
+      });
+
+      logger.info("Command enqueued to AsyncQueue", {
+        taskId,
+        team,
+        command: fullCommand,
+      });
+
+      return {
+        team,
+        command: fullCommand,
+        success: true,
+        timestamp: Date.now(),
+        async: true,
+        taskId,
+      };
+    } catch (error) {
+      logger.error("Failed to enqueue async command", {
+        team,
+        command: fullCommand,
+        error,
+      });
+
+      return {
+        team,
+        command: fullCommand,
+        response: error instanceof Error ? error.message : String(error),
+        success: false,
+        timestamp: Date.now(),
+        async: true,
+      };
+    }
+  }
+
+  // Sync mode: Send immediately and wait
+  logger.info("Sending command to team (sync)", {
     team,
     command: fullCommand,
     fromTeam,
-    waitForResponse,
   });
 
   const startTime = Date.now();
@@ -109,40 +175,28 @@ export async function command(
       fullCommand,
       {
         timeout,
-        waitForResponse,
+        waitForResponse: true,
       }
     );
 
     const duration = Date.now() - startTime;
 
-    if (waitForResponse) {
-      logger.info("Command completed", {
-        team,
-        command: fullCommand,
-        duration,
-        responseLength: response?.length || 0,
-      });
+    logger.info("Command completed", {
+      team,
+      command: fullCommand,
+      duration,
+      responseLength: response?.length || 0,
+    });
 
-      return {
-        team,
-        command: fullCommand,
-        response,
-        success: true,
-        duration,
-        timestamp: Date.now(),
-        async: false,
-      };
-    } else {
-      logger.info("Command sent (async)", { team, command: fullCommand });
-
-      return {
-        team,
-        command: fullCommand,
-        success: true,
-        timestamp: Date.now(),
-        async: true,
-      };
-    }
+    return {
+      team,
+      command: fullCommand,
+      response,
+      success: true,
+      duration,
+      timestamp: Date.now(),
+      async: false,
+    };
   } catch (error) {
     const duration = Date.now() - startTime;
 

@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
 import type { TeamConfig } from "../../../src/process-pool/types.js";
+import { TeamsConfigManager } from "../../../src/config/teams-config.js";
 import { existsSync } from "fs";
 
 describe("ClaudeProcess Integration", () => {
@@ -15,6 +16,12 @@ describe("ClaudeProcess Integration", () => {
     description: "Test team for integration tests",
     skipPermissions: true,
   };
+
+  // Load config early to get timeout value
+  const testConfigPath = "./tests/teams.test.json";
+  const tempConfigManager = new TeamsConfigManager(testConfigPath);
+  tempConfigManager.load();
+  const sessionInitTimeout = tempConfigManager.getConfig().settings.sessionInitTimeout;
 
   afterEach(async () => {
     if (claudeProcess) {
@@ -88,7 +95,7 @@ describe("ClaudeProcess Integration", () => {
     beforeEach(async () => {
       claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
       await claudeProcess.spawn();
-    });
+    }, sessionInitTimeout); // Use config timeout (longer than waitForReady's 20s timeout)
 
     it("should send simple message and receive response", async () => {
       const response = await claudeProcess.sendMessage("Hello, Claude!", 30000);
@@ -174,7 +181,7 @@ describe("ClaudeProcess Integration", () => {
     beforeEach(async () => {
       claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
       await claudeProcess.spawn();
-    });
+    }, sessionInitTimeout); // Use config timeout (longer than waitForReady's 20s timeout)
 
     it("should timeout on messages that take too long", async () => {
       await expect(

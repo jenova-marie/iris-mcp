@@ -43,7 +43,7 @@ describe("ClaudeCache", () => {
   });
 
   describe("message lifecycle", () => {
-    it("should track a message from start to completion", () => {
+    it("should track a message from start to completion", async () => {
       // Start a new message
       const messageId = cache.startMessage("Hello Claude");
       expect(messageId).toMatch(/^msg-\d+-\d+$/);
@@ -62,6 +62,9 @@ describe("ClaudeCache", () => {
       // Append response text
       cache.appendToCurrentMessage("Hello! ");
       cache.appendToCurrentMessage("How can I help you today?");
+
+      // Add a small delay to ensure duration > 0
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Complete the message
       cache.completeCurrentMessage();

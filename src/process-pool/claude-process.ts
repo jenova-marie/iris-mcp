@@ -18,6 +18,7 @@ import type {
 } from "./types.js";
 import { Logger } from "../utils/logger.js";
 import { ProcessError, TimeoutError } from "../utils/errors.js";
+import { ClaudeCache } from "./claude-cache.js";
 
 export class ClaudeProcess extends EventEmitter {
   private process: ChildProcess | null = null;
@@ -27,6 +28,9 @@ export class ClaudeProcess extends EventEmitter {
   private responseBuffer: string = "";
   private textAccumulator: string = "";
 
+  // Track the cache message ID for current message
+  private currentCacheMessageId: string | null = null;
+
   private messagesProcessed = 0;
   private startTime = 0;
   private logger: Logger;
@@ -34,7 +38,11 @@ export class ClaudeProcess extends EventEmitter {
   private initPromise: Promise<void> | null = null;
   private initResolve: (() => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
+  private initPingCompleted = false;
   private debugLogPath: string | null = null;
+
+  // Centralized cache for process I/O
+  private cache: ClaudeCache;
 
   constructor(
     private teamName: string,
@@ -44,6 +52,7 @@ export class ClaudeProcess extends EventEmitter {
   ) {
     super();
     this.logger = new Logger(`process:${teamName}`);
+    this.cache = new ClaudeCache(teamName);
   }
 
   /**
@@ -316,6 +325,47 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   /**
+   * Clear the output cache
+   */
+  clearOutputCache(): void {
+    this.cache.clear();
+    this.logger.debug("Output cache cleared");
+  }
+
+  /**
+   * Get the current output cache
+   * Returns the text content cache, not the raw JSON protocol cache
+   */
+  getOutputCache(): { stdout: string; stderr: string } {
+    return this.cache.getText();
+  }
+
+  /**
+   * Get a report of recent messages and cache status
+   * Useful for monitoring and debugging
+   */
+  getReport(): {
+    recentMessages: any[];
+    pendingMessages: any[];
+    errorMessages: any[];
+    cacheReport: any;
+  } {
+    return {
+      recentMessages: this.cache.getRecentMessages(5),
+      pendingMessages: this.cache.getPendingMessages(),
+      errorMessages: this.cache.getErrorMessages(),
+      cacheReport: this.cache.getReport(),
+    };
+  }
+
+  /**
+   * Export messages for debugging
+   */
+  exportMessages(format: 'json' | 'text' = 'text'): string {
+    return this.cache.exportMessages(format);
+  }
+
+  /**
    * Spawn the Claude Code process
    */
   async spawn(): Promise<void> {
@@ -395,6 +445,9 @@ export class ClaudeProcess extends EventEmitter {
         this.process.stderr.on("data", (data) => {
           const output = data.toString();
 
+          // Cache the stderr output (both protocol and text are the same for stderr)
+          this.cache.appendStderr(output);
+
           // Capture debug log path from stderr
           // Claude outputs: "Logging to: /path/to/debug.txt"
           const logPathMatch = output.match(/Logging to: (.+)/);
@@ -411,6 +464,7 @@ export class ClaudeProcess extends EventEmitter {
 
       // Claude in stream-json mode sends init AFTER receiving first message
       // So we need to send a dummy message to trigger initialization
+      // We send "ping" which triggers init AND generates a response that we need to consume
       this.logger.info("Sending initialization ping to trigger init message");
 
       const initMessage =
@@ -429,8 +483,18 @@ export class ClaudeProcess extends EventEmitter {
 
       this.process.stdin!.write(initMessage);
 
-      // Now wait for process to be ready (init message will arrive)
+      // Wait for process to be ready (init message + response to init ping)
+      // The init ping will generate a full response cycle that we need to wait for
       await this.waitForReady();
+
+      // CRITICAL: The init ping generates a "pong" response that gets accumulated
+      // in textAccumulator. We MUST clear it or it will contaminate the first real message
+      this.textAccumulator = "";
+      this.logger.debug("Text accumulator cleared after initialization");
+
+      // Also clear output cache (for report action)
+      this.clearOutputCache();
+      this.logger.debug("Output cache cleared after initialization");
 
       this.status = "idle";
       this.resetIdleTimer();
@@ -560,6 +624,9 @@ export class ClaudeProcess extends EventEmitter {
       uptime: this.startTime ? now - this.startTime : 0,
       idleTimeRemaining: this.idleTimer ? this.idleTimeout : 0,
       queueLength: this.messageQueue.length,
+      sessionId: this.sessionId,
+      messageCount: this.messagesProcessed,
+      lastActivity: now,
     };
   }
 
@@ -600,11 +667,15 @@ export class ClaudeProcess extends EventEmitter {
     this.textAccumulator = ""; // Reset accumulator for new message
     this.resetIdleTimer();
 
+    // Start tracking this message in the cache
+    this.currentCacheMessageId = this.cache.startMessage(this.currentMessage.message);
+
     this.logger.debug("Processing message", {
       messageLength: this.currentMessage.message.length,
       messagePreview: this.currentMessage.message.substring(0, 100),
       messagesProcessed: this.messagesProcessed,
       status: this.status,
+      cacheMessageId: this.currentCacheMessageId,
     });
 
     try {
@@ -641,6 +712,15 @@ export class ClaudeProcess extends EventEmitter {
         error: error instanceof Error ? error.message : error,
         messagePreview: this.currentMessage.message.substring(0, 100),
       });
+
+      // Error the cache message
+      if (this.currentCacheMessageId) {
+        this.cache.errorCurrentMessage(
+          `Failed to write to stdin: ${error instanceof Error ? error.message : error}`
+        );
+        this.currentCacheMessageId = null;
+      }
+
       this.currentMessage.reject(
         new ProcessError(
           `Failed to write to stdin: ${error instanceof Error ? error.message : error}`,
@@ -673,6 +753,9 @@ export class ClaudeProcess extends EventEmitter {
       bufferLength: this.responseBuffer.length,
       currentMessageId: this.currentMessage ? "active" : "none",
     });
+
+    // Cache the raw protocol output
+    this.cache.appendStdoutProtocol(rawData);
 
     this.responseBuffer += rawData;
 
@@ -709,19 +792,13 @@ export class ClaudeProcess extends EventEmitter {
         // Based on actual Claude headless documentation (see docs/HEADLESS_CLAUDE.md)
         if (jsonResponse.type === "system" && jsonResponse.subtype === "init") {
           // Initial system message with session ID and configuration
+          // NOTE: We don't resolve initPromise here anymore - we wait for message_stop
+          // to ensure the init ping response is fully received before proceeding
           this.logger.debug("Received init message", {
             sessionId: jsonResponse.session_id,
             model: jsonResponse.model,
             tools: jsonResponse.tools,
           });
-
-          // Resolve the init promise if waiting
-          if (this.initResolve) {
-            this.initResolve();
-            this.initResolve = null;
-            this.initReject = null;
-            this.initPromise = null;
-          }
         } else if (jsonResponse.type === "user") {
           // Echo of user message
           this.logger.debug("Received user message echo");
@@ -740,6 +817,13 @@ export class ClaudeProcess extends EventEmitter {
             // Accumulate text chunks from streaming
             const deltaText = event.delta.text || "";
             this.textAccumulator += deltaText;
+
+            // Update the cache with streaming text
+            this.cache.appendToCurrentMessage(deltaText);
+
+            // Mark message as streaming if it's just starting
+            this.cache.markMessageStreaming();
+
             this.logger.debug("Stream event: text_delta", {
               chunkLength: deltaText.length,
               chunk: deltaText.substring(0, 100),
@@ -753,12 +837,16 @@ export class ClaudeProcess extends EventEmitter {
               hasCurrentMessage: !!this.currentMessage,
               hasAccumulatedText: this.textAccumulator.length > 0,
               responsePreview: this.textAccumulator.substring(0, 200),
+              initPingCompleted: this.initPingCompleted,
             });
 
             if (this.currentMessage) {
               if (this.textAccumulator.length > 0) {
                 this.logger.debug("Resolving message with accumulated text");
                 this.currentMessage.resolve(this.textAccumulator);
+
+                // Complete the cache message with final response
+                this.cache.completeCurrentMessage(this.textAccumulator);
 
                 this.emit("message-response", {
                   teamName: this.teamName,
@@ -769,12 +857,28 @@ export class ClaudeProcess extends EventEmitter {
                   "Message stop received but no accumulated text",
                 );
                 this.currentMessage.resolve("");
+
+                // Complete the cache message even if empty
+                this.cache.completeCurrentMessage("");
               }
 
               this.currentMessage = null;
+              this.currentCacheMessageId = null;
               this.status = "idle";
               this.textAccumulator = "";
               this.processNextMessage();
+            } else if (!this.initPingCompleted && this.initResolve) {
+              // This is the message_stop for the init ping response
+              // Mark as completed so waitForReady() can complete
+              this.logger.debug("Init ping response completed", {
+                accumulatedLength: this.textAccumulator.length,
+                accumulatedPreview: this.textAccumulator.substring(0, 100),
+              });
+              this.initPingCompleted = true;
+              this.initResolve();
+              this.initResolve = null;
+              this.initReject = null;
+              this.initPromise = null;
             } else {
               this.logger.warn("Message stop received but no current message");
             }
@@ -785,6 +889,8 @@ export class ClaudeProcess extends EventEmitter {
           this.logger.debug("Received assistant message", {
             stopReason: jsonResponse.message?.stop_reason,
             hasContent: !!jsonResponse.message?.content,
+            hasCurrentMessage: !!this.currentMessage,
+            initPingCompleted: this.initPingCompleted,
           });
 
           // Extract text from assistant message
@@ -804,6 +910,9 @@ export class ClaudeProcess extends EventEmitter {
                 responsePreview: textContent.substring(0, 200),
               });
 
+              // Complete the cache message with assistant response
+              this.cache.completeCurrentMessage(textContent);
+
               this.currentMessage.resolve(textContent);
 
               this.emit("message-response", {
@@ -812,15 +921,34 @@ export class ClaudeProcess extends EventEmitter {
               });
 
               this.currentMessage = null;
+              this.currentCacheMessageId = null;
               this.status = "idle";
               this.processNextMessage();
             }
+          } else if (!this.initPingCompleted && this.initResolve) {
+            // This is the assistant message for the init ping response
+            // (Some Claude versions send assistant message instead of stream_events)
+            this.logger.debug(
+              "Init ping response completed (assistant message)",
+              {
+                hasContent: !!jsonResponse.message?.content,
+              },
+            );
+            this.initPingCompleted = true;
+            this.initResolve();
+            this.initResolve = null;
+            this.initReject = null;
+            this.initPromise = null;
           }
         } else if (jsonResponse.type === "result") {
           // Final result message with stats
           if (jsonResponse.is_error && this.currentMessage) {
+            // Mark cache message as errored
+            this.cache.errorCurrentMessage("Claude returned error");
+
             this.currentMessage.reject(new Error("Claude returned error"));
             this.currentMessage = null;
+            this.currentCacheMessageId = null;
             this.status = "idle";
             this.processNextMessage();
           }
@@ -832,13 +960,16 @@ export class ClaudeProcess extends EventEmitter {
         } else if (jsonResponse.type === "error") {
           // Error from Claude
           if (this.currentMessage) {
+            const errorMsg = `Claude error: ${jsonResponse.error?.message || JSON.stringify(jsonResponse.error)}`;
+
+            // Mark cache message as errored
+            this.cache.errorCurrentMessage(errorMsg);
+
             this.currentMessage.reject(
-              new ProcessError(
-                `Claude error: ${jsonResponse.error?.message || JSON.stringify(jsonResponse.error)}`,
-                this.teamName,
-              ),
+              new ProcessError(errorMsg, this.teamName),
             );
             this.currentMessage = null;
+            this.currentCacheMessageId = null;
             this.status = "idle";
             this.processNextMessage();
           }
@@ -866,6 +997,12 @@ export class ClaudeProcess extends EventEmitter {
   private handleProcessError(error: Error): void {
     this.logger.error("Process error", error);
 
+    // Error the current cache message if any
+    if (this.currentCacheMessageId) {
+      this.cache.errorCurrentMessage(`Process error: ${error.message}`);
+      this.currentCacheMessageId = null;
+    }
+
     // Reject current and queued messages
     if (this.currentMessage) {
       this.currentMessage.reject(
@@ -889,6 +1026,12 @@ export class ClaudeProcess extends EventEmitter {
     this.status = "stopped";
     this.process = null;
     this.clearIdleTimer();
+
+    // Error the current cache message if any
+    if (this.currentCacheMessageId) {
+      this.cache.errorCurrentMessage(`Process exited (code: ${code}, signal: ${signal})`);
+      this.currentCacheMessageId = null;
+    }
 
     // Reject any pending messages
     if (this.currentMessage) {

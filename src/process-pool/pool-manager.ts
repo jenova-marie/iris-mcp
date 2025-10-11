@@ -26,6 +26,13 @@ export class ClaudeProcessPool extends EventEmitter {
   }
 
   /**
+   * Get the current configuration
+   */
+  getConfig() {
+    return this.configManager.getConfig();
+  }
+
+  /**
    * Generate pool key for team pair
    * Format: "fromTeam->toTeam" or "external->toTeam"
    */
@@ -153,11 +160,12 @@ export class ClaudeProcessPool extends EventEmitter {
    * Terminate a specific process
    */
   async terminateProcess(teamName: string): Promise<void> {
-    const process = this.processes.get(teamName);
+    // Find the process by team name (it could be in any pool key)
+    const process = this.getProcess(teamName);
+
     if (process) {
+      // Just call terminate - the event handlers will clean up the maps
       await process.terminate();
-      this.processes.delete(teamName);
-      this.removeFromAccessOrder(teamName);
     }
   }
 
@@ -167,20 +175,49 @@ export class ClaudeProcessPool extends EventEmitter {
   async terminateAll(): Promise<void> {
     this.logger.info('Terminating all processes');
 
+    // Copy the processes array to avoid modifying while iterating
+    const processesToTerminate = Array.from(this.processes.values());
+
     const promises: Promise<void>[] = [];
-    for (const [teamName, process] of this.processes) {
+    for (const process of processesToTerminate) {
       promises.push(process.terminate());
     }
 
     await Promise.all(promises);
 
+    // Event handlers should have cleaned up, but ensure everything is cleared
     this.processes.clear();
+    this.sessionToProcess.clear();
     this.accessOrder = [];
 
     if (this.healthCheckInterval) {
       clearInterval(this.healthCheckInterval);
       this.healthCheckInterval = null;
     }
+  }
+
+  /**
+   * Clear output cache for a specific team's process
+   */
+  clearOutputCache(teamName: string): void {
+    const process = this.getProcess(teamName);
+    if (process) {
+      process.clearOutputCache();
+      this.logger.debug("Output cache cleared for team", { teamName });
+    } else {
+      this.logger.warn("No process found to clear cache", { teamName });
+    }
+  }
+
+  /**
+   * Get output cache for a specific team's process
+   */
+  getOutputCache(teamName: string): { stdout: string; stderr: string } | null {
+    const process = this.getProcess(teamName);
+    if (process) {
+      return process.getOutputCache();
+    }
+    return null;
   }
 
   /**

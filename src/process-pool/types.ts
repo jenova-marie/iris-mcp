@@ -8,6 +8,8 @@ export interface ProcessPoolConfig {
   maxProcesses: number;
   healthCheckInterval: number;
   sessionInitTimeout: number;
+  httpPort?: number;
+  defaultTransport?: "stdio" | "http";
 }
 
 export interface TeamConfig {
@@ -45,6 +47,9 @@ export interface ProcessMetrics {
   uptime: number;
   idleTimeRemaining: number;
   queueLength: number;
+  sessionId?: string;
+  messageCount: number;
+  lastActivity: number;
 }
 
 export interface ProcessPoolStatus {

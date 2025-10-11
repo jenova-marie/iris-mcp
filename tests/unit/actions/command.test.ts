@@ -14,6 +14,10 @@ describe("command action", () => {
     mockIris = {
       sendMessage: vi.fn(),
       clearOutputCache: vi.fn(),
+      isAwake: vi.fn().mockReturnValue(true),
+      getAsyncQueue: vi.fn().mockReturnValue({
+        enqueue: vi.fn().mockReturnValue("task-id-123"),
+      }),
     } as unknown as IrisOrchestrator;
 
     vi.clearAllMocks();
@@ -44,11 +48,44 @@ describe("command action", () => {
 
   });
 
-  describe("command formatting", () => {
-    it("should add slash prefix if not present", async () => {
+  describe("command validation", () => {
+    it("should accept compact command", async () => {
       const input: CommandInput = {
         team: "team-alpha",
         command: "compact",
+      };
+
+      vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("Success");
+
+      const result = await command(input, mockIris);
+
+      expect(mockIris.sendMessage).toHaveBeenCalledWith(
+        null,
+        "team-alpha",
+        "/compact",
+        expect.any(Object)
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it("should reject unsupported commands with not implemented message", async () => {
+      const input: CommandInput = {
+        team: "team-alpha",
+        command: "help",
+      };
+
+      const result = await command(input, mockIris);
+
+      expect(mockIris.sendMessage).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.response).toContain("not implemented");
+      expect(result.response).toContain("Only /compact is currently supported");
+    });
+
+    it("should not duplicate slash prefix for compact", async () => {
+      const input: CommandInput = {
+        team: "team-alpha",
+        command: "/compact",
       };
 
       vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("Success");
@@ -59,43 +96,6 @@ describe("command action", () => {
         null,
         "team-alpha",
         "/compact",
-        expect.any(Object)
-      );
-    });
-
-    it("should not duplicate slash if already present", async () => {
-      const input: CommandInput = {
-        team: "team-alpha",
-        command: "/clear",
-      };
-
-      vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("Success");
-
-      await command(input, mockIris);
-
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        "/clear",
-        expect.any(Object)
-      );
-    });
-
-    it("should append arguments if provided", async () => {
-      const input: CommandInput = {
-        team: "team-alpha",
-        command: "custom",
-        args: "arg1 arg2",
-      };
-
-      vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("Success");
-
-      await command(input, mockIris);
-
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        "/custom arg1 arg2",
         expect.any(Object)
       );
     });
@@ -140,62 +140,87 @@ describe("command action", () => {
     it("should include fromTeam if provided", async () => {
       const input: CommandInput = {
         team: "team-alpha",
-        command: "help",
+        command: "compact",
         fromTeam: "team-beta",
       };
 
-      vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("Help text");
+      vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("Compacted");
 
       await command(input, mockIris);
 
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
         "team-beta",
         "team-alpha",
-        "/help",
+        "/compact",
         expect.any(Object)
       );
     });
   });
 
   describe("asynchronous mode (waitForResponse=false)", () => {
-    it("should send command without waiting", async () => {
+    it("should send compact command without waiting", async () => {
+      const input: CommandInput = {
+        team: "team-alpha",
+        command: "compact",
+        waitForResponse: false,
+      };
+
+      const result = await command(input, mockIris);
+
+      // In async mode, command is enqueued to AsyncQueue, not sent via sendMessage
+      expect(mockIris.isAwake).toHaveBeenCalledWith(null, "team-alpha");
+
+      const mockQueue = vi.mocked(mockIris.getAsyncQueue());
+      expect(mockQueue.enqueue).toHaveBeenCalledWith({
+        type: "command",
+        fromTeam: null,
+        toTeam: "team-alpha",
+        content: "compact",
+        args: undefined,
+        timeout: 30000,
+      });
+
+      expect(result).toMatchObject({
+        team: "team-alpha",
+        command: "/compact",
+        success: true,
+        async: true,
+        taskId: "task-id-123",
+      });
+
+      expect(result.response).toBeUndefined();
+      expect(result.timestamp).toBeGreaterThan(0);
+    });
+
+    it("should return not implemented for unsupported async commands", async () => {
       const input: CommandInput = {
         team: "team-alpha",
         command: "clear",
         waitForResponse: false,
       };
 
-      vi.mocked(mockIris.sendMessage).mockResolvedValueOnce(undefined);
-
       const result = await command(input, mockIris);
 
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        "/clear",
-        {
-          timeout: 30000,
-          waitForResponse: false,
-        }
-      );
+      // Should not enqueue unsupported commands
+      expect(mockIris.isAwake).not.toHaveBeenCalled();
+      expect(mockIris.getAsyncQueue).not.toHaveBeenCalled();
 
       expect(result).toMatchObject({
         team: "team-alpha",
         command: "/clear",
-        success: true,
-        async: true,
+        success: false,
+        async: false, // Returns immediately without queuing
       });
 
-      expect(result.response).toBeUndefined();
-      expect(result.timestamp).toBeGreaterThan(0);
+      expect(result.response).toContain("not implemented");
     });
   });
 
   describe("error handling", () => {
-    it("should return failure result on error", async () => {
+    it("should return failure result on sendMessage error", async () => {
       const input: CommandInput = {
         team: "team-alpha",
-        command: "test",
+        command: "compact",
       };
 
       const error = new Error("Process not running");
@@ -205,7 +230,7 @@ describe("command action", () => {
 
       expect(result).toMatchObject({
         team: "team-alpha",
-        command: "/test",
+        command: "/compact",
         response: "Process not running",
         success: false,
         async: false,
@@ -215,81 +240,64 @@ describe("command action", () => {
       expect(result.timestamp).toBeGreaterThan(0);
     });
 
-    it("should handle non-Error exceptions", async () => {
+    it("should handle AsyncQueue enqueue errors", async () => {
       const input: CommandInput = {
         team: "team-alpha",
-        command: "test",
+        command: "compact",
         waitForResponse: false,
       };
 
-      vi.mocked(mockIris.sendMessage).mockRejectedValueOnce(
-        "String error"
-      );
+      // Make AsyncQueue.enqueue throw
+      const mockQueue = vi.mocked(mockIris.getAsyncQueue());
+      mockQueue.enqueue = vi.fn().mockImplementation(() => {
+        throw new Error("Queue full");
+      });
 
       const result = await command(input, mockIris);
 
       expect(result).toMatchObject({
         team: "team-alpha",
-        command: "/test",
-        response: "String error",
+        command: "/compact",
+        response: "Queue full",
         success: false,
         async: true,
       });
     });
   });
 
-  describe("common commands", () => {
-    it.each([
-      ["compact", "/compact"],
-      ["clear", "/clear"],
-      ["help", "/help"],
-      ["status", "/status"],
-    ])("should handle %s command", async (cmd, expected) => {
+  describe("supported vs unsupported commands", () => {
+    it("should accept compact command", async () => {
       const input: CommandInput = {
         team: "team-alpha",
-        command: cmd,
+        command: "compact",
       };
 
       vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("OK");
 
       const result = await command(input, mockIris);
 
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        expected,
-        expect.any(Object)
-      );
-
-      expect(result.command).toBe(expected);
+      expect(result.command).toBe("/compact");
       expect(result.success).toBe(true);
     });
-  });
 
-  describe("custom commands with arguments", () => {
-    it("should handle custom commands with multiple arguments", async () => {
+    it.each([
+      ["clear"],
+      ["help"],
+      ["status"],
+      ["custom"],
+    ])("should reject %s command as not implemented", async (cmd) => {
       const input: CommandInput = {
         team: "team-alpha",
-        command: "custom-action",
-        args: "param1 param2 --flag value",
+        command: cmd,
       };
-
-      vi.mocked(mockIris.sendMessage).mockResolvedValueOnce("Custom result");
 
       const result = await command(input, mockIris);
 
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        "/custom-action param1 param2 --flag value",
-        expect.any(Object)
-      );
-
-      expect(result).toMatchObject({
-        command: "/custom-action param1 param2 --flag value",
-        success: true,
-        response: "Custom result",
-      });
+      expect(mockIris.sendMessage).not.toHaveBeenCalled();
+      expect(result.command).toBe(`/${cmd}`);
+      expect(result.success).toBe(false);
+      expect(result.response).toContain("not implemented");
+      expect(result.response).toContain("Only /compact is currently supported");
     });
   });
 });

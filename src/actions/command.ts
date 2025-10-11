@@ -1,13 +1,13 @@
 /**
  * Iris MCP Module: command
- * Sends slash commands to Claude Code (e.g., /compact, /clear, etc.)
+ * Sends the /compact command to Claude Code
  *
- * This module allows sending any slash command to Claude processes.
- * Common commands include:
- * - /compact: Clean up conversation history and reduce memory usage
- * - /clear: Clear the conversation
- * - /help: Show available commands
- * - Custom commands defined in Claude's configuration
+ * Currently only /compact is supported in headless stream-json mode.
+ * Other slash commands (/help, /clear, etc.) are interactive CLI features
+ * and do not work programmatically.
+ *
+ * The /compact command cleans up conversation history and reduces memory usage
+ * in the Claude process.
  */
 
 import type { IrisOrchestrator } from "../iris.js";
@@ -16,11 +16,15 @@ import { Logger } from "../utils/logger.js";
 
 const logger = new Logger("mcp:command");
 
+// Only compact is supported in headless mode
+const SUPPORTED_COMMANDS = ["compact"] as const;
+type SupportedCommand = typeof SUPPORTED_COMMANDS[number];
+
 export interface CommandInput {
   /** Team whose Claude process to send command to */
   team: string;
 
-  /** The command to send (e.g., "compact", "clear", "help") */
+  /** The command to send - only "compact" is currently supported */
   command: string;
 
   /** Optional arguments for the command */
@@ -91,6 +95,24 @@ export async function command(
 
   // Ensure command doesn't already start with slash (we'll add it)
   const commandName = cmd.startsWith('/') ? cmd.substring(1) : cmd;
+
+  // Check if command is supported
+  if (!SUPPORTED_COMMANDS.includes(commandName as SupportedCommand)) {
+    logger.warn("Unsupported command requested", {
+      team,
+      command: commandName,
+      supportedCommands: SUPPORTED_COMMANDS,
+    });
+
+    return {
+      team,
+      command: `/${commandName}`,
+      response: `Command '/${commandName}' is not implemented. Only /compact is currently supported.`,
+      success: false,
+      timestamp: Date.now(),
+      async: false,
+    };
+  }
 
   // Build the full command string
   const fullCommand = args ? `/${commandName} ${args}` : `/${commandName}`;

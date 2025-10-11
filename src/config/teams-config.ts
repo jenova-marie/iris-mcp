@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, existsSync, watchFile } from 'fs';
-import { resolve } from 'path';
+import { resolve, dirname, isAbsolute } from 'path';
 import { z } from 'zod';
 import type { TeamsConfig } from '../process-pool/types.js';
 import { Logger } from '../utils/logger.js';
@@ -77,8 +77,15 @@ export class TeamsConfigManager {
       // Validate with Zod
       const validated = TeamsConfigSchema.parse(parsed);
 
-      // Validate team paths exist
+      // Resolve team paths relative to config file directory
+      const configDir = dirname(resolve(this.configPath));
       for (const [name, team] of Object.entries(validated.teams)) {
+        // If path is relative, resolve it relative to config file directory
+        if (!isAbsolute(team.path)) {
+          team.path = resolve(configDir, team.path);
+        }
+
+        // Validate team paths exist
         if (!existsSync(team.path)) {
           logger.warn(`Team "${name}" path does not exist: ${team.path}`);
         }

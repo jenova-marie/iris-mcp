@@ -41,9 +41,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        key: ${{ runner.os }}-node-${{ matrix.node-version }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
         restore-keys: |
-          ${{ runner.os }}-pnpm-store-
+          ${{ runner.os }}-node-${{ matrix.node-version }}-pnpm-store-
 
     - name: Install build dependencies for native modules
       run: |
@@ -52,9 +52,6 @@ jobs:
 
     - name: Install dependencies
       run: pnpm install --frozen-lockfile
-
-    - name: Rebuild native modules
-      run: pnpm rebuild better-sqlite3
 
     - name: Lint code
       run: pnpm lint || true

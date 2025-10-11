@@ -852,6 +852,13 @@ export class ClaudeProcess extends EventEmitter {
                   teamName: this.teamName,
                   response: this.textAccumulator,
                 });
+
+                // Emit message-complete for AsyncQueue coordination
+                this.emit("message-complete", {
+                  teamName: this.teamName,
+                  success: true,
+                  duration: Date.now() - this.startTime,
+                });
               } else {
                 this.logger.warn(
                   "Message stop received but no accumulated text",
@@ -920,6 +927,13 @@ export class ClaudeProcess extends EventEmitter {
                 response: textContent,
               });
 
+              // Emit message-complete for AsyncQueue coordination
+              this.emit("message-complete", {
+                teamName: this.teamName,
+                success: true,
+                duration: Date.now() - this.startTime,
+              });
+
               this.currentMessage = null;
               this.currentCacheMessageId = null;
               this.status = "idle";
@@ -946,6 +960,14 @@ export class ClaudeProcess extends EventEmitter {
             // Mark cache message as errored
             this.cache.errorCurrentMessage("Claude returned error");
 
+            // Emit message-complete for AsyncQueue coordination (error case)
+            this.emit("message-complete", {
+              teamName: this.teamName,
+              success: false,
+              error: "Claude returned error",
+              duration: Date.now() - this.startTime,
+            });
+
             this.currentMessage.reject(new Error("Claude returned error"));
             this.currentMessage = null;
             this.currentCacheMessageId = null;
@@ -964,6 +986,14 @@ export class ClaudeProcess extends EventEmitter {
 
             // Mark cache message as errored
             this.cache.errorCurrentMessage(errorMsg);
+
+            // Emit message-complete for AsyncQueue coordination (error case)
+            this.emit("message-complete", {
+              teamName: this.teamName,
+              success: false,
+              error: errorMsg,
+              duration: Date.now() - this.startTime,
+            });
 
             this.currentMessage.reject(
               new ProcessError(errorMsg, this.teamName),

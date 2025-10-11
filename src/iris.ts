@@ -234,6 +234,47 @@ export class IrisOrchestrator {
   }
 
   /**
+   * Check if a team is "awake" (has a live, ready process)
+   *
+   * A team is considered awake if:
+   * 1. It has an active session
+   * 2. It has an active process in the pool
+   * 3. The process status is NOT "spawning" or "stopped"
+   *
+   * @param fromTeam - Source team (null for external)
+   * @param toTeam - Target team to check
+   * @returns true if team has a ready process, false otherwise
+   */
+  isAwake(fromTeam: string | null, toTeam: string): boolean {
+    // Check if session exists
+    const session = this.sessionManager.getSession(fromTeam, toTeam);
+    if (!session) {
+      logger.debug("Team not awake: no session", { fromTeam, toTeam });
+      return false;
+    }
+
+    // Check if process exists for this session
+    const process = this.processPool.getProcessBySessionId(session.sessionId);
+    if (!process) {
+      logger.debug("Team not awake: no process", { fromTeam, toTeam, sessionId: session.sessionId });
+      return false;
+    }
+
+    const metrics = process.getMetrics();
+    const isReady = metrics.status !== "spawning" && metrics.status !== "stopped";
+
+    logger.debug("Team awake check", {
+      fromTeam,
+      toTeam,
+      sessionId: session.sessionId,
+      status: metrics.status,
+      isReady,
+    });
+
+    return isReady;
+  }
+
+  /**
    * Shutdown orchestrator
    */
   async shutdown(): Promise<void> {

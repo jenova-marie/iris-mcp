@@ -1,12 +1,14 @@
 {
   "settings": {
-    "idleTimeout": 300000,
+    "idleTimeout": 30000000,
     "maxProcesses": 10,
     "healthCheckInterval": 30000,
-    "sessionInitTimeout": 30000
+    "sessionInitTimeout": 30000,
+    "httpPort": 1615,
+    "defaultTransport": "http"
   },
   "teams": {
-    "iris-mcp": {
+    "team-iris": {
       "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
       "description": "Iris MCP team - points to itself for testing",
       "skipPermissions": true,

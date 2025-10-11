@@ -35,6 +35,8 @@ const TeamsConfigSchema = z.object({
     maxProcesses: z.number().int().min(1).max(50),
     healthCheckInterval: z.number().positive(),
     sessionInitTimeout: z.number().positive(),
+    httpPort: z.number().int().min(1).max(65535).optional().default(1615),
+    defaultTransport: z.enum(["stdio", "http"]).optional().default("stdio"),
   }),
   teams: z.record(z.string(), TeamConfigSchema),
 });

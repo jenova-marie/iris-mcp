@@ -8,8 +8,8 @@ import { ConfigurationError } from "../../../src/utils/errors.js";
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from "fs";
 
 describe("TeamsConfigManager", () => {
-  const testConfigPath = "./team-alphas-config.json";
-  const testDirPath = "./test-project-dir";
+  const testConfigPath = "./tests/data/team-alphas-config.json";
+  const testDirPath = "./tests/data/test-project-dir";
 
   beforeEach(() => {
     // Create test project directory

@@ -1,6 +1,9 @@
-# Teams MCP: Complete Technical Architecture & Implementation Guide
+# Iris MCP: Complete Technical Architecture & Implementation Guide
 
 **A Production-Ready MCP Server for Cross-Project Claude Code Coordination**
+
+**Last Updated**: 2025-10-11
+**Version**: 1.0.0 (Post-Refactor - Action-Based Architecture)
 
 ---
 
@@ -8,14 +11,18 @@
 
 1. [Architecture Overview](#architecture-overview)
 2. [System Components](#system-components)
-3. [MCP Protocol Implementation](#mcp-protocol-implementation)
-4. [Process Management & Connection Pooling](#process-management--connection-pooling)
-5. [Project Structure](#project-structure)
-6. [Complete Implementation](#complete-implementation)
-7. [Configuration & Deployment](#configuration--deployment)
-8. [Testing & Debugging](#testing--debugging)
-9. [Production Considerations](#production-considerations)
-10. [API Reference](#api-reference)
+3. [Action-Based Architecture](#action-based-architecture)
+4. [Process Output Caching](#process-output-caching)
+5. [Async Task Queue](#async-task-queue)
+6. [MCP Protocol Implementation](#mcp-protocol-implementation)
+7. [HTTP Transport Support](#http-transport-support)
+8. [Process Management & Connection Pooling](#process-management--connection-pooling)
+9. [Project Structure](#project-structure)
+10. [Complete Implementation](#complete-implementation)
+11. [Configuration & Deployment](#configuration--deployment)
+12. [Testing & Debugging](#testing--debugging)
+13. [Production Considerations](#production-considerations)
+14. [API Reference](#api-reference)
 
 ---
 
@@ -39,8 +46,9 @@
 │  ┌─────────────────── LAYER 1: MCP TRANSPORT ─────────────────┐ │
 │  │  MCP Server Core (index.ts)                                 │ │
 │  │  • Protocol Handler (JSON-RPC 2.0)                          │ │
-│  │  • Tool Registry (teams_ask, teams_send_message, etc.)     │ │
+│  │  • Action Registry (team_tell, team_isAwake, etc.)         │ │
 │  │  • Request/Response Management                              │ │
+│  │  • Stdio/HTTP Transport Support                             │ │
 │  └────────────────────────────────────────────────────────────┘ │
 │                            │                                      │
 │                            ▼                                      │
@@ -242,19 +250,33 @@ Iris MCP is architected for **progressive enhancement** across five phases. Phas
 
 #### ✅ Phase 1: Core MCP Server (CURRENT)
 
-**Status:** Complete
-**Focus:** MCP protocol + process pooling + session management
+**Status:** Complete (v1.0.0)
+**Focus:** MCP protocol + process pooling + session management + action-based architecture
 
 **Key Features:**
-- MCP tools for team coordination (`teams_ask`, `teams_send_message`, `teams_notify`, `teams_get_status`)
-- Process pooling with LRU eviction (52% performance improvement)
-- Session management with SQLite persistence
-- Health checks and idle timeout management
-- Three-layer architecture (Transport → BLL → Infrastructure)
+- **Action-Based MCP Interface**: 7 team coordination actions with intuitive verb-based naming
+  - `team_tell` - Unified communication (sync/async/persistent modes)
+  - `team_isAwake` - Check team process status
+  - `team_wake` - Activate team process
+  - `team_sleep` - Deactivate team process
+  - `team_wake_all` - Bulk team activation
+  - `team_report` - View process output cache
+  - `team_command` - Execute slash commands (e.g., `/compact`)
+- **Process Output Caching**: Structured message storage with ClaudeCache for debugging and analytics
+- **Async Task Queue**: RxJS-based per-team queues with backpressure (100-message limit)
+- **HTTP Transport Support**: Dual-mode operation (stdio + HTTP) with Commander CLI
+- **Process pooling** with LRU eviction (52% performance improvement)
+- **Session management** with SQLite persistence
+- **Health checks** and idle timeout management
+- **Three-layer architecture** (Transport → BLL → Infrastructure)
 
 **Architecture:**
 ```
-MCP Client → index.ts → IrisOrchestrator → (SessionManager + PoolManager) → ClaudeProcess
+MCP Client → index.ts → IrisOrchestrator → {
+  SessionManager (SQLite sessions)
+  PoolManager (LRU eviction) → ClaudeProcess (with ClaudeCache)
+  AsyncQueue (RxJS per-team queues)
+}
 ```
 
 #### 🚧 Phase 2: Web Dashboard
@@ -554,6 +576,641 @@ Each session file contains the full conversation history in JSONL format, allowi
 
 ---
 
+## 🎯 Action-Based Architecture
+
+**Major Refactor (2025-10-11)**: The MCP interface was renamed from `tools/` to `actions/` with unified naming convention for better semantic clarity.
+
+### Tool Renaming
+
+| Old Name (teams_*) | New Name (team_*) | Purpose |
+|--------------------|-------------------|---------|
+| `teams_request` | `team_tell` | Unified communication (sync/async/persistent) |
+| `teams_get_status` | `team_isAwake` | Check if teams are active |
+| N/A | `team_wake` | Activate team process |
+| N/A | `team_sleep` | Deactivate team process |
+| N/A | `team_wake_all` | Activate all teams |
+| N/A | `team_report` | View team output cache |
+| N/A | `team_command` | Execute slash commands (e.g., `/compact`) |
+
+### Design Philosophy
+
+**Action-Oriented Verbs**: The new naming uses natural language verbs that better describe what the action does:
+- **tell** - "Tell the backend team about X" (more natural than "request")
+- **wake** - "Wake up the team" (activate process)
+- **sleep** - "Put the team to sleep" (deactivate process)
+- **isAwake** - "Is the team awake?" (check status)
+- **report** - "Get a report from the team" (view output cache)
+
+**Unified Interface**: Each action is a separate module in `src/actions/` with clear, single responsibility.
+
+### Action Implementations
+
+**src/actions/tell.ts**:
+```typescript
+export async function tell(
+  args: {
+    toTeam: string;
+    message: string;
+    fromTeam?: string;
+    waitForResponse?: boolean;  // Default: true
+    timeout?: number;            // Default: 30000ms
+    persist?: boolean;           // Use persistent queue
+    ttlDays?: number;           // TTL for persistent messages
+  },
+  iris: IrisOrchestrator
+): Promise<TellResponse>
+```
+
+**Modes**:
+1. **Synchronous** (`waitForResponse=true`): Tell and wait for response
+2. **Asynchronous** (`waitForResponse=false`): Fire-and-forget via AsyncQueue
+3. **Persistent** (`persist=true`): Queue in SQLite notification table
+
+**src/actions/isAwake.ts**:
+```typescript
+export async function isAwake(
+  args: { team?: string; includeNotifications?: boolean },
+  iris: IrisOrchestrator,
+  processPool: ClaudeProcessPool,
+  configManager: TeamsConfigManager
+): Promise<IsAwakeResponse>
+```
+
+Returns process status (idle, processing, stopped), session info, and notification counts.
+
+**src/actions/wake.ts**:
+```typescript
+export async function wake(
+  args: { team: string; fromTeam?: string },
+  iris: IrisOrchestrator,
+  processPool: ClaudeProcessPool,
+  sessionManager: SessionManager
+): Promise<WakeResponse>
+```
+
+Ensures team's Claude process is active in the pool. Spawns process if not already running.
+
+**src/actions/sleep.ts**:
+```typescript
+export async function sleep(
+  args: { team: string; fromTeam?: string; force?: boolean },
+  processPool: ClaudeProcessPool
+): Promise<SleepResponse>
+```
+
+Terminates team's process and frees resources. `force` flag allows termination even if busy.
+
+**src/actions/wake-all.ts**:
+```typescript
+export async function wakeAll(
+  args: { fromTeam?: string; parallel?: boolean },
+  iris: IrisOrchestrator,
+  processPool: ClaudeProcessPool,
+  sessionManager: SessionManager
+): Promise<WakeAllResponse>
+```
+
+Wake up all configured teams. `parallel` flag enables concurrent spawning for faster startup.
+
+**src/actions/report.ts**:
+```typescript
+export async function report(
+  args: { team: string; fromTeam?: string },
+  processPool: ClaudeProcessPool
+): Promise<ReportResponse>
+```
+
+View cached stdout/stderr from team's process without clearing it. Returns structured message exchanges.
+
+**src/actions/command.ts**:
+```typescript
+export async function command(
+  args: { team: string; command: string; args?: string; fromTeam?: string },
+  iris: IrisOrchestrator
+): Promise<CommandResponse>
+```
+
+Execute slash commands on team's Claude instance. Currently only supports `/compact`.
+
+### Action Registration
+
+Actions are registered in `src/index.ts`:
+
+```typescript
+const TOOLS: Tool[] = [
+  {
+    name: "team_tell",
+    description: "Tell a message to a specific team. Supports sync, async, and persistent modes.",
+    inputSchema: { /* ... */ }
+  },
+  {
+    name: "team_isAwake",
+    description: "Check if teams are awake (active) or asleep (inactive).",
+    inputSchema: { /* ... */ }
+  },
+  // ... other actions
+];
+```
+
+**Benefits of Action-Based Architecture**:
+- ✅ More intuitive naming (verb-based, not noun-based)
+- ✅ Better separation of concerns (one action per file)
+- ✅ Easier to extend with new actions
+- ✅ Preparation for CLI and web dashboard interfaces (Phase 4)
+- ✅ Consistent with natural language patterns
+
+---
+
+## 🗄️ Process Output Caching
+
+**Feature Added (2025-10-11)**: ClaudeCache provides structured message storage for debugging and monitoring.
+
+### ClaudeCache Architecture
+
+**Location**: `src/process-pool/claude-cache.ts`
+
+**Purpose**: Capture and store all I/O from Claude processes for debugging, analytics, and the `team_report` action.
+
+### Data Structures
+
+**MessageExchange**: Tracks request/response pairs
+```typescript
+interface MessageExchange {
+  id: string;                    // Unique identifier
+  request: string;                // What was sent to Claude
+  response: string;               // What Claude responded (accumulating)
+  status: 'pending' | 'streaming' | 'completed' | 'error';
+  startTime: Date;
+  endTime?: Date;
+  duration?: number;             // Duration in milliseconds
+  error?: string;                // Error message if failed
+  metadata?: {
+    tokenCount?: number;
+    cost?: number;
+    model?: string;
+  };
+}
+```
+
+**ProtocolMessage**: Stores raw JSON protocol messages
+```typescript
+interface ProtocolMessage {
+  timestamp: Date;
+  type: string;                  // e.g., "system", "stream_event"
+  subtype?: string;              // e.g., "init", "message_start"
+  raw: string;                   // Original JSON string
+  parsed: any;                    // Parsed JSON object
+  messageId?: string;            // Link to MessageExchange
+}
+```
+
+### Cache Configuration
+
+```typescript
+interface CacheConfig {
+  maxMessages?: number;          // Max message exchanges to keep (default: 100)
+  maxProtocolMessages?: number;  // Max protocol messages to keep (default: 500)
+  maxMessageAge?: number;        // Max age in milliseconds (default: 1 hour)
+  preserveErrors?: boolean;      // Keep error messages longer (default: true)
+}
+```
+
+### Cache Operations
+
+**Lifecycle Management**:
+```typescript
+// Start tracking a new message
+const messageId = cache.startMessage("What is the current directory?");
+
+// Append streaming response chunks
+cache.appendToCurrentMessage("The current");
+cache.appendToCurrentMessage(" directory is /projects/frontend");
+
+// Complete the message
+cache.completeCurrentMessage();
+
+// Or mark as error
+cache.errorCurrentMessage("Timeout exceeded");
+```
+
+**Querying**:
+```typescript
+// Get recent messages
+const recent = cache.getRecentMessages(10);
+
+// Get messages since timestamp
+const since = cache.getMessagesSince(new Date(Date.now() - 3600000));
+
+// Get pending/streaming messages
+const pending = cache.getPendingMessages();
+
+// Get completed messages
+const completed = cache.getCompletedMessages();
+
+// Get error messages
+const errors = cache.getErrorMessages();
+
+// Get protocol messages for a specific message
+const protocol = cache.getProtocolMessages(messageId);
+```
+
+**Reporting**:
+```typescript
+// Get cache summary
+const report = cache.getReport();
+/*
+{
+  totalMessages: 42,
+  pendingMessages: 1,
+  completedMessages: 40,
+  errorMessages: 1,
+  averageDuration: 1250,
+  oldestMessage: Date(2025-10-11T10:00:00Z),
+  newestMessage: Date(2025-10-11T11:30:00Z),
+  cacheSize: {
+    messages: 42,
+    protocolMessages: 156
+  }
+}
+*/
+
+// Export messages as JSON or text
+const json = cache.exportMessages('json');
+const text = cache.exportMessages('text');
+```
+
+### Integration with ClaudeProcess
+
+**Cache Initialization**:
+```typescript
+class ClaudeProcess {
+  private cache: ClaudeCache;
+
+  constructor(teamName: string, teamConfig: TeamConfig, idleTimeout: number) {
+    // ...
+    this.cache = new ClaudeCache(teamName, {
+      maxMessages: 100,
+      maxProtocolMessages: 500,
+      maxMessageAge: 3600000,  // 1 hour
+      preserveErrors: true,
+    });
+  }
+}
+```
+
+**Capturing stdout**:
+```typescript
+private handleStdout(data: Buffer): void {
+  const rawData = data.toString();
+
+  // Parse protocol messages
+  const lines = rawData.split('\n').filter(line => line.trim());
+  for (const line of lines) {
+    try {
+      const jsonResponse = JSON.parse(line);
+
+      // Store in cache
+      this.cache.addProtocolMessage(line);
+
+      // Handle different message types
+      if (jsonResponse.type === 'stream_event') {
+        const event = jsonResponse.event;
+
+        if (event?.type === 'message_start') {
+          this.cache.markMessageStreaming();
+        } else if (event?.type === 'content_block_delta') {
+          const deltaText = event.delta?.text || '';
+          this.cache.appendToCurrentMessage(deltaText);
+        } else if (event?.type === 'message_stop') {
+          this.cache.completeCurrentMessage();
+        }
+      }
+    } catch (error) {
+      // Not JSON, ignore
+    }
+  }
+}
+```
+
+**Capturing stderr**:
+```typescript
+private handleStderr(data: Buffer): void {
+  const errorData = data.toString();
+  this.cache.appendStderr(errorData);
+}
+```
+
+### PoolManager Integration
+
+**Cache Management**:
+```typescript
+class ClaudeProcessPool {
+  private caches = new Map<string, ClaudeCache>();
+
+  async getOrCreateProcess(teamName: string, ...): Promise<ClaudeProcess> {
+    // Create cache for new process
+    if (!this.caches.has(teamName)) {
+      const cache = new ClaudeCache(teamName);
+      this.caches.set(teamName, cache);
+    }
+
+    // Pass cache to process
+    const process = new ClaudeProcess(teamName, teamConfig, idleTimeout);
+    // ...
+  }
+
+  getCacheForTeam(teamName: string): ClaudeCache | undefined {
+    return this.caches.get(teamName);
+  }
+
+  async terminateProcess(teamName: string) {
+    // Clean up cache
+    this.caches.delete(teamName);
+    // ...
+  }
+}
+```
+
+### Use Cases
+
+**Debugging**:
+```bash
+# View process output for debugging
+$ iris team_report --team backend
+
+{
+  "totalMessages": 15,
+  "recentMessages": [
+    {
+      "id": "msg-1-1731355200000",
+      "request": "What is the current directory?",
+      "response": "The current directory is /projects/backend",
+      "status": "completed",
+      "duration": 1234
+    }
+  ]
+}
+```
+
+**Monitoring**:
+- Track response times per team
+- Identify teams with frequent errors
+- Measure token usage and costs
+
+**Analytics**:
+- Average response duration per team
+- Message volume per team
+- Error rates and patterns
+
+**Circular Buffer**: Cache automatically evicts old messages when limits are reached, keeping most recent data.
+
+---
+
+## ⚡ Async Task Queue
+
+**Feature Added (2025-10-11)**: AsyncQueue provides RxJS-based async task coordination for fire-and-forget operations.
+
+### Architecture Overview
+
+**Location**: `src/async/queue.ts`
+
+**Purpose**: Manage asynchronous operations (tell, command, sleep) without blocking the caller.
+
+**Key Features**:
+- Per-team queues for parallel cross-team processing
+- Serial processing within each team queue (FIFO)
+- 100-message rolling limit per team
+- No timeouts - tasks wait indefinitely until processed
+- Reactive coordination with RxJS
+
+### Design Pattern
+
+**RxJS Observables**: Each team has a `Subject<AsyncTask>` that processes tasks serially using `concatMap`.
+
+```typescript
+class AsyncQueue {
+  private queues = new Map<string, Subject<AsyncTask>>();
+
+  private getOrCreateQueue(teamName: string): Subject<AsyncTask> {
+    if (!this.queues.has(teamName)) {
+      const queue = new Subject<AsyncTask>();
+
+      // Serial processing with concatMap (FIFO order)
+      queue
+        .pipe(
+          concatMap((task) => this.processTask(task)),
+          catchError((error) => {
+            logger.error("Queue processing error", { error });
+            return of(null); // Continue despite errors
+          }),
+        )
+        .subscribe();
+
+      this.queues.set(teamName, queue);
+    }
+
+    return this.queues.get(teamName)!;
+  }
+}
+```
+
+### Task Types
+
+```typescript
+type AsyncTaskType = "tell" | "command" | "sleep";
+
+interface AsyncTask {
+  taskId: string;          // Unique identifier
+  type: AsyncTaskType;
+  toTeam: string;
+  fromTeam: string | null;
+  content: string;         // Message or command
+  timeout?: number;        // Default: 30000ms
+  args?: string;           // For command type
+  enqueuedAt: number;
+}
+```
+
+### Queue Operations
+
+**Enqueue Task**:
+```typescript
+const taskId = asyncQueue.enqueue({
+  type: "tell",
+  toTeam: "backend",
+  fromTeam: "frontend",
+  content: "Deploy the new feature",
+  timeout: 60000
+});
+// Returns immediately with taskId
+```
+
+**Process Task**:
+```typescript
+private async processTask(task: AsyncTask): Promise<AsyncTaskResult> {
+  // Route to appropriate handler based on task type
+  switch (task.type) {
+    case "tell":
+      response = await this.iris.sendMessage(
+        task.fromTeam,
+        task.toTeam,
+        task.content,
+        { timeout: task.timeout || 30000, waitForResponse: true }
+      );
+      break;
+
+    case "command":
+      const commandStr = task.args ? `/${task.content} ${task.args}` : `/${task.content}`;
+      response = await this.iris.sendMessage(
+        task.fromTeam,
+        task.toTeam,
+        commandStr,
+        { timeout: task.timeout || 30000, waitForResponse: true }
+      );
+      break;
+
+    case "sleep":
+      response = await this.iris.sendMessage(
+        task.fromTeam,
+        task.toTeam,
+        task.content,
+        { timeout: task.timeout || 30000, waitForResponse: true }
+      );
+      break;
+  }
+
+  return {
+    taskId: task.taskId,
+    type: task.type,
+    toTeam: task.toTeam,
+    success: true,
+    response,
+    duration: Date.now() - startTime,
+    completedAt: Date.now()
+  };
+}
+```
+
+### Queue Statistics
+
+```typescript
+interface QueueStats {
+  teamName: string;
+  pending: number;      // Tasks currently in queue
+  processed: number;    // Total tasks completed
+  failed: number;       // Total tasks that failed
+  maxQueueSize: number; // Rolling limit (100)
+}
+
+// Get stats for a specific team
+const stats = asyncQueue.getQueueStats("backend");
+
+// Get stats for all teams
+const allStats = asyncQueue.getAllQueueStats();
+```
+
+### Integration with Actions
+
+**tell action (async mode)**:
+```typescript
+export async function tell(args, iris: IrisOrchestrator): Promise<TellResponse> {
+  if (!args.waitForResponse) {
+    // Async mode: enqueue task
+    const taskId = iris.asyncQueue.enqueue({
+      type: "tell",
+      toTeam: args.toTeam,
+      fromTeam: args.fromTeam,
+      content: args.message,
+      timeout: args.timeout
+    });
+
+    return {
+      success: true,
+      taskId,
+      message: "Message enqueued for async processing"
+    };
+  } else {
+    // Sync mode: wait for response
+    const response = await iris.sendMessage(...);
+    return { success: true, response };
+  }
+}
+```
+
+**command action**:
+```typescript
+export async function command(args, iris: IrisOrchestrator): Promise<CommandResponse> {
+  // All commands are async
+  const taskId = iris.asyncQueue.enqueue({
+    type: "command",
+    toTeam: args.team,
+    fromTeam: args.fromTeam,
+    content: args.command,
+    args: args.args,
+    timeout: 30000
+  });
+
+  return {
+    success: true,
+    taskId,
+    message: `Command /${args.command} enqueued for team ${args.team}`
+  };
+}
+```
+
+### Orchestrator Integration
+
+```typescript
+class IrisOrchestrator {
+  private asyncQueue: AsyncQueue;
+
+  constructor(sessionManager, processPool) {
+    this.sessionManager = sessionManager;
+    this.processPool = processPool;
+    this.asyncQueue = new AsyncQueue(this);  // Pass self reference
+  }
+
+  async shutdown() {
+    this.asyncQueue.shutdown();  // Complete all queues
+    await this.processPool.terminateAll();
+    this.sessionManager.close();
+  }
+}
+```
+
+### Error Handling
+
+**Task Failure**:
+```typescript
+{
+  taskId: "abc123",
+  type: "tell",
+  toTeam: "backend",
+  success: false,
+  error: "Process timeout after 30000ms",
+  duration: 30001,
+  completedAt: 1731355230000
+}
+```
+
+**Queue Full**:
+```typescript
+// Throws error if queue has 100 pending tasks
+throw new Error(
+  `Queue for team 'backend' is full (100 tasks). Please wait.`
+);
+```
+
+### Benefits
+
+- **Non-Blocking**: Caller doesn't wait for async tasks to complete
+- **Parallel Teams**: Different teams' queues process concurrently
+- **Serial Within Team**: Messages to same team are processed in order
+- **Backpressure**: 100-message limit prevents queue overload
+- **Reactive**: Built on RxJS for robust async coordination
+
+---
+
 ## 📡 MCP Protocol Implementation
 
 ### Understanding MCP
@@ -689,6 +1346,233 @@ Version negotiation happens during initialization:
   "id": 1
 }
 ```
+
+---
+
+## 🌐 HTTP Transport Support
+
+**Feature Added (2025-10-11)**: Iris MCP now supports HTTP transport in addition to stdio, enabling web clients and external integrations.
+
+### Transport Modes
+
+**Stdio Mode** (Default):
+- Standard input/output communication
+- Used by Claude Desktop and Claude Code CLI
+- MCP protocol over stdin/stdout pipes
+
+**HTTP Mode** (New):
+- HTTP server with JSON-RPC 2.0 over POST requests
+- Server-Sent Events (SSE) for streaming responses
+- Stateless request handling with StreamableHTTPServerTransport
+
+### Configuration
+
+**teams.json**:
+```json
+{
+  "settings": {
+    "defaultTransport": "stdio",  // or "http"
+    "httpPort": 1615,
+    "idleTimeout": 300000,
+    "maxProcesses": 10,
+    "healthCheckInterval": 30000
+  },
+  "teams": {
+    // ... team configurations
+  }
+}
+```
+
+### Command-Line Interface
+
+**Start with stdio** (default):
+```bash
+$ iris-mcp
+# or
+$ iris-mcp --transport stdio
+```
+
+**Start with HTTP**:
+```bash
+$ iris-mcp --transport http --port 1615
+# Server starts on http://localhost:1615
+```
+
+### HTTP Server Implementation
+
+**src/index.ts**:
+```typescript
+async run(
+  transport: "stdio" | "http" = "stdio",
+  port: number = 1615
+): Promise<void> {
+  // Initialize session manager
+  await this.sessionManager.initialize();
+
+  if (transport === "http") {
+    // HTTP transport mode
+    const app = express();
+    app.use(express.json());
+
+    // MCP endpoint
+    app.all("/mcp", async (req, res) => {
+      // Create stateless transport for each request
+      const httpTransport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined, // Stateless mode
+        enableJsonResponse: true,
+      });
+
+      // Connect to MCP server
+      await this.server.connect(httpTransport);
+
+      // Handle request (POST for JSON-RPC, GET for SSE)
+      await httpTransport.handleRequest(req, res, req.body);
+    });
+
+    // Health check endpoint
+    app.get("/health", (req, res) => {
+      res.json({
+        status: "ok",
+        transport: "http",
+        server: "@iris-mcp/server",
+        version: "1.0.0",
+      });
+    });
+
+    app.listen(port, () => {
+      logger.info(`Iris MCP Server running on HTTP port ${port}`);
+      logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
+      logger.info(`Health check: http://localhost:${port}/health`);
+    });
+  } else {
+    // Stdio transport mode
+    const stdioTransport = new StdioServerTransport();
+    await this.server.connect(stdioTransport);
+    logger.info("Iris MCP Server running on stdio");
+  }
+}
+```
+
+### API Endpoints
+
+**POST /mcp** - MCP JSON-RPC requests:
+```bash
+curl -X POST http://localhost:1615/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tools/list",
+    "id": 1
+  }'
+```
+
+**GET /health** - Health check:
+```bash
+curl http://localhost:1615/health
+
+{
+  "status": "ok",
+  "transport": "http",
+  "server": "@iris-mcp/server",
+  "version": "1.0.0"
+}
+```
+
+### Client Integration
+
+**JavaScript/TypeScript**:
+```typescript
+// Connect to HTTP MCP server
+const response = await fetch("http://localhost:1615/mcp", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    jsonrpc: "2.0",
+    method: "tools/call",
+    params: {
+      name: "team_tell",
+      arguments: {
+        toTeam: "backend",
+        message: "Deploy version 2.0",
+        fromTeam: "frontend"
+      }
+    },
+    id: 1
+  })
+});
+
+const result = await response.json();
+console.log(result.result);
+```
+
+**Python**:
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:1615/mcp",
+    json={
+        "jsonrpc": "2.0",
+        "method": "tools/call",
+        "params": {
+            "name": "team_isAwake",
+            "arguments": {"team": "backend"}
+        },
+        "id": 1
+    }
+)
+
+print(response.json()["result"])
+```
+
+### Stateless vs Stateful
+
+**Stateless Mode** (Current):
+- Each HTTP request creates a new transport
+- No session persistence across requests
+- Suitable for RESTful API usage
+- Transport destroyed after response sent
+
+**Stateful Mode** (Future):
+- Server-Sent Events (SSE) for persistent connections
+- Session IDs track client state
+- Real-time streaming of responses
+- Planned for Phase 3
+
+### Benefits
+
+**HTTP Transport Advantages**:
+- ✅ Web browser clients can connect directly
+- ✅ External tools can integrate via HTTP API
+- ✅ RESTful API pattern familiar to developers
+- ✅ Health check endpoint for monitoring
+- ✅ Supports CORS for cross-origin requests (configurable)
+
+**Stdio Transport Advantages**:
+- ✅ Direct integration with Claude Desktop/CLI
+- ✅ No network overhead (process pipes)
+- ✅ Simpler security model (no exposed ports)
+- ✅ Better for local development
+
+### Security Considerations
+
+**HTTP Mode**:
+- Currently no authentication (Phase 3 will add API keys)
+- Bind to `localhost` only by default
+- Consider firewall rules for production
+- HTTPS recommended for production (use reverse proxy)
+
+**Stdio Mode**:
+- Process-level isolation
+- No network exposure
+- Suitable for local development and CLI usage
+
+### Dependencies
+
+HTTP transport requires:
+- `express` ^4.18.2 - Web framework
+- `@modelcontextprotocol/sdk` ^0.6.0 - StreamableHTTPServerTransport
+- `commander` ^12.1.0 - CLI argument parsing
 
 ---
 
@@ -874,10 +1758,23 @@ iris-mcp/
 ├── CLAUDE.md                        # Project instructions for Claude Code
 ├── teams.json                       # Team registry configuration
 ├── src/
-│   ├── index.ts                     # MCP server entry + tool registration
-│   ├── iris.ts                      # 🆕 IrisOrchestrator (Business Logic Layer)
+│   ├── index.ts                     # MCP server entry + action registration + HTTP/stdio
+│   ├── iris.ts                      # IrisOrchestrator (Business Logic Layer)
 │   │
-│   ├── session/                     # 🆕 Session Management Layer
+│   ├── actions/                     # 🆕 Action-Based MCP Interface (Phase 1)
+│   │   ├── index.ts                 # Action exports
+│   │   ├── tell.ts                  # team_tell (sync/async/persistent)
+│   │   ├── isAwake.ts               # team_isAwake (status check)
+│   │   ├── wake.ts                  # team_wake (activate process)
+│   │   ├── sleep.ts                 # team_sleep (deactivate process)
+│   │   ├── wake-all.ts              # team_wake_all (bulk activation)
+│   │   ├── report.ts                # team_report (view cache)
+│   │   └── command.ts               # team_command (slash commands)
+│   │
+│   ├── async/                       # 🆕 Async Task Queue (Phase 1)
+│   │   └── queue.ts                 # RxJS-based per-team queues
+│   │
+│   ├── session/                     # Session Management Layer
 │   │   ├── session-manager.ts       # Main session orchestrator
 │   │   ├── session-store.ts         # SQLite database wrapper
 │   │   ├── path-utils.ts            # Session file path utilities
@@ -886,19 +1783,13 @@ iris-mcp/
 │   │   └── types.ts                 # Session type definitions
 │   │
 │   ├── process-pool/
-│   │   ├── pool-manager.ts          # ClaudeProcessPool (now session-aware)
+│   │   ├── pool-manager.ts          # ClaudeProcessPool (session-aware)
 │   │   ├── claude-process.ts        # ClaudeProcess + static initializeSessionFile()
+│   │   ├── claude-cache.ts          # 🆕 ClaudeCache (output caching)
 │   │   └── types.ts                 # Process type definitions
 │   │
 │   ├── config/
 │   │   └── teams-config.ts          # Configuration loader + hot-reload
-│   │
-│   ├── tools/
-│   │   ├── teams-ask.ts             # teams_ask (uses IrisOrchestrator)
-│   │   ├── teams-send-message.ts    # teams_send_message (uses IrisOrchestrator)
-│   │   ├── teams-notify.ts          # teams_notify (notification queue)
-│   │   ├── teams-get-status.ts      # teams_get_status
-│   │   └── index.ts                 # Tool exports
 │   │
 │   ├── notifications/
 │   │   └── queue.ts                 # SQLite persistent notification queue
@@ -942,11 +1833,15 @@ iris-mcp/
     └── ...
 ```
 
-**Key Changes from Original Design:**
+**Key Changes from Original Design (v1.0.0 - 2025-10-11):**
+- **🆕 actions/:** Action-based MCP interface (replaced tools/)
+- **🆕 async/:** RxJS-based async task queue for non-blocking operations
+- **🆕 claude-cache.ts:** Structured output caching for debugging and analytics
+- **🆕 HTTP transport:** Dual-mode operation (stdio + HTTP) with Commander CLI
 - **🆕 iris.ts:** Business Logic Layer for orchestration
 - **🆕 session/:** Complete session management subsystem
 - **Updated:** Process pool now session-aware (requires sessionId)
-- **Updated:** Tools use IrisOrchestrator instead of direct pool access
+- **Updated:** Actions use IrisOrchestrator instead of direct pool access
 
 ---
 
@@ -2266,86 +3161,89 @@ try {
 
 ## 📚 API Reference
 
-### MCP Tools
+### MCP Actions
 
-#### teams_ask
+**Note**: All action names follow the `team_*` convention (verb-based naming for natural language interaction).
 
-Ask another team a question and wait for synchronous response.
+#### team_tell
 
-**Parameters:**
-- `team_name` (string, required): Target team identifier
-- `question` (string, required): Question to ask
-
-**Returns:**
-```typescript
-{
-  response: string;
-  team: string;
-  timestamp: number;
-}
-```
-
-**Example:**
-```typescript
-await teams_ask({
-  team_name: "backend",
-  question: "What database migration system do you use?"
-})
-// Returns: { response: "We use Prisma for migrations...", team: "backend", ... }
-```
-
-#### teams_send_message
-
-Send a message to another team with optional wait for reply.
+Unified communication action supporting synchronous, asynchronous, and persistent modes.
 
 **Parameters:**
-- `team_name` (string, required): Target team
+- `toTeam` (string, required): Target team identifier
 - `message` (string, required): Message content
-- `wait_for_reply` (boolean, optional): Wait for response (default: true)
+- `fromTeam` (string, optional): Source team identifier
+- `waitForResponse` (boolean, optional): Wait for response (default: true)
+- `timeout` (number, optional): Timeout in milliseconds (default: 30000)
+- `persist` (boolean, optional): Use persistent queue (default: false)
+- `ttlDays` (number, optional): TTL for persistent messages (default: 30)
 
 **Returns:**
 ```typescript
 {
   success: boolean;
-  response?: string;
-  messageId: string;
+  response?: string;         // Only if waitForResponse=true
+  taskId?: string;           // Only if waitForResponse=false
+  message: string;
 }
 ```
 
-#### teams_notify
+**Modes:**
+1. **Synchronous** (default): `waitForResponse=true` - Tell and wait for response
+2. **Asynchronous**: `waitForResponse=false` - Fire-and-forget via AsyncQueue
+3. **Persistent**: `persist=true` - Queue in SQLite notification table
 
-Send fire-and-forget notification to team's queue.
-
-**Parameters:**
-- `team_name` (string, required): Target team
-- `message` (string, required): Notification message
-- `priority` (string, optional): "low" | "normal" | "high"
-
-**Returns:**
+**Examples:**
 ```typescript
-{
-  queued: boolean;
-  messageId: string;
-  timestamp: number;
-}
+// Synchronous mode (wait for response)
+await team_tell({
+  toTeam: "backend",
+  message: "What database migration system do you use?",
+  fromTeam: "frontend",
+  waitForResponse: true,
+  timeout: 30000
+})
+// Returns: { success: true, response: "We use Prisma for migrations..." }
+
+// Asynchronous mode (fire-and-forget)
+await team_tell({
+  toTeam: "backend",
+  message: "Deploy version 2.0",
+  fromTeam: "frontend",
+  waitForResponse: false
+})
+// Returns: { success: true, taskId: "abc123", message: "Message enqueued..." }
+
+// Persistent mode (survives server restarts)
+await team_tell({
+  toTeam: "backend",
+  message: "Review security audit",
+  fromTeam: "frontend",
+  persist: true,
+  ttlDays: 7
+})
+// Returns: { success: true, message: "Message persisted to queue" }
 ```
 
-#### teams_get_status
+#### team_isAwake
 
-Get status of team or all teams.
+Check if teams are awake (active) or asleep (inactive).
 
 **Parameters:**
-- `team_name` (string, optional): Specific team or omit for all
+- `team` (string, optional): Specific team or omit for all
+- `includeNotifications` (boolean, optional): Include notification counts (default: false)
 
 **Returns:**
 ```typescript
 {
   teams: {
     [teamName: string]: {
-      active: boolean;
-      lastUsed: number;
-      messagesProcessed: number;
-      queueLength: number;
+      status: 'idle' | 'processing' | 'stopped';
+      pid?: number;
+      lastUsed?: number;
+      messagesProcessed?: number;
+      queueLength?: number;
+      notifications?: number;  // If includeNotifications=true
     }
   };
   poolStatus: {
@@ -2353,6 +3251,165 @@ Get status of team or all teams.
     maxProcesses: number;
   };
 }
+```
+
+**Example:**
+```typescript
+await team_isAwake({ team: "backend", includeNotifications: true })
+// Returns: { teams: { backend: { status: 'idle', pid: 12345, ... } } }
+```
+
+#### team_wake
+
+Activate a team's Claude process (ensure it's running in the pool).
+
+**Parameters:**
+- `team` (string, required): Team to activate
+- `fromTeam` (string, optional): Source team identifier
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  message: string;
+  status: 'spawned' | 'already_active';
+  pid?: number;
+}
+```
+
+**Example:**
+```typescript
+await team_wake({ team: "backend", fromTeam: "frontend" })
+// Returns: { success: true, message: "Team 'backend' is now active", status: 'spawned' }
+```
+
+#### team_sleep
+
+Deactivate a team's Claude process (terminate and free resources).
+
+**Parameters:**
+- `team` (string, required): Team to deactivate
+- `fromTeam` (string, optional): Source team identifier
+- `force` (boolean, optional): Force termination even if busy (default: false)
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  message: string;
+}
+```
+
+**Example:**
+```typescript
+await team_sleep({ team: "backend", fromTeam: "frontend" })
+// Returns: { success: true, message: "Team 'backend' has been put to sleep" }
+```
+
+#### team_wake_all
+
+Activate all configured teams' Claude processes.
+
+**Parameters:**
+- `fromTeam` (string, optional): Source team identifier
+- `parallel` (boolean, optional): Spawn processes concurrently (default: false)
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  message: string;
+  results: {
+    [teamName: string]: {
+      success: boolean;
+      status: 'spawned' | 'already_active' | 'failed';
+      error?: string;
+    }
+  };
+}
+```
+
+**Example:**
+```typescript
+await team_wake_all({ fromTeam: "frontend", parallel: true })
+// Returns: { success: true, message: "All teams activated", results: {...} }
+```
+
+#### team_report
+
+View cached stdout/stderr from team's process without clearing it.
+
+**Parameters:**
+- `team` (string, required): Team to get report from
+- `fromTeam` (string, optional): Source team identifier
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  team: string;
+  cache: {
+    totalMessages: number;
+    pendingMessages: number;
+    completedMessages: number;
+    errorMessages: number;
+    averageDuration: number;
+    recentMessages: MessageExchange[];
+  };
+}
+```
+
+**MessageExchange Structure:**
+```typescript
+{
+  id: string;
+  request: string;
+  response: string;
+  status: 'pending' | 'streaming' | 'completed' | 'error';
+  startTime: Date;
+  endTime?: Date;
+  duration?: number;
+  error?: string;
+  metadata?: {
+    tokenCount?: number;
+    cost?: number;
+    model?: string;
+  };
+}
+```
+
+**Example:**
+```typescript
+await team_report({ team: "backend", fromTeam: "frontend" })
+// Returns: { success: true, cache: { totalMessages: 42, recentMessages: [...] } }
+```
+
+#### team_command
+
+Execute slash commands on team's Claude instance.
+
+**Parameters:**
+- `team` (string, required): Target team
+- `command` (string, required): Command to execute (e.g., "compact")
+- `args` (string, optional): Command arguments
+- `fromTeam` (string, optional): Source team identifier
+
+**Returns:**
+```typescript
+{
+  success: boolean;
+  taskId: string;
+  message: string;
+}
+```
+
+**Supported Commands:**
+- `/compact` - Compact session history to reduce context size
+
+**Example:**
+```typescript
+await team_command({ team: "backend", command: "compact", fromTeam: "frontend" })
+// Returns: { success: true, taskId: "abc123", message: "Command /compact enqueued..." }
 ```
 
 ---

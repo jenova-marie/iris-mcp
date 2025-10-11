@@ -321,7 +321,7 @@ describe("tell", () => {
   describe("duration tracking", () => {
     it("should track duration for synchronous requests", async () => {
       vi.mocked(mockIris.sendMessage).mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve("Response"), 10))
+        () => new Promise(resolve => setTimeout(() => resolve("Response"), 15))
       );
 
       const result = await tell(

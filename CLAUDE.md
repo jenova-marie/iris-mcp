@@ -82,7 +82,7 @@ Both `ClaudeProcess` and `ClaudeProcessPool` extend `EventEmitter` and emit even
 
 ### Configuration with Hot-Reload
 
-`TeamsConfigManager` (`src/config/teams-config.ts`) loads `teams.json` with Zod validation. Uses `fs.watchFile()` with 1s interval to hot-reload configuration changes without server restart.
+`TeamsConfigManager` (`src/config/teams-config.ts`) loads `config.json` (from `$IRIS_HOME/config.json` or `~/.iris/config.json`) with Zod validation. Uses `fs.watchFile()` with 1s interval to hot-reload configuration changes without server restart.
 
 Configuration structure:
 ```typescript

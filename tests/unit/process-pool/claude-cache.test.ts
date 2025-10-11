@@ -78,8 +78,11 @@ describe("ClaudeCache", () => {
       expect(pending).toHaveLength(0);
     });
 
-    it("should handle message errors", () => {
+    it("should handle message errors", async () => {
       const messageId = cache.startMessage("Cause an error");
+
+      // Add a small delay to ensure duration > 0
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Error the message
       cache.errorCurrentMessage("Connection lost");
@@ -88,7 +91,7 @@ describe("ClaudeCache", () => {
       expect(errors).toHaveLength(1);
       expect(errors[0].status).toBe("error");
       expect(errors[0].error).toBe("Connection lost");
-      expect(errors[0].duration).toBeGreaterThan(0);
+      expect(errors[0].duration).toBeGreaterThanOrEqual(5); // At least 5ms
     });
 
     it("should support setting final response on completion", () => {

@@ -1,0 +1,34 @@
+# Source files
+src/
+tests/
+docs/
+
+# Configuration
+tsconfig.json
+vitest.config.ts
+.claude.json
+teams.json
+teams.test.json
+
+# Development
+.github/
+.vscode/
+*.log
+*.db
+*.db-shm
+*.db-wal
+data/
+
+# Git
+.git/
+.gitignore
+
+# Build artifacts
+coverage/
+.vitest/
+
+# Example files
+src/config/teams.example.json
+
+# Resources
+resources/

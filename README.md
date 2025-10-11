@@ -6,11 +6,10 @@
   **Model Context Protocol server for cross-project Claude Code coordination**
 
   [![Build Status](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml)
-  [![Test Coverage](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/jenova-marie/iris-mcp/actions)
+  [![codecov](https://codecov.io/gh/jenova-marie/iris-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/jenova-marie/iris-mcp)
   [![npm version](https://badge.fury.io/js/@iris-mcp%2Fserver.svg)](https://badge.fury.io/js/@iris-mcp%2Fserver)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
   Iris MCP enables Claude Code instances across different project directories to communicate and coordinate. Stay in one project while asking questions to teams in other codebases.
 </div>
 

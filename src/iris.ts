@@ -220,6 +220,20 @@ export class IrisOrchestrator {
   }
 
   /**
+   * Clear output cache for a team
+   */
+  async clearOutputCache(teamName: string): Promise<void> {
+    this.processPool.clearOutputCache(teamName);
+  }
+
+  /**
+   * Get output cache for a team
+   */
+  getOutputCache(teamName: string): { stdout: string; stderr: string } | null {
+    return this.processPool.getOutputCache(teamName);
+  }
+
+  /**
    * Shutdown orchestrator
    */
   async shutdown(): Promise<void> {

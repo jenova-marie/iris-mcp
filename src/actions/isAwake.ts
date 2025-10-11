@@ -1,0 +1,167 @@
+/**
+ * Iris MCP Module: isAwake
+ * Check if teams are awake or asleep and get their status
+ */
+
+import type { IrisOrchestrator } from "../iris.js";
+import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
+import type { TeamsConfigManager } from "../config/teams-config.js";
+import { validateTeamName } from "../utils/validation.js";
+import { Logger } from "../utils/logger.js";
+
+const logger = new Logger("mcp:isAwake");
+
+export interface IsAwakeInput {
+  /** Optional: Get status for a specific team only */
+  team?: string;
+
+  /** Include notification queue statistics (default: true) */
+  includeNotifications?: boolean;
+}
+
+export interface TeamStatus {
+  /** Team name */
+  name: string;
+
+  /** Whether the team is currently active in the process pool */
+  status: "awake" | "asleep";
+
+  /** Process ID if active */
+  pid?: number;
+
+  /** Session ID if active */
+  sessionId?: string;
+
+  /** Message count if active */
+  messageCount?: number;
+
+  /** Last activity timestamp if active */
+  lastActivity?: number;
+
+  /** Team configuration */
+  config: {
+    path: string;
+    description?: string;
+    color?: string;
+  };
+}
+
+export interface IsAwakeOutput {
+  /** Status of individual teams */
+  teams: TeamStatus[];
+
+  /** Overall pool statistics */
+  pool: {
+    activeProcesses: number;
+    maxProcesses: number;
+    totalMessages: number;
+  };
+
+  /** Notification queue statistics (if includeNotifications=true) */
+  notifications?: {
+    pending: number;
+    total: number;
+  };
+
+  /** Timestamp of status check */
+  timestamp: number;
+}
+
+export async function isAwake(
+  input: IsAwakeInput,
+  iris: IrisOrchestrator,
+  processPool: ClaudeProcessPool,
+  configManager: TeamsConfigManager,
+): Promise<IsAwakeOutput> {
+  const {
+    team,
+    includeNotifications = true,
+  } = input;
+
+  // Validate team name if provided
+  if (team) {
+    validateTeamName(team);
+  }
+
+  logger.info("Getting status", { team, includeNotifications });
+
+  try {
+    const config = configManager.getConfig();
+    const poolStatus = processPool.getStatus();
+    const teams: TeamStatus[] = [];
+
+    // Get status for specific team or all teams
+    const teamsToCheck = team
+      ? { [team]: config.teams[team] }
+      : config.teams;
+
+    if (team && !config.teams[team]) {
+      throw new Error(`Unknown team: ${team}`);
+    }
+
+    // Check each team
+    for (const [teamName, teamConfig] of Object.entries(teamsToCheck)) {
+      // Check if team has an active process
+      const process = processPool.getProcess(teamName);
+      const sessionKey = `external->${teamName}`;
+      const poolProcess = poolStatus.processes[sessionKey];
+
+      const teamStatus: TeamStatus = {
+        name: teamName,
+        status: process ? "awake" : "asleep",
+        config: {
+          path: teamConfig.path,
+          description: teamConfig.description,
+          color: teamConfig.color,
+        },
+      };
+
+      // Add active process details if available
+      if (process && poolProcess) {
+        teamStatus.pid = poolProcess.pid;
+        teamStatus.sessionId = poolProcess.sessionId;
+        teamStatus.messageCount = poolProcess.messageCount;
+        teamStatus.lastActivity = poolProcess.lastActivity;
+      }
+
+      teams.push(teamStatus);
+    }
+
+    // Sort teams by name
+    teams.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Calculate pool statistics
+    const activeProcesses = Object.keys(poolStatus.processes).length;
+    const totalMessages = Object.values(poolStatus.processes)
+      .reduce((sum, p) => sum + p.messageCount, 0);
+
+    const output: IsAwakeOutput = {
+      teams,
+      pool: {
+        activeProcesses,
+        maxProcesses: poolStatus.maxProcesses,
+        totalMessages,
+      },
+      timestamp: Date.now(),
+    };
+
+    // Add notification statistics if requested
+    if (includeNotifications) {
+      // TODO: Implement when NotificationQueue is available
+      output.notifications = {
+        pending: 0,
+        total: 0,
+      };
+    }
+
+    logger.info("Status retrieved", {
+      teamCount: teams.length,
+      activeCount: teams.filter(t => t.status === "awake").length
+    });
+
+    return output;
+  } catch (error) {
+    logger.error("Failed to get status", error);
+    throw error;
+  }
+}

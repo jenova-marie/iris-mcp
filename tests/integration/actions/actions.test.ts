@@ -20,6 +20,7 @@ import { sleep } from "../../../src/actions/sleep.js";
 import { tell } from "../../../src/actions/tell.js";
 import { wake } from "../../../src/actions/wake.js";
 import { wakeAll } from "../../../src/actions/wake-all.js";
+import { command } from "../../../src/actions/command.js";
 
 describe("Actions Integration Tests", () => {
   let sessionManager: SessionManager;
@@ -236,7 +237,94 @@ describe("Actions Integration Tests", () => {
     });
   });
 
-  describe("9. Put team-alpha to sleep", () => {
+  describe("9. Test command action - help", () => {
+    it(
+      "should send /help command and get response",
+      async () => {
+        const result = await command(
+          {
+            team: "team-alpha",
+            command: "help",
+            waitForResponse: true,
+          },
+          iris,
+        );
+
+        expect(result).toBeDefined();
+        expect(result.team).toBe("team-alpha");
+        expect(result.command).toBe("/help");
+        expect(result.success).toBe(true);
+        expect(result.async).toBe(false);
+        expect(result.response).toBeTruthy();
+        expect(result.duration).toBeGreaterThan(0);
+
+        // Help command should return information about available commands
+        expect(result.response?.toLowerCase()).toContain("command");
+      },
+      sessionInitTimeout,
+    );
+  });
+
+  describe("10. Test command action - clear", () => {
+    it(
+      "should send /clear command",
+      async () => {
+        const result = await command(
+          {
+            team: "team-alpha",
+            command: "/clear", // Test with slash prefix
+            waitForResponse: true,
+            timeout: 10000,
+          },
+          iris,
+        );
+
+        expect(result).toBeDefined();
+        expect(result.team).toBe("team-alpha");
+        expect(result.command).toBe("/clear");
+        expect(result.success).toBe(true);
+        expect(result.response).toBeTruthy();
+      },
+      sessionInitTimeout,
+    );
+  });
+
+  describe("11. Test command action - async compact", () => {
+    it("should send /compact command asynchronously", async () => {
+      const result = await command(
+        {
+          team: "team-beta",
+          command: "compact",
+          waitForResponse: false,
+        },
+        iris,
+      );
+
+      expect(result).toBeDefined();
+      expect(result.team).toBe("team-beta");
+      expect(result.command).toBe("/compact");
+      expect(result.success).toBe(true);
+      expect(result.async).toBe(true);
+      expect(result.response).toBeUndefined();
+    });
+
+    // Wait a bit for async compact to process
+    it("should wait for async compact to process", async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Check that team-beta is still running after compact
+      const status = await isAwake(
+        { team: "team-beta" },
+        iris,
+        processPool,
+        configManager,
+      );
+
+      expect(status.teams[0].status).toBe("awake");
+    });
+  });
+
+  describe("12. Put team-alpha to sleep", () => {
     it("should put team-alpha to sleep", async () => {
       const result = await sleep({ team: "team-alpha" }, processPool);
 
@@ -247,7 +335,7 @@ describe("Actions Integration Tests", () => {
     });
   });
 
-  describe("10. Verify team-alpha is asleep", () => {
+  describe("13. Verify team-alpha is asleep", () => {
     it("should confirm team-alpha is now asleep", async () => {
       const result = await isAwake(
         { team: "team-alpha" },
@@ -262,7 +350,7 @@ describe("Actions Integration Tests", () => {
     });
   });
 
-  describe("11. Re-wake team-alpha", () => {
+  describe("14. Re-wake team-alpha", () => {
     it(
       "should wake team-alpha again",
       async () => {
@@ -281,7 +369,7 @@ describe("Actions Integration Tests", () => {
     );
   });
 
-  describe("12. Final status check", () => {
+  describe("15. Final status check", () => {
     it("should show final state of all teams", async () => {
       const result = await isAwake({}, iris, processPool, configManager);
 

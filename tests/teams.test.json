@@ -1,0 +1,24 @@
+{
+  "settings": {
+    "idleTimeout": 300000,
+    "maxProcesses": 10,
+    "healthCheckInterval": 30000,
+    "sessionInitTimeout": 60000,
+    "httpPort": 1616,
+    "defaultTransport": "stdio"
+  },
+  "teams": {
+    "team-alpha": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/teams/team-alpha",
+      "description": "Iris MCP Team Alpha - testing team",
+      "skipPermissions": true,
+      "color": "#4CAF50"
+    },
+    "team-beta": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp/teams/team-beta",
+      "description": "Iris MCP Team Beta - testing team",
+      "skipPermissions": true,
+      "color": "#4CAAF0"
+    }
+  }
+}

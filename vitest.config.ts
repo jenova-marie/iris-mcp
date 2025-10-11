@@ -1,11 +1,19 @@
 import { defineConfig } from "vitest/config";
+import { resolve } from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    setupFiles: ["./tests/setup.ts"],
     env: {
       NODE_ENV: "test",
+      IRIS_HOME: resolve(__dirname, "tests"),
     },
     testTimeout: 30000, // 20 seconds default (enough for single Claude spawn + response)
     hookTimeout: 15000, // 15 seconds for beforeEach/afterEach (session manager init)

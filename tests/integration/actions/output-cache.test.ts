@@ -283,8 +283,9 @@ describe("Output Cache with Async Messages", () => {
 
       // Get detailed cache report to debug
       const process = processPool.getProcess("team-alpha");
-      const cacheReport = process?.cache?.getReport();
-      const allMessages = process?.cache?.getRecentMessages(10);
+      const cache = process?.getCache();
+      const cacheReport = cache?.getReport();
+      const allMessages = cache?.getRecentMessages(10);
 
       logger.info("Cache after multiple async messages", {
         stdoutLength: finalCache.stdout.length,

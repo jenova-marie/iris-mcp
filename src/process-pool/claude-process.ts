@@ -341,6 +341,14 @@ export class ClaudeProcess extends EventEmitter {
   }
 
   /**
+   * Get the cache instance for advanced querying
+   * Useful for debugging and testing
+   */
+  getCache(): ClaudeCache {
+    return this.cache;
+  }
+
+  /**
    * Get a report of recent messages and cache status
    * Useful for monitoring and debugging
    */

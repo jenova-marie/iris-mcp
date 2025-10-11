@@ -1,8 +1,6 @@
 <div align="center">
   <img src="resources/iris-mcp.png" alt="Iris MCP Logo" width="200" height="200">
-
-  # Iris MCP
-
+---
   **Model Context Protocol server for cross-project Claude Code coordination**
 
   [![Build Status](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml)

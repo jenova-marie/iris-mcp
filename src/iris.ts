@@ -291,6 +291,7 @@ export class IrisOrchestrator {
    */
   async shutdown(): Promise<void> {
     logger.info("Shutting down Iris orchestrator");
+    this.asyncQueue.shutdown();
     await this.processPool.terminateAll();
     this.sessionManager.close();
   }

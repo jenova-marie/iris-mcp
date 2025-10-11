@@ -27,6 +27,10 @@ describe("tell", () => {
     mockIris = {
       sendMessage: vi.fn(),
       clearOutputCache: vi.fn(),
+      isAwake: vi.fn().mockReturnValue(true),
+      getAsyncQueue: vi.fn().mockReturnValue({
+        enqueue: vi.fn().mockReturnValue("task-id-123"),
+      }),
     } as unknown as IrisOrchestrator;
   });
 
@@ -111,8 +115,6 @@ describe("tell", () => {
 
   describe("asynchronous mode (waitForResponse=false)", () => {
     it("should send message without waiting", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue(undefined);
-
       const result = await tell(
         {
           toTeam: "team-alpha",
@@ -122,42 +124,49 @@ describe("tell", () => {
         mockIris
       );
 
+      // In async mode, message is enqueued to AsyncQueue, not sent via sendMessage
+      expect(mockIris.isAwake).toHaveBeenCalledWith(null, "team-alpha");
+      expect(mockIris.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+
+      const mockQueue = vi.mocked(mockIris.getAsyncQueue());
+      expect(mockQueue.enqueue).toHaveBeenCalledWith({
+        type: "tell",
+        fromTeam: null,
+        toTeam: "team-alpha",
+        content: "Async message",
+        timeout: 30000,
+      });
+
       expect(result).toMatchObject({
         to: "team-alpha",
         message: "Async message",
         timestamp: expect.any(Number),
         async: true,
+        taskId: "task-id-123",
       });
       expect(result.response).toBeUndefined();
       expect(result.duration).toBeUndefined();
-
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        "Async message",
-        { timeout: 30000, waitForResponse: false }
-      );
     });
 
     it("should ignore timeout in async mode", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue(undefined);
-
       await tell(
         {
           toTeam: "team-alpha",
           message: "Async",
           waitForResponse: false,
-          timeout: 60000, // Should still be passed through
+          timeout: 60000, // Should still be passed through to AsyncQueue
         },
         mockIris
       );
 
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        "Async",
-        { timeout: 60000, waitForResponse: false }
-      );
+      const mockQueue = vi.mocked(mockIris.getAsyncQueue());
+      expect(mockQueue.enqueue).toHaveBeenCalledWith({
+        type: "tell",
+        fromTeam: null,
+        toTeam: "team-alpha",
+        content: "Async",
+        timeout: 60000,
+      });
     });
   });
 

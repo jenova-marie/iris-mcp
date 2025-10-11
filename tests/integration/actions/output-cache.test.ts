@@ -71,6 +71,7 @@ describe("Output Cache with Async Messages", () => {
       maxProcesses: teamsConfig.settings.maxProcesses,
       idleTimeout: teamsConfig.settings.idleTimeout,
       healthCheckInterval: teamsConfig.settings.healthCheckInterval,
+      sessionInitTimeout: teamsConfig.settings.sessionInitTimeout,
     });
 
     iris = new IrisOrchestrator(sessionManager, processPool);

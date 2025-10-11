@@ -22,6 +22,7 @@ import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
 import { SessionManager } from "./session/session-manager.js";
 import { IrisOrchestrator } from "./iris.js";
 import { Logger } from "./utils/logger.js";
+import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { tell } from "./actions/tell.js";
 import { isAwake } from "./actions/isAwake.js";
 import { wake } from "./actions/wake.js";
@@ -227,6 +228,9 @@ class IrisMcpServer {
     this.setupEventListeners();
 
     logger.info("Iris MCP Server initialized", {
+      irisHome: getIrisHome(),
+      configPath: getConfigPath(),
+      dataDir: getDataDir(),
       teams: Object.keys(config.teams),
       maxProcesses: config.settings.maxProcesses,
     });

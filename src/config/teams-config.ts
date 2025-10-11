@@ -1,20 +1,17 @@
 /**
  * Iris MCP - Teams Configuration Loader
- * Loads and validates teams.json configuration with Zod
+ * Loads and validates config.json configuration with Zod
  */
 
 import { readFileSync, existsSync, watchFile } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { resolve } from 'path';
 import { z } from 'zod';
 import type { TeamsConfig } from '../process-pool/types.js';
 import { Logger } from '../utils/logger.js';
 import { ConfigurationError } from '../utils/errors.js';
+import { getConfigPath, ensureIrisHome } from '../utils/paths.js';
 
 const logger = new Logger('config');
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // Zod schema for validation
 const TeamConfigSchema = z.object({
@@ -47,16 +44,18 @@ export class TeamsConfigManager {
   private watchCallback?: (config: TeamsConfig) => void;
 
   constructor(configPath?: string) {
-    // Default to teams.json in project root
-    // Use IRIS_CONFIG_PATH env var, or resolve relative to this module's directory
+    // Use provided path, or IRIS_CONFIG_PATH env var, or default to $IRIS_HOME/config.json (or ~/.iris/config.json)
     if (configPath) {
       this.configPath = configPath;
     } else if (process.env.IRIS_CONFIG_PATH) {
       this.configPath = resolve(process.env.IRIS_CONFIG_PATH);
     } else {
-      // Resolve relative to the dist directory (2 levels up from config/)
-      this.configPath = resolve(__dirname, '../../teams.json');
+      // Use $IRIS_HOME/config.json or ~/.iris/config.json
+      this.configPath = getConfigPath();
     }
+
+    // Ensure IRIS_HOME directory structure exists
+    ensureIrisHome();
   }
 
   /**
@@ -67,7 +66,8 @@ export class TeamsConfigManager {
       if (!existsSync(this.configPath)) {
         throw new ConfigurationError(
           `Configuration file not found: ${this.configPath}\n` +
-          'Create teams.json from teams.example.json'
+          'Create config.json at $IRIS_HOME/config.json (or ~/.iris/config.json)\n' +
+          'You can use teams.example.json as a template or set $IRIS_HOME to a custom location'
         );
       }
 

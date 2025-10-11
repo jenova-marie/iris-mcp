@@ -9,6 +9,7 @@ import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "fs";
 import { dirname, resolve } from "path";
 import { Logger } from "../utils/logger.js";
+import { getSessionDbPath } from "../utils/paths.js";
 import type {
   SessionInfo,
   SessionRow,
@@ -24,9 +25,9 @@ const logger = new Logger("session-store");
 export class SessionStore {
   private db: Database.Database;
 
-  constructor(dbPath = "./data/team-sessions.db") {
-    // Convert to absolute path to ensure database is created in correct location
-    const absoluteDbPath = resolve(dbPath);
+  constructor(dbPath?: string) {
+    // Use provided path or default to $IRIS_HOME/data/team-sessions.db (or ~/.iris/data/team-sessions.db)
+    const absoluteDbPath = dbPath ? resolve(dbPath) : getSessionDbPath();
 
     // Ensure data directory exists
     const dataDir = dirname(absoluteDbPath);

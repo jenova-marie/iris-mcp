@@ -10,6 +10,7 @@
 
 import { SessionManager } from "./session/session-manager.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
+import { AsyncQueue } from "./async/queue.js";
 import { Logger } from "./utils/logger.js";
 
 const logger = new Logger("iris");
@@ -40,10 +41,14 @@ export interface IrisStatus {
  * - Status reporting
  */
 export class IrisOrchestrator {
+  private asyncQueue: AsyncQueue;
+
   constructor(
     private sessionManager: SessionManager,
     private processPool: ClaudeProcessPool,
-  ) {}
+  ) {
+    this.asyncQueue = new AsyncQueue(this);
+  }
 
   /**
    * Send a message from one team to another
@@ -231,6 +236,13 @@ export class IrisOrchestrator {
    */
   getOutputCache(teamName: string): { stdout: string; stderr: string } | null {
     return this.processPool.getOutputCache(teamName);
+  }
+
+  /**
+   * Get the async queue for direct access (e.g., stats, enqueueing)
+   */
+  getAsyncQueue(): AsyncQueue {
+    return this.asyncQueue;
   }
 
   /**

@@ -209,8 +209,19 @@ describe("Output Cache with Async Messages", () => {
     async () => {
       logger.info("Testing multiple async messages");
 
-      // Clear cache first
-      await iris.clearOutputCache("team-alpha");
+      // First ensure the process is spawned and ready with a sync message
+      await tell(
+        {
+          toTeam: "team-alpha",
+          message: "ping", // Simple message to wake up the process
+          fromTeam: undefined,
+          waitForResponse: true,
+          clearCache: true, // Start with clean cache
+        },
+        iris,
+      );
+
+      logger.info("Process warmed up, sending async messages");
 
       // Send multiple async messages
       const messages = [
@@ -234,9 +245,32 @@ describe("Output Cache with Async Messages", () => {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      // Wait for all messages to process
+      // Wait for all messages to process by polling the AsyncQueue
       logger.info("Waiting for all async messages to process...");
-      await new Promise((resolve) => setTimeout(resolve, 10000)); // Increased wait time
+      const maxWaitTime = 30000; // 30 second max
+      const pollInterval = 1000; // Check every second
+      const startTime = Date.now();
+
+      let allProcessed = false;
+      while (Date.now() - startTime < maxWaitTime) {
+        const queueStats = iris.getAsyncQueue().getQueueStats("team-alpha");
+        logger.info("Polling AsyncQueue", {
+          pending: queueStats?.pending || 0,
+          processed: queueStats?.processed || 0,
+        });
+
+        if (!queueStats || queueStats.pending === 0) {
+          allProcessed = true;
+          logger.info("All async messages processed");
+          break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
+
+      if (!allProcessed) {
+        logger.warn("Timeout waiting for async messages to complete");
+      }
 
       // Report at the final output cache
       const finalCache = await report(
@@ -247,10 +281,22 @@ describe("Output Cache with Async Messages", () => {
         processPool,
       );
 
+      // Get detailed cache report to debug
+      const process = processPool.getProcess("team-alpha");
+      const cacheReport = process?.cache?.getReport();
+      const allMessages = process?.cache?.getRecentMessages(10);
+
       logger.info("Cache after multiple async messages", {
         stdoutLength: finalCache.stdout.length,
         stderrLength: finalCache.stderr.length,
         totalBytes: finalCache.totalBytes,
+        cacheReport: cacheReport,
+        allMessages: allMessages?.map(m => ({
+          id: m.id,
+          status: m.status,
+          requestPreview: m.request.substring(0, 50),
+          responsePreview: m.response.substring(0, 100),
+        })),
       });
 
       // The cache should contain output from all messages
@@ -274,7 +320,7 @@ describe("Output Cache with Async Messages", () => {
       await tell(
         {
           toTeam: "team-alpha",
-          message: "echo 'Initial cache content'",
+          message: "Please say exactly: 'Initial cache content'",
           fromTeam: undefined,
           waitForResponse: true,
           clearCache: true, // Clear initially
@@ -286,7 +332,7 @@ describe("Output Cache with Async Messages", () => {
       await tell(
         {
           toTeam: "team-alpha",
-          message: "echo 'Should be added to cache'",
+          message: "Please say exactly: 'Should be added to cache'",
           fromTeam: undefined,
           waitForResponse: false,
           clearCache: false, // Preserve existing cache
@@ -294,8 +340,26 @@ describe("Output Cache with Async Messages", () => {
         iris,
       );
 
-      // Wait for async processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Wait for async processing by polling AsyncQueue
+      logger.info("Waiting for async message to process...");
+      const maxWaitTime = 15000; // 15 second max
+      const pollInterval = 1000; // Check every second
+      const startTime = Date.now();
+
+      let allProcessed = false;
+      while (Date.now() - startTime < maxWaitTime) {
+        const queueStats = iris.getAsyncQueue().getQueueStats("team-alpha");
+        if (!queueStats || queueStats.pending === 0) {
+          allProcessed = true;
+          logger.info("Async message processed");
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      }
+
+      if (!allProcessed) {
+        logger.warn("Timeout waiting for async message to complete");
+      }
 
       // Check cache
       const cache = await report(

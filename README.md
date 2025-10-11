@@ -1,8 +1,18 @@
-# Iris MCP 🌈
+<div align="center">
+  <img src="resources/iris-mcp.png" alt="Iris MCP Logo" width="200" height="200">
 
-**Model Context Protocol server for cross-project Claude Code coordination**
+  # Iris MCP
 
-Iris MCP enables Claude Code instances across different project directories to communicate and coordinate. Stay in one project while asking questions to teams in other codebases.
+  **Model Context Protocol server for cross-project Claude Code coordination**
+
+  [![Build Status](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml)
+  [![Test Coverage](https://github.com/jenova-marie/iris-mcp/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/jenova-marie/iris-mcp/actions)
+  [![npm version](https://badge.fury.io/js/@iris-mcp%2Fserver.svg)](https://badge.fury.io/js/@iris-mcp%2Fserver)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+  [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+  Iris MCP enables Claude Code instances across different project directories to communicate and coordinate. Stay in one project while asking questions to teams in other codebases.
+</div>
 
 ---
 
@@ -62,11 +72,14 @@ Claude (in frontend) → Iris MCP → Claude (in backend) → analyzes backend c
 ### Installation
 
 ```bash
-# Install globally
+# Install globally from npm
 npm install -g @iris-mcp/server
 
-# Or use locally
-git clone https://github.com/your-org/iris-mcp
+# Or install locally in your project
+npm install @iris-mcp/server
+
+# Or clone and build from source
+git clone https://github.com/jenova-marie/iris-mcp
 cd iris-mcp
 pnpm install
 pnpm build
@@ -746,13 +759,43 @@ See `src/intelligence/README.md`
 
 ## 🤝 Contributing
 
-Contributions welcome! This is Phase 1 - there's lots of exciting work ahead.
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+### How to Contribute
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+### Development Setup
+
+```bash
+# Clone your fork
+git clone https://github.com/your-username/iris-mcp
+cd iris-mcp
+
+# Install dependencies
+pnpm install
+
+# Run tests
+pnpm test
+
+# Run in watch mode
+pnpm dev
+
+# Build the project
+pnpm build
+```
+
+Please ensure all tests pass before submitting a PR.
 
 ---
 
 ## 📄 License
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details
 
 ---
 

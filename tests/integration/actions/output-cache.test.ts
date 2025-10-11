@@ -20,7 +20,7 @@ describe("Output Cache with Async Messages", () => {
   let sessionManager: SessionManager;
   let processPool: ClaudeProcessPool;
   let configManager: TeamsConfigManager;
-  const testConfigPath = "./tests/teams.test.json";
+  const testConfigPath = "./tests/config.json";
   const testDbPath = "./tests/data/test-output-cache.db";
 
   // Load config early to get timeout value

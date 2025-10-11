@@ -18,7 +18,7 @@ describe("ClaudeProcess Integration", () => {
   };
 
   // Load config early to get timeout value
-  const testConfigPath = "./tests/teams.test.json";
+  const testConfigPath = "./tests/config.json";
   const tempConfigManager = new TeamsConfigManager(testConfigPath);
   tempConfigManager.load();
   const sessionInitTimeout = tempConfigManager.getConfig().settings.sessionInitTimeout;

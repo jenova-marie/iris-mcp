@@ -11,7 +11,7 @@ import { TeamsConfigManager } from "../../../src/config/teams-config.js";
 describe("SessionManager Integration", () => {
   let manager: SessionManager;
   let configManager: TeamsConfigManager;
-  const testConfigPath = "./tests/teams.test.json"; // Use test teams config
+  const testConfigPath = "./tests/config.json"; // Use test teams config
   const testDbPath = "./tests/data/test-integration-session-manager.db";
 
   // Load config early to get timeout value

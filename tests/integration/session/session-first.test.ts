@@ -19,7 +19,7 @@ describe("Session-First Message Test (Isolate Pong Bug)", () => {
   let pool: ClaudeProcessPool;
   let configManager: TeamsConfigManager;
   let sessionManager: SessionManager;
-  const testConfigPath = "./tests/teams.test.json";
+  const testConfigPath = "./tests/config.json";
   const testSessionDbPath = "./tests/data/test-session-first.db";
 
   // Load config to get timeout

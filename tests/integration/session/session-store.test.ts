@@ -7,11 +7,12 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { existsSync, unlinkSync } from "fs";
+import { resolve } from "path";
 import { SessionStore } from "../../../src/session/session-store.js";
 
 describe("SessionStore Integration", () => {
   let store: SessionStore;
-  const testDbPath = "./tests/data/test-integration-session-store.db";
+  const testDbPath = resolve(process.cwd(), "tests/data/test-integration-session-store.db");
 
   beforeEach(() => {
     store = new SessionStore(testDbPath);

@@ -54,7 +54,11 @@ jobs:
       run: pnpm install --frozen-lockfile
 
     - name: Rebuild native modules
-      run: pnpm rebuild better-sqlite3
+      run: |
+        # Navigate to better-sqlite3 in pnpm store and rebuild from source
+        cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
+        npm run build-release
+        cd -
 
     - name: Lint code
       run: pnpm lint || true

@@ -213,9 +213,9 @@ describe("Output Cache with Async Messages", () => {
 
       // Send multiple async messages
       const messages = [
-        "echo 'First async message'",
-        "echo 'Second async message'",
-        "echo 'Third async message'",
+        "Please say exactly: 'First async message response'",
+        "Please say exactly: 'Second async message response'",
+        "Please say exactly: 'Third async message response'",
       ];
 
       for (const msg of messages) {
@@ -235,7 +235,7 @@ describe("Output Cache with Async Messages", () => {
 
       // Wait for all messages to process
       logger.info("Waiting for all async messages to process...");
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 10000)); // Increased wait time
 
       // Report at the final output cache
       const finalCache = await report(
@@ -257,9 +257,9 @@ describe("Output Cache with Async Messages", () => {
       expect(finalCache.totalBytes).toBeGreaterThan(0);
 
       const combinedOutput = finalCache.stdout + finalCache.stderr;
-      expect(combinedOutput).toContain("First async message");
-      expect(combinedOutput).toContain("Second async message");
-      expect(combinedOutput).toContain("Third async message");
+      expect(combinedOutput).toContain("First async message response");
+      expect(combinedOutput).toContain("Second async message response");
+      expect(combinedOutput).toContain("Third async message response");
     },
     sessionInitTimeout,
   );

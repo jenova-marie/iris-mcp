@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
 
 jobs:
@@ -16,83 +16,83 @@ jobs:
         node-version: [18.x, 20.x, 22.x]
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 10.14.0
-        run_install: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.14.0
+          run_install: false
 
-    - name: Setup Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'pnpm'
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "pnpm"
 
-    - name: Get pnpm store directory
-      id: pnpm-cache
-      shell: bash
-      run: |
-        echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
-    - name: Setup pnpm cache
-      uses: actions/cache@v3
-      with:
-        path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-        key: ${{ runner.os }}-node-${{ matrix.node-version }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-        restore-keys: |
-          ${{ runner.os }}-node-${{ matrix.node-version }}-pnpm-store-
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node-version }}-pnpm-store-
 
-    - name: Install build dependencies for native modules
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential python3
+      - name: Install build dependencies for native modules
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile --dangerously-allow-all-builds
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --dangerously-allow-all-builds
 
-    - name: Rebuild native modules
-      run: |
-        # Navigate to better-sqlite3 in pnpm store and rebuild from source
-        cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
-        npm run build-release
-        cd -
+      - name: Rebuild native modules
+        run: |
+          # Navigate to better-sqlite3 in pnpm store and rebuild from source
+          cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
+          npm run build-release
+          cd -
 
-    - name: Lint code
-      run: pnpm lint || true
+      - name: Lint code
+        run: pnpm lint || true
 
-    - name: Type check
-      run: pnpm tsc
+      - name: Type check
+        run: pnpm tsc
 
-    - name: Build
-      run: pnpm build
+      - name: Build
+        run: pnpm build
 
-    - name: Run unit tests
-      run: pnpm test:unit
+      - name: Run unit tests
+        run: pnpm test:unit
 
-    - name: Generate coverage report
-      if: matrix.node-version == '20.x'
-      run: pnpm test:unit --coverage
+      - name: Generate coverage report
+        if: matrix.node-version == '20.x'
+        run: pnpm test:unit --coverage
 
-    - name: Upload coverage to Codecov
-      if: matrix.node-version == '20.x'
-      uses: codecov/codecov-action@v3
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./coverage/coverage-final.json
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == '20.x'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage/coverage-final.json
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: true
 
   security:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Run security audit
-      run: |
-        npm install -g pnpm
-        pnpm audit || true
+      - name: Run security audit
+        run: |
+          npm install -g pnpm
+          pnpm audit || true

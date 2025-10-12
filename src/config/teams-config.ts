@@ -3,8 +3,9 @@
  * Loads and validates config.json configuration with Zod
  */
 
-import { readFileSync, existsSync, watchFile } from 'fs';
+import { readFileSync, existsSync, watchFile, copyFileSync } from 'fs';
 import { resolve, dirname, isAbsolute } from 'path';
+import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import type { TeamsConfig } from '../process-pool/types.js';
 import { Logger } from '../utils/logger.js';
@@ -38,6 +39,55 @@ const TeamsConfigSchema = z.object({
   teams: z.record(z.string(), TeamConfigSchema),
 });
 
+/**
+ * Copy config.default.json to config.json
+ */
+function createDefaultConfig(configPath: string): void {
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = dirname(__filename);
+  const defaultConfigPath = resolve(__dirname, '../config.default.json');
+
+  if (!existsSync(defaultConfigPath)) {
+    throw new ConfigurationError(
+      `Default configuration template not found: ${defaultConfigPath}`
+    );
+  }
+
+  copyFileSync(defaultConfigPath, configPath);
+  logger.info('Created default configuration', { path: configPath });
+}
+
+/**
+ * Output instructions for configuring teams and exit
+ */
+function outputInstructionsAndExit(configPath: string): never {
+  console.error('\n╔════════════════════════════════════════════════════════════════════╗');
+  console.error('║           Iris MCP - Configuration Required                       ║');
+  console.error('╚════════════════════════════════════════════════════════════════════╝\n');
+  console.error(`Configuration file: ${configPath}\n`);
+  console.error('No teams are configured. Please add team entries to the "teams" object.\n');
+  console.error('Example configuration:\n');
+  console.error('  "teams": {');
+  console.error('    "frontend": {');
+  console.error('      "path": "/absolute/path/to/your/project",');
+  console.error('      "description": "Frontend application"');
+  console.error('    },');
+  console.error('    "backend": {');
+  console.error('      "path": "/absolute/path/to/backend",');
+  console.error('      "description": "Backend API service",');
+  console.error('      "idleTimeout": 600000,');
+  console.error('      "skipPermissions": false,');
+  console.error('      "color": "#FF6B6B"');
+  console.error('    }');
+  console.error('  }\n');
+  console.error('Optional team properties:');
+  console.error('  - idleTimeout: milliseconds before process stops (default: 300000)');
+  console.error('  - skipPermissions: auto-approve Claude actions (default: false)');
+  console.error('  - color: hex color for UI (e.g., "#FF6B6B")\n');
+
+  process.exit(0);
+}
+
 export class TeamsConfigManager {
   private config: TeamsConfig | null = null;
   private configPath: string;
@@ -63,12 +113,13 @@ export class TeamsConfigManager {
    */
   load(): TeamsConfig {
     try {
+      // Step 1: If config.json doesn't exist, copy default and exit with instructions
       if (!existsSync(this.configPath)) {
-        throw new ConfigurationError(
-          `Configuration file not found: ${this.configPath}\n` +
-          'Create config.json at $IRIS_HOME/config.json (or ~/.iris/config.json)\n' +
-          'You can use teams.example.json as a template or set $IRIS_HOME to a custom location'
-        );
+        logger.info('Configuration file not found, creating from defaults', {
+          path: this.configPath
+        });
+        createDefaultConfig(this.configPath);
+        outputInstructionsAndExit(this.configPath);
       }
 
       const content = readFileSync(this.configPath, 'utf8');
@@ -76,6 +127,12 @@ export class TeamsConfigManager {
 
       // Validate with Zod
       const validated = TeamsConfigSchema.parse(parsed);
+
+      // Step 2: If no teams configured, output instructions and exit
+      if (Object.keys(validated.teams).length === 0) {
+        logger.warn('No teams configured in config file');
+        outputInstructionsAndExit(this.configPath);
+      }
 
       // Resolve team paths relative to config file directory
       const configDir = dirname(resolve(this.configPath));

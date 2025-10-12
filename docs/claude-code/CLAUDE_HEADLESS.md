@@ -35,6 +35,11 @@ Headless mode leverages all the CLI options available in Claude Code. Here are t
 | `--permission-prompt-tool` | MCP tool for handling permission prompts (only with `--print`) | `claude --permission-prompt-tool mcp__auth__prompt` |
 | `--dangerously-skip-permissions` | Skip all permission prompts (dangerous!) | `claude --dangerously-skip-permissions` |
 
+## statistics
+
+Context Usage Information
+While you can't use /context in headless mode, the final JSON result message in streaming mode includes metrics like total_cost_usd, duration_ms, and num_turns Headless mode - Claude Docs, which provides some usage information - though not the detailed breakdown that /context offers in interactive mode.
+
 ## Multi-turn Conversations
 
 For multi-turn conversations, you can resume conversations or continue from the most recent session:

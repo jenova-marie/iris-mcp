@@ -3,9 +3,8 @@
  * Loads and validates config.json configuration with Zod
  */
 
-import { readFileSync, existsSync, watchFile, copyFileSync } from 'fs';
+import { readFileSync, existsSync, watchFile } from 'fs';
 import { resolve, dirname, isAbsolute } from 'path';
-import { fileURLToPath } from 'url';
 import { z } from 'zod';
 import type { TeamsConfig } from '../process-pool/types.js';
 import { Logger } from '../utils/logger.js';
@@ -39,54 +38,6 @@ const TeamsConfigSchema = z.object({
   teams: z.record(z.string(), TeamConfigSchema),
 });
 
-/**
- * Copy config.default.json to config.json
- */
-function createDefaultConfig(configPath: string): void {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
-  const defaultConfigPath = resolve(__dirname, '../config.default.json');
-
-  if (!existsSync(defaultConfigPath)) {
-    throw new ConfigurationError(
-      `Default configuration template not found: ${defaultConfigPath}`
-    );
-  }
-
-  copyFileSync(defaultConfigPath, configPath);
-  logger.info('Created default configuration', { path: configPath });
-}
-
-/**
- * Output instructions for configuring teams and exit
- */
-function outputInstructionsAndExit(configPath: string): never {
-  console.error('\n╔════════════════════════════════════════════════════════════════════╗');
-  console.error('║           Iris MCP - Configuration Required                       ║');
-  console.error('╚════════════════════════════════════════════════════════════════════╝\n');
-  console.error(`Configuration file: ${configPath}\n`);
-  console.error('No teams are configured. Please add team entries to the "teams" object.\n');
-  console.error('Example configuration:\n');
-  console.error('  "teams": {');
-  console.error('    "frontend": {');
-  console.error('      "path": "/absolute/path/to/your/project",');
-  console.error('      "description": "Frontend application"');
-  console.error('    },');
-  console.error('    "backend": {');
-  console.error('      "path": "/absolute/path/to/backend",');
-  console.error('      "description": "Backend API service",');
-  console.error('      "idleTimeout": 600000,');
-  console.error('      "skipPermissions": false,');
-  console.error('      "color": "#FF6B6B"');
-  console.error('    }');
-  console.error('  }\n');
-  console.error('Optional team properties:');
-  console.error('  - idleTimeout: milliseconds before process stops (default: 300000)');
-  console.error('  - skipPermissions: auto-approve Claude actions (default: false)');
-  console.error('  - color: hex color for UI (e.g., "#FF6B6B")\n');
-
-  process.exit(0);
-}
 
 export class TeamsConfigManager {
   private config: TeamsConfig | null = null;
@@ -113,13 +64,18 @@ export class TeamsConfigManager {
    */
   load(): TeamsConfig {
     try {
-      // Step 1: If config.json doesn't exist, copy default and exit with instructions
+      // Check if config file exists
       if (!existsSync(this.configPath)) {
-        logger.info('Configuration file not found, creating from defaults', {
-          path: this.configPath
-        });
-        createDefaultConfig(this.configPath);
-        outputInstructionsAndExit(this.configPath);
+        console.error('\n╔════════════════════════════════════════════════════════════════════╗');
+        console.error('║           Iris MCP - Configuration Not Found                      ║');
+        console.error('╚════════════════════════════════════════════════════════════════════╝\n');
+        console.error(`Configuration file not found: ${this.configPath}\n`);
+        console.error('Run the install command to create the default configuration:\n');
+        console.error('  $ iris install\n');
+        console.error('This will:');
+        console.error('  1. Create the Iris MCP configuration file');
+        console.error('  2. Install Iris to your Claude CLI configuration\n');
+        process.exit(0);
       }
 
       const content = readFileSync(this.configPath, 'utf8');
@@ -128,10 +84,20 @@ export class TeamsConfigManager {
       // Validate with Zod
       const validated = TeamsConfigSchema.parse(parsed);
 
-      // Step 2: If no teams configured, output instructions and exit
+      // Check if teams are configured
       if (Object.keys(validated.teams).length === 0) {
-        logger.warn('No teams configured in config file');
-        outputInstructionsAndExit(this.configPath);
+        console.error('\n╔════════════════════════════════════════════════════════════════════╗');
+        console.error('║           Iris MCP - No Teams Configured                          ║');
+        console.error('╚════════════════════════════════════════════════════════════════════╝\n');
+        console.error(`Configuration file: ${this.configPath}\n`);
+        console.error('No teams are configured. Add teams to get started:\n');
+        console.error('Add a team using current directory:');
+        console.error('  $ iris add-team <name>\n');
+        console.error('Add a team with specific path:');
+        console.error('  $ iris add-team <name> /path/to/project\n');
+        console.error('Show add-team help:');
+        console.error('  $ iris add-team --help\n');
+        process.exit(0);
       }
 
       // Resolve team paths relative to config file directory

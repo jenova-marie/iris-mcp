@@ -86,11 +86,7 @@ export async function wake(
         clearCache
       });
 
-      // Clear cache if requested
-      if (clearCache) {
-        processPool.clearOutputCache(team);
-        logger.debug("Output cache cleared for awake team", { team });
-      }
+      // No cache to clear in bare-bones mode
 
       return {
         team,
@@ -113,11 +109,7 @@ export async function wake(
       const process = await processPool.getOrCreateProcess(team, session.sessionId);
       const metrics = process.getMetrics();
 
-      // Clear cache if requested (after spawning)
-      if (clearCache) {
-        processPool.clearOutputCache(team);
-        logger.debug("Output cache cleared for newly woken team", { team });
-      }
+      // No cache to clear in bare-bones mode
 
       const duration = Date.now() - startTime;
 

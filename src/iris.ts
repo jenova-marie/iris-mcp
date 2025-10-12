@@ -225,20 +225,6 @@ export class IrisOrchestrator {
   }
 
   /**
-   * Clear output cache for a team
-   */
-  async clearOutputCache(teamName: string): Promise<void> {
-    this.processPool.clearOutputCache(teamName);
-  }
-
-  /**
-   * Get output cache for a team
-   */
-  getOutputCache(teamName: string): { stdout: string; stderr: string } | null {
-    return this.processPool.getOutputCache(teamName);
-  }
-
-  /**
    * Get the async queue for direct access (e.g., stats, enqueueing)
    */
   getAsyncQueue(): AsyncQueue {

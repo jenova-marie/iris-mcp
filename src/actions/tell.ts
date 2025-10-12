@@ -167,11 +167,7 @@ export async function tell(
       };
     }
 
-    // Clear cache if requested (before enqueueing)
-    if (clearCache) {
-      await iris.clearOutputCache(toTeam);
-      logger.debug("Output cache cleared before async tell", { toTeam });
-    }
+    // No cache to clear in bare-bones mode
 
     // Enqueue to AsyncQueue for processing
     try {
@@ -209,11 +205,7 @@ export async function tell(
   const startTime = Date.now();
 
   try {
-    // Clear cache if requested (before sending the message)
-    if (clearCache) {
-      await iris.clearOutputCache(toTeam);
-      logger.debug("Output cache cleared before tell", { toTeam });
-    }
+    // No cache to clear in bare-bones mode
 
     const response = await iris.sendMessage(fromTeam || null, toTeam, message, {
       timeout,

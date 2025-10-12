@@ -107,11 +107,7 @@ export async function sleep(
     });
 
     try {
-      // Clear cache if requested (before terminating)
-      if (clearCache) {
-        processPool.clearOutputCache(team);
-        logger.debug("Output cache cleared before sleep", { team });
-      }
+      // No cache to clear in bare-bones mode
 
       // Terminate the process
       await processPool.terminateProcess(team);

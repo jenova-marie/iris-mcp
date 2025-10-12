@@ -59,38 +59,15 @@ export async function report(
       throw new ConfigurationError(`Unknown team: ${team}`);
     }
 
-    // Get the output cache
-    const cache = processPool.getOutputCache(team);
-
-    if (!cache) {
-      // No process running for this team
-      logger.info("No active process for team", { team });
-
-      return {
-        team,
-        stdout: "",
-        stderr: "",
-        hasProcess: false,
-        totalBytes: 0,
-        timestamp: Date.now(),
-      };
-    }
-
-    const totalBytes = cache.stdout.length + cache.stderr.length;
-
-    logger.info("Retrieved output cache", {
-      team,
-      stdoutLength: cache.stdout.length,
-      stderrLength: cache.stderr.length,
-      totalBytes,
-    });
+    // No caching in bare-bones mode - all responses are streamed directly
+    logger.info("Report requested but caching disabled", { team, fromTeam });
 
     return {
       team,
-      stdout: cache.stdout,
-      stderr: cache.stderr,
-      hasProcess: true,
-      totalBytes,
+      stdout: "",
+      stderr: "",
+      hasProcess: false,
+      totalBytes: 0,
       timestamp: Date.now(),
     };
   } catch (error) {

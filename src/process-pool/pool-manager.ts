@@ -197,30 +197,6 @@ export class ClaudeProcessPool extends EventEmitter {
   }
 
   /**
-   * Clear output cache for a specific team's process
-   */
-  clearOutputCache(teamName: string): void {
-    const process = this.getProcess(teamName);
-    if (process) {
-      process.clearOutputCache();
-      this.logger.debug("Output cache cleared for team", { teamName });
-    } else {
-      this.logger.warn("No process found to clear cache", { teamName });
-    }
-  }
-
-  /**
-   * Get output cache for a specific team's process
-   */
-  getOutputCache(teamName: string): { stdout: string; stderr: string } | null {
-    const process = this.getProcess(teamName);
-    if (process) {
-      return process.getOutputCache();
-    }
-    return null;
-  }
-
-  /**
    * Get pool status with session information
    */
   getStatus(): ProcessPoolStatus {

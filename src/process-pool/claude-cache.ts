@@ -12,14 +12,14 @@ import { Logger } from "../utils/logger.js";
  * Represents a single message exchange with Claude
  */
 export interface MessageExchange {
-  id: string;                                    // Unique identifier
-  request: string;                                // What was sent to Claude
-  response: string;                               // What Claude responded (accumulating)
-  status: 'pending' | 'streaming' | 'completed' | 'error';
+  id: string; // Unique identifier
+  request: string; // What was sent to Claude
+  response: string; // What Claude responded (accumulating)
+  status: "pending" | "streaming" | "completed" | "error";
   startTime: Date;
   endTime?: Date;
-  duration?: number;                             // Duration in milliseconds
-  error?: string;                                // Error message if failed
+  duration?: number; // Duration in milliseconds
+  error?: string; // Error message if failed
   metadata?: {
     tokenCount?: number;
     cost?: number;
@@ -32,11 +32,11 @@ export interface MessageExchange {
  */
 export interface ProtocolMessage {
   timestamp: Date;
-  type: string;                                  // e.g., "system", "stream_event", "assistant"
-  subtype?: string;                              // e.g., "init", "message_start"
-  raw: string;                                   // Original JSON string
-  parsed: any;                                    // Parsed JSON object
-  messageId?: string;                            // Link to MessageExchange.id
+  type: string; // e.g., "system", "stream_event", "assistant"
+  subtype?: string; // e.g., "init", "message_start"
+  raw: string; // Original JSON string
+  parsed: any; // Parsed JSON object
+  messageId?: string; // Link to MessageExchange.id
 }
 
 /**
@@ -60,10 +60,10 @@ export interface CacheReport {
  * Configuration for the cache
  */
 export interface CacheConfig {
-  maxMessages?: number;                          // Max message exchanges to keep (default: 100)
-  maxProtocolMessages?: number;                  // Max protocol messages to keep (default: 500)
-  maxMessageAge?: number;                        // Max age in milliseconds (default: 1 hour)
-  preserveErrors?: boolean;                      // Keep error messages longer (default: true)
+  maxMessages?: number; // Max message exchanges to keep (default: 100)
+  maxProtocolMessages?: number; // Max protocol messages to keep (default: 500)
+  maxMessageAge?: number; // Max age in milliseconds (default: 1 hour)
+  preserveErrors?: boolean; // Keep error messages longer (default: true)
 }
 
 /**
@@ -82,9 +82,6 @@ export class ClaudeCache {
   private messageIdCounter = 0;
   private logger: Logger;
   private config: Required<CacheConfig>;
-
-  // Legacy support - stderr is still just a string
-  private stderrCache = "";
 
   constructor(teamName: string, config: CacheConfig = {}) {
     this.logger = new Logger(`cache:${teamName}`);
@@ -106,14 +103,17 @@ export class ClaudeCache {
       id,
       request,
       response: "",
-      status: 'pending',
+      status: "pending",
       startTime: new Date(),
     };
 
     this.messages.push(this.currentMessage);
     this.enforceMessageLimit();
 
-    this.logger.debug("Started tracking message", { id, requestPreview: request.substring(0, 50) });
+    this.logger.debug("Started tracking message", {
+      id,
+      requestPreview: request.substring(0, 50),
+    });
     return id;
   }
 
@@ -121,8 +121,8 @@ export class ClaudeCache {
    * Update the current message as streaming
    */
   markMessageStreaming(): void {
-    if (this.currentMessage && this.currentMessage.status === 'pending') {
-      this.currentMessage.status = 'streaming';
+    if (this.currentMessage && this.currentMessage.status === "pending") {
+      this.currentMessage.status = "streaming";
     }
   }
 
@@ -132,8 +132,8 @@ export class ClaudeCache {
   appendToCurrentMessage(text: string): void {
     if (this.currentMessage) {
       this.currentMessage.response += text;
-      if (this.currentMessage.status === 'pending') {
-        this.currentMessage.status = 'streaming';
+      if (this.currentMessage.status === "pending") {
+        this.currentMessage.status = "streaming";
       }
     } else {
       this.logger.warn("No current message to append to");
@@ -153,10 +153,11 @@ export class ClaudeCache {
       this.currentMessage.response = finalResponse;
     }
 
-    this.currentMessage.status = 'completed';
+    this.currentMessage.status = "completed";
     this.currentMessage.endTime = new Date();
     this.currentMessage.duration =
-      this.currentMessage.endTime.getTime() - this.currentMessage.startTime.getTime();
+      this.currentMessage.endTime.getTime() -
+      this.currentMessage.startTime.getTime();
 
     this.logger.debug("Completed message", {
       id: this.currentMessage.id,
@@ -176,11 +177,12 @@ export class ClaudeCache {
       return;
     }
 
-    this.currentMessage.status = 'error';
+    this.currentMessage.status = "error";
     this.currentMessage.error = error;
     this.currentMessage.endTime = new Date();
     this.currentMessage.duration =
-      this.currentMessage.endTime.getTime() - this.currentMessage.startTime.getTime();
+      this.currentMessage.endTime.getTime() -
+      this.currentMessage.startTime.getTime();
 
     this.logger.debug("Message errored", {
       id: this.currentMessage.id,
@@ -216,20 +218,12 @@ export class ClaudeCache {
         }
       }
     } catch (error) {
-      this.logger.debug("Failed to parse protocol message", { raw: raw.substring(0, 100) });
+      this.logger.debug("Failed to parse protocol message", {
+        raw: raw.substring(0, 100),
+      });
     }
   }
 
-  /**
-   * Append to stderr cache (legacy support)
-   */
-  appendStderr(data: string): void {
-    this.stderrCache += data;
-    // Limit stderr cache size
-    if (this.stderrCache.length > 100000) {
-      this.stderrCache = this.stderrCache.slice(-50000);
-    }
-  }
 
   /**
    * Clear all caches
@@ -238,7 +232,6 @@ export class ClaudeCache {
     this.messages = [];
     this.protocolMessages = [];
     this.currentMessage = null;
-    this.stderrCache = "";
     this.logger.debug("Cache cleared");
   }
 
@@ -253,24 +246,26 @@ export class ClaudeCache {
    * Get a specific message by ID
    */
   getMessage(id: string): MessageExchange | undefined {
-    return this.messages.find(m => m.id === id);
+    return this.messages.find((m) => m.id === id);
   }
 
   /**
    * Get messages since a timestamp
    */
   getMessagesSince(timestamp: Date): MessageExchange[] {
-    return this.messages.filter(m => m.startTime >= timestamp);
+    return this.messages.filter((m) => m.startTime >= timestamp);
   }
 
   /**
    * Get pending messages (including streaming)
    */
   getPendingMessages(): MessageExchange[] {
-    const pending = this.messages.filter(m => m.status === 'pending' || m.status === 'streaming');
+    const pending = this.messages.filter(
+      (m) => m.status === "pending" || m.status === "streaming",
+    );
     if (this.currentMessage) {
       // Ensure current message is included
-      if (!pending.find(m => m.id === this.currentMessage!.id)) {
+      if (!pending.find((m) => m.id === this.currentMessage!.id)) {
         pending.push(this.currentMessage);
       }
     }
@@ -281,14 +276,14 @@ export class ClaudeCache {
    * Get completed messages
    */
   getCompletedMessages(): MessageExchange[] {
-    return this.messages.filter(m => m.status === 'completed');
+    return this.messages.filter((m) => m.status === "completed");
   }
 
   /**
    * Get error messages
    */
   getErrorMessages(): MessageExchange[] {
-    return this.messages.filter(m => m.status === 'error');
+    return this.messages.filter((m) => m.status === "error");
   }
 
   /**
@@ -302,7 +297,7 @@ export class ClaudeCache {
    * Get protocol messages for a specific message exchange
    */
   getProtocolMessages(messageId: string): ProtocolMessage[] {
-    return this.protocolMessages.filter(p => p.messageId === messageId);
+    return this.protocolMessages.filter((p) => p.messageId === messageId);
   }
 
   /**
@@ -317,16 +312,26 @@ export class ClaudeCache {
    */
   getReport(): CacheReport {
     const completedMessages = this.getCompletedMessages();
-    const totalDuration = completedMessages.reduce((sum, m) => sum + (m.duration || 0), 0);
+    const totalDuration = completedMessages.reduce(
+      (sum, m) => sum + (m.duration || 0),
+      0,
+    );
 
     return {
       totalMessages: this.messages.length,
       pendingMessages: this.getPendingMessages().length,
       completedMessages: completedMessages.length,
       errorMessages: this.getErrorMessages().length,
-      averageDuration: completedMessages.length > 0 ? totalDuration / completedMessages.length : 0,
-      oldestMessage: this.messages.length > 0 ? this.messages[0].startTime : undefined,
-      newestMessage: this.messages.length > 0 ? this.messages[this.messages.length - 1].startTime : undefined,
+      averageDuration:
+        completedMessages.length > 0
+          ? totalDuration / completedMessages.length
+          : 0,
+      oldestMessage:
+        this.messages.length > 0 ? this.messages[0].startTime : undefined,
+      newestMessage:
+        this.messages.length > 0
+          ? this.messages[this.messages.length - 1].startTime
+          : undefined,
       cacheSize: {
         messages: this.messages.length,
         protocolMessages: this.protocolMessages.length,
@@ -337,120 +342,23 @@ export class ClaudeCache {
   /**
    * Export messages in various formats
    */
-  exportMessages(format: 'json' | 'text' = 'json'): string {
-    if (format === 'json') {
+  exportMessages(format: "json" | "text" = "json"): string {
+    if (format === "json") {
       return JSON.stringify(this.messages, null, 2);
     } else {
-      return this.messages.map(m =>
-        `[${m.startTime.toISOString()}] (${m.status}) ${m.duration ? m.duration + 'ms' : 'pending'}\n` +
-        `Request: ${m.request.substring(0, 100)}${m.request.length > 100 ? '...' : ''}\n` +
-        `Response: ${m.response.substring(0, 200)}${m.response.length > 200 ? '...' : ''}\n` +
-        (m.error ? `Error: ${m.error}\n` : '') +
-        '---'
-      ).join('\n');
+      return this.messages
+        .map(
+          (m) =>
+            `[${m.startTime.toISOString()}] (${m.status}) ${m.duration ? m.duration + "ms" : "pending"}\n` +
+            `Request: ${m.request.substring(0, 100)}${m.request.length > 100 ? "..." : ""}\n` +
+            `Response: ${m.response.substring(0, 200)}${m.response.length > 200 ? "..." : ""}\n` +
+            (m.error ? `Error: ${m.error}\n` : "") +
+            "---",
+        )
+        .join("\n");
     }
   }
 
-  /**
-   * Legacy support - get text output
-   */
-  getText(): { stdout: string; stderr: string } {
-    // Concatenate all completed message responses for stdout
-    const stdout = this.messages
-      .filter(m => m.status === 'completed')
-      .map(m => m.response)
-      .join('\n');
-
-    return {
-      stdout,
-      stderr: this.stderrCache,
-    };
-  }
-
-  /**
-   * Legacy support - get protocol output
-   */
-  getProtocol(): { stdout: string; stderr: string } {
-    // Concatenate all protocol messages
-    const stdout = this.protocolMessages
-      .map(p => p.raw)
-      .join('\n');
-
-    return {
-      stdout,
-      stderr: this.stderrCache,
-    };
-  }
-
-  /**
-   * Legacy support - append stdout protocol
-   */
-  appendStdoutProtocol(data: string): void {
-    // Try to parse and store as protocol messages
-    const lines = data.split('\n').filter(line => line.trim());
-    for (const line of lines) {
-      if (line.trim()) {
-        this.addProtocolMessage(line);
-      }
-    }
-  }
-
-  /**
-   * Legacy support - append stdout text
-   */
-  appendStdoutText(text: string): void {
-    this.appendToCurrentMessage(text);
-  }
-
-  /**
-   * Legacy support - append stderr protocol
-   */
-  appendStderrProtocol(data: string): void {
-    this.appendStderr(data);
-  }
-
-  /**
-   * Legacy support - append stderr text
-   */
-  appendStderrText(text: string): void {
-    this.appendStderr(text);
-  }
-
-  /**
-   * Get cache sizes for metrics
-   */
-  getSizes(): {
-    protocol: { stdout: number; stderr: number };
-    text: { stdout: number; stderr: number };
-  } {
-    const protocolSize = this.protocolMessages.reduce((sum, p) => sum + p.raw.length, 0);
-    const textSize = this.messages.reduce((sum, m) => sum + m.response.length, 0);
-
-    return {
-      protocol: {
-        stdout: protocolSize,
-        stderr: this.stderrCache.length,
-      },
-      text: {
-        stdout: textSize,
-        stderr: this.stderrCache.length,
-      },
-    };
-  }
-
-  /**
-   * Truncate caches (legacy support)
-   */
-  truncate(maxSize: number = 1000000): void {
-    // For new structured cache, we enforce limits differently
-    this.enforceMessageLimit();
-    this.enforceProtocolLimit();
-
-    // Still truncate stderr if needed
-    if (this.stderrCache.length > maxSize) {
-      this.stderrCache = this.stderrCache.slice(-maxSize);
-    }
-  }
 
   /**
    * Enforce message count limit
@@ -465,12 +373,12 @@ export class ClaudeCache {
     const now = Date.now();
 
     let removed = 0;
-    this.messages = this.messages.filter(m => {
+    this.messages = this.messages.filter((m) => {
       // Keep if we haven't removed enough yet
       if (removed >= toRemove) return true;
 
       // Keep errors longer if configured
-      if (this.config.preserveErrors && m.status === 'error') return true;
+      if (this.config.preserveErrors && m.status === "error") return true;
 
       // Keep messages younger than maxMessageAge
       if (now - m.startTime.getTime() < this.config.maxMessageAge) return true;
@@ -482,7 +390,9 @@ export class ClaudeCache {
 
     // If we still have too many, forcefully remove oldest non-error messages
     while (this.messages.length > this.config.maxMessages) {
-      const indexToRemove = this.messages.findIndex(m => m.status !== 'error');
+      const indexToRemove = this.messages.findIndex(
+        (m) => m.status !== "error",
+      );
       if (indexToRemove === -1) break; // All remaining are errors
       this.messages.splice(indexToRemove, 1);
     }
@@ -493,7 +403,8 @@ export class ClaudeCache {
    */
   private enforceProtocolLimit(): void {
     if (this.protocolMessages.length > this.config.maxProtocolMessages) {
-      const toRemove = this.protocolMessages.length - this.config.maxProtocolMessages;
+      const toRemove =
+        this.protocolMessages.length - this.config.maxProtocolMessages;
       this.protocolMessages.splice(0, toRemove);
     }
   }

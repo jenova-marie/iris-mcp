@@ -8,10 +8,15 @@ Iris MCP is a Model Context Protocol server that enables Claude Code instances a
 
 ## Team Identity
 
-This Claude instance represents the **iris-mcp** team.
+This Claude instance represents the **team-iris** team.
 
-When using Iris MCP tools (`teams_ask`, `teams_send_message`, `teams_notify`),
-always set `fromTeam: "iris-mcp"` to identify yourself in inter-team communication.
+When using Iris MCP tools, always set `fromTeam: "team-iris"` to identify yourself in inter-team communication.
+
+You can verify your team identity at any time using the `team_getTeamName` tool:
+```typescript
+team_getTeamName({ pwd: "/Users/jenova/projects/jenova-marie/iris-mcp" })
+// Returns: { teamName: "team-iris", found: true }
+```
 
 ## Build & Development Commands
 
@@ -117,12 +122,17 @@ Use case: `teams_notify` tool for fire-and-forget messages that persist across s
 
 ## MCP Tools Implementation
 
-All tools are implemented in `src/tools/` with consistent validation pipeline:
+All tools are implemented in `src/actions/` with consistent validation pipeline:
 
-1. **teams_ask** - Synchronous Q&A (waits for response)
-2. **teams_send_message** - Send with optional wait flag
-3. **teams_notify** - Fire-and-forget to SQLite queue
-4. **teams_get_status** - Query teams, processes, notifications
+1. **team_tell** - Send message to a team (sync/async/persistent modes)
+2. **team_isAwake** - Check if teams are active or inactive
+3. **team_wake** - Wake up a team process
+4. **team_sleep** - Put a team process to sleep
+5. **team_wake_all** - Wake all configured teams
+6. **team_report** - View team output cache (stdout/stderr)
+7. **team_cache_read** - Read conversation cache and protocol messages
+8. **team_cache_clear** - Clear conversation cache
+9. **team_getTeamName** - Identify team name from current working directory
 
 **Validation Pattern** (in all tools):
 ```typescript
@@ -172,7 +182,7 @@ When writing tests, avoid testing private implementation details. Export handler
 - `src/process-pool/pool-manager.ts` - Pool with LRU eviction, health checks
 - `src/process-pool/claude-process.ts` - Individual process wrapper, stdio communication
 - `src/notifications/queue.ts` - SQLite notification queue
-- `src/tools/*.ts` - MCP tool implementations
+- `src/actions/*.ts` - MCP tool implementations (tell, wake, sleep, isAwake, cache, getTeamName, etc.)
 - `src/utils/logger.ts` - Structured JSON logging to stderr
 - `src/utils/errors.ts` - Custom error hierarchy
 - `src/utils/validation.ts` - Security-focused input validation

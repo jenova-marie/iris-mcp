@@ -903,9 +903,28 @@ export class ClaudeProcess extends EventEmitter {
                 accumulatorLength: this.textAccumulator.length,
                 isEmpty: this.textAccumulator.length === 0,
                 preview: this.textAccumulator.substring(0, 200),
+                teamName: this.teamName,
               });
 
+              if (this.textAccumulator.length === 0) {
+                this.logger.error("CRITICAL: About to resolve with EMPTY textAccumulator", {
+                  teamName: this.teamName,
+                  hasCurrentMessage: !!this.currentMessage,
+                  currentMessageText: this.currentMessage?.message,
+                  resultData: {
+                    cost: jsonResponse.total_cost_usd,
+                    duration: jsonResponse.duration_ms,
+                    numTurns: jsonResponse.num_turns,
+                  },
+                });
+              }
+
               this.currentMessage.resolve(this.textAccumulator);
+
+              this.logger.debug("Message resolved successfully", {
+                responseLength: this.textAccumulator.length,
+                teamName: this.teamName,
+              });
 
               this.emit("message-response", {
                 teamName: this.teamName,

@@ -200,12 +200,21 @@ export async function tell(
     from: fromTeam,
     to: toTeam,
     clearCache,
+    messageLength: message.length,
+    messagePreview: message.substring(0, 50),
   });
 
   const startTime = Date.now();
 
   try {
     // No cache to clear in bare-bones mode
+
+    logger.debug("Calling iris.sendMessage", {
+      fromTeam: fromTeam || "null",
+      toTeam,
+      timeout,
+      waitForResponse: true,
+    });
 
     const response = await iris.sendMessage(fromTeam || null, toTeam, message, {
       timeout,
@@ -214,7 +223,24 @@ export async function tell(
 
     const duration = Date.now() - startTime;
 
-    logger.info("Received response from team", { toTeam, duration });
+    logger.info("Received response from team", {
+      toTeam,
+      duration,
+      responseLength: response?.length || 0,
+      responseType: typeof response,
+      responsePreview: response?.substring(0, 100),
+      isEmpty: !response || response.length === 0,
+    });
+
+    if (!response || response.length === 0) {
+      logger.warn("EMPTY RESPONSE DETECTED", {
+        toTeam,
+        fromTeam,
+        message,
+        duration,
+        responseValue: JSON.stringify(response),
+      });
+    }
 
     return {
       from: fromTeam,
@@ -226,7 +252,12 @@ export async function tell(
       async: false,
     };
   } catch (error) {
-    logger.error("Failed to send request to team", error);
+    logger.error("Failed to send request to team", {
+      error: error instanceof Error ? error.message : error,
+      stack: error instanceof Error ? error.stack : undefined,
+      toTeam,
+      fromTeam,
+    });
     throw error;
   }
 }

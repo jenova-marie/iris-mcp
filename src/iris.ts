@@ -129,7 +129,34 @@ export class IrisOrchestrator {
 
     // Step 4: Send message and wait for response
     try {
+      logger.debug("Calling process.sendMessage", {
+        sessionId: session.sessionId,
+        toTeam,
+        messageLength: message.length,
+        messagePreview: message.substring(0, 50),
+        timeout,
+      });
+
       const response = await process.sendMessage(message, timeout);
+
+      logger.debug("Received response from process.sendMessage", {
+        sessionId: session.sessionId,
+        toTeam,
+        responseLength: response?.length || 0,
+        responseType: typeof response,
+        isEmpty: !response || response.length === 0,
+        responsePreview: response?.substring(0, 100),
+      });
+
+      if (!response || response.length === 0) {
+        logger.warn("EMPTY RESPONSE FROM PROCESS", {
+          sessionId: session.sessionId,
+          toTeam,
+          fromTeam,
+          message,
+          responseValue: JSON.stringify(response),
+        });
+      }
 
       // Step 5: Track session usage and message count
       this.sessionManager.recordUsage(session.sessionId);
@@ -137,13 +164,15 @@ export class IrisOrchestrator {
 
       logger.info("Message sent successfully", {
         sessionId: session.sessionId,
-        responseLength: response.length,
+        responseLength: response?.length || 0,
+        isEmpty: !response || response.length === 0,
       });
 
       return response;
     } catch (error) {
       logger.error("Failed to send message", {
         error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
         sessionId: session.sessionId,
         toTeam,
       });

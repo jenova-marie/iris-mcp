@@ -893,7 +893,17 @@ export class ClaudeProcess extends EventEmitter {
 
               // Complete message in cache
               this.cache.completeCurrentMessage(this.textAccumulator);
+
+              // Capture messageId before nulling it
+              const completedMessageId = this.currentCacheMessageId;
               this.currentCacheMessageId = null;
+
+              // Log resolution details for debugging empty responses
+              this.logger.info("Resolving message", {
+                accumulatorLength: this.textAccumulator.length,
+                isEmpty: this.textAccumulator.length === 0,
+                preview: this.textAccumulator.substring(0, 200),
+              });
 
               this.currentMessage.resolve(this.textAccumulator);
 
@@ -907,6 +917,22 @@ export class ClaudeProcess extends EventEmitter {
                 teamName: this.teamName,
                 success: true,
                 duration: Date.now() - this.startTime,
+              });
+
+              // Emit message-metrics with all captured stats for dashboard/reporting
+              this.emit("message-metrics", {
+                teamName: this.teamName,
+                messageId: completedMessageId,
+                sessionId: this.sessionId,
+                metrics: {
+                  cost: jsonResponse.total_cost_usd,
+                  durationMs: jsonResponse.duration_ms,
+                  durationApiMs: jsonResponse.duration_api_ms,
+                  numTurns: jsonResponse.num_turns,
+                  requestLength: this.currentMessage.message.length,
+                  responseLength: this.textAccumulator.length,
+                  timestamp: Date.now(),
+                },
               });
             }
 

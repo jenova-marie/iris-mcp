@@ -33,11 +33,12 @@ export class ClaudeProcessPool extends EventEmitter {
   }
 
   /**
-   * Generate pool key for team pair
-   * Format: "fromTeam->toTeam" or "external->toTeam"
+   * Generate pool key for team
+   * Each team has exactly one process, regardless of who's talking to them
    */
   private getPoolKey(fromTeam: string | null, toTeam: string): string {
-    return `${fromTeam ?? 'external'}->${toTeam}`;
+    // Pool key is just the team name - one process per team
+    return toTeam;
   }
 
   /**
@@ -234,13 +235,8 @@ export class ClaudeProcessPool extends EventEmitter {
    * @deprecated Use getProcessBySessionId or getOrCreateProcess instead
    */
   getProcess(teamName: string): ClaudeProcess | undefined {
-    // Try to find by team name in any pool key
-    for (const [poolKey, process] of this.processes) {
-      if (poolKey.endsWith(`->${teamName}`)) {
-        return process;
-      }
-    }
-    return undefined;
+    // Pool key is now just the team name
+    return this.processes.get(teamName);
   }
 
   /**

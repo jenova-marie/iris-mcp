@@ -9,8 +9,11 @@
     "iris": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc && cp src/config.default.json dist/config.default.json",
+    "build": "pnpm build:server && pnpm build:client",
+    "build:server": "tsc && cp src/config.default.json dist/config.default.json",
+    "build:client": "cd src/dashboard/client && pnpm install && pnpm build",
     "dev": "tsx watch src/index.ts",
+    "dev:client": "cd src/dashboard/client && pnpm dev",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
     "test": "pnpm test:unit && pnpm test:integration",

@@ -127,14 +127,43 @@ export class ClaudeProcessPool extends EventEmitter {
     );
 
     // Spawn the process
-    await process.spawn();
+    try {
+      await process.spawn();
 
-    // Add to pool with pool key
-    this.processes.set(poolKey, process);
-    this.sessionToProcess.set(sessionId, poolKey);
-    this.updateAccessOrder(poolKey);
+      // Add to pool with pool key
+      this.processes.set(poolKey, process);
+      this.sessionToProcess.set(sessionId, poolKey);
+      this.updateAccessOrder(poolKey);
 
-    return process;
+      this.logger.info("Process successfully added to pool", {
+        poolKey,
+        teamName,
+        sessionId,
+        totalProcesses: this.processes.size,
+      });
+
+      return process;
+    } catch (error) {
+      // CRITICAL: Clean up the failed process
+      // The process object exists but spawn failed, so it's in a zombie state
+      this.logger.error("Process spawn failed, cleaning up", {
+        poolKey,
+        teamName,
+        sessionId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      // Terminate the zombie process to clean up any resources
+      await process.terminate().catch((termError) => {
+        this.logger.warn("Failed to terminate zombie process", {
+          poolKey,
+          error: termError instanceof Error ? termError.message : String(termError),
+        });
+      });
+
+      // Re-throw the original error
+      throw error;
+    }
   }
 
   /**
@@ -228,6 +257,29 @@ export class ClaudeProcessPool extends EventEmitter {
       processes,
       activeSessions: this.sessionToProcess.size,
     };
+  }
+
+  /**
+   * Log current pool state for debugging
+   */
+  logPoolState(context: string): void {
+    const status = this.getStatus();
+
+    this.logger.debug("Pool state snapshot", {
+      context,
+      totalProcesses: status.totalProcesses,
+      maxProcesses: status.maxProcesses,
+      activeSessions: status.activeSessions,
+      processes: Object.entries(status.processes).map(([key, proc]) => ({
+        poolKey: key,
+        status: proc.status,
+        pid: proc.pid,
+        sessionId: proc.sessionId,
+        messageCount: proc.messageCount,
+      })),
+      accessOrder: this.accessOrder,
+      sessionMappings: Array.from(this.sessionToProcess.entries()),
+    });
   }
 
   /**

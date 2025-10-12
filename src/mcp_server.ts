@@ -149,7 +149,8 @@ const TOOLS: Tool[] = [
   {
     name: "team_wake_all",
     description:
-      "Wake up all configured teams. Sounds the air-raid siren and brings all teams online.",
+      "Wake up all configured teams sequentially. Sounds the air-raid siren and brings all teams online. " +
+      "Note: Parallel mode is NOT RECOMMENDED - spawning multiple Claude instances simultaneously is unstable and causes timeouts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -160,7 +161,7 @@ const TOOLS: Tool[] = [
         parallel: {
           type: "boolean",
           description:
-            "Wake teams in parallel for faster startup (default: false)",
+            "Wake teams in parallel (NOT RECOMMENDED - unstable, causes timeouts. Default: false)",
         },
       },
     },
@@ -337,7 +338,7 @@ export class IrisMcpServer {
       try {
         switch (name) {
           case "team_tell":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -349,9 +350,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_isAwake":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -368,9 +370,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_wake":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -387,9 +390,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_sleep":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -401,9 +405,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_wake_all":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -420,9 +425,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_report":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -434,9 +440,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_cache_read":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -448,9 +455,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_cache_clear":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -462,9 +470,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_getTeamName":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -476,9 +485,10 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           case "team_teams":
-            return {
+            result = {
               content: [
                 {
                   type: "text",
@@ -494,12 +504,25 @@ export class IrisMcpServer {
                 },
               ],
             };
+            break;
 
           default:
             throw new Error(`Unknown tool: ${name}`);
         }
+
+        // Log pool state AFTER successful tool execution (when DEBUG env is set)
+        if (process.env.DEBUG) {
+          this.processPool.logPoolState(`after:${name}`);
+        }
+
+        return result;
       } catch (error) {
         logger.error(`Tool ${name} failed`, error);
+
+        // Log pool state AFTER failed tool execution (when DEBUG env is set)
+        if (process.env.DEBUG) {
+          this.processPool.logPoolState(`error:${name}`);
+        }
 
         return {
           content: [

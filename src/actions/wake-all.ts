@@ -14,7 +14,7 @@ export interface WakeAllInput {
   /** Optional: Team requesting the wake-all */
   fromTeam?: string;
 
-  /** Wake teams in parallel (faster but more resource intensive) */
+  /** Wake teams in parallel (NOT RECOMMENDED - parallel Claude spawning is unstable and causes timeouts) */
   parallel?: boolean;
 }
 
@@ -63,6 +63,10 @@ export async function wakeAll(
   const { fromTeam, parallel = false } = input;
 
   logger.info("🚨 Sounding the air-raid siren - waking all teams!", { fromTeam, parallel });
+
+  if (parallel) {
+    logger.warn("⚠️  Parallel mode is UNSTABLE - spawning multiple Claude instances simultaneously causes timeouts. Consider using sequential mode (parallel=false).");
+  }
 
   const startTime = Date.now();
   const config = processPool.getConfig();

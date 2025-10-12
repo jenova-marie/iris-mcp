@@ -27,6 +27,7 @@ import { wakeAll } from "./actions/wake-all.js";
 import { report } from "./actions/report.js";
 import { cacheRead, cacheClear } from "./actions/cache.js";
 import { getTeamName } from "./actions/getTeamName.js";
+import { teams } from "./actions/teams.js";
 
 const logger = new Logger("server");
 
@@ -258,6 +259,22 @@ const TOOLS: Tool[] = [
       required: ["pwd"],
     },
   },
+  {
+    name: "team_teams",
+    description:
+      "Get all currently configured teams and their status. " +
+      "Returns a list of all teams with their configuration and current state (awake/asleep). " +
+      "Optionally include process details for active teams.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        includeProcessDetails: {
+          type: "boolean",
+          description: "Include process details for active teams (default: false)",
+        },
+      },
+    },
+  },
 ];
 
 export class IrisMcpServer {
@@ -311,6 +328,12 @@ export class IrisMcpServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
 
+      // Log pool state BEFORE tool execution (when DEBUG env is set)
+      if (process.env.DEBUG) {
+        this.processPool.logPoolState(`before:${name}`);
+      }
+
+      let result;
       try {
         switch (name) {
           case "team_tell":
@@ -447,6 +470,24 @@ export class IrisMcpServer {
                   type: "text",
                   text: JSON.stringify(
                     await getTeamName(args as any, this.configManager),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+
+          case "team_teams":
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await teams(
+                      args as any,
+                      this.processPool,
+                      this.configManager,
+                    ),
                     null,
                     2,
                   ),

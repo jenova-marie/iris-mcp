@@ -181,7 +181,8 @@ describe("wake", () => {
       );
       expect(mockProcessPool.getOrCreateProcess).toHaveBeenCalledWith(
         "team-alpha",
-        "new-session-456"
+        "new-session-456",
+        null
       );
       // clearOutputCache not called in bare-bones mode
       expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();

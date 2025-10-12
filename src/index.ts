@@ -11,7 +11,12 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { getConfigManager } from "./config/teams-config.js";
 import { IrisMcpServer } from "./mcp_server.js";
+import { IrisWebServer } from "./web_server.js";
+import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
+import { SessionManager } from "./session/session-manager.js";
+import { NotificationQueue } from "./notifications/queue.js";
 import { Logger } from "./utils/logger.js";
+import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { addTeam, install, uninstall } from "./cli/index.js";
 
 const logger = new Logger("cli");
@@ -30,7 +35,7 @@ program
   .description("🌈 Iris MCP - Bridge your AI agents across codebases")
   .version(packageJson.version);
 
-// Start command - runs the MCP server
+// Start command - runs the MCP server and optionally the web server
 program
   .command("start")
   .description("Start the Iris MCP server")
@@ -67,8 +72,43 @@ program
     }
 
     try {
-      const server = new IrisMcpServer();
-      await server.run(transport, port);
+      // Initialize shared components
+      logger.info("Initializing Iris MCP...", {
+        irisHome: getIrisHome(),
+        configPath: getConfigPath(),
+        dataDir: getDataDir(),
+        teams: Object.keys(config.teams),
+        maxProcesses: config.settings.maxProcesses,
+      });
+
+      const sessionManager = new SessionManager(config);
+      const processPool = new ClaudeProcessPool(configManager, config.settings);
+      const notificationQueue = new NotificationQueue(
+        `${getDataDir()}/notifications.db`
+      );
+
+      // Initialize session manager
+      logger.info("Initializing session manager...");
+      await sessionManager.initialize();
+      logger.info("Session manager initialized");
+
+      // Create MCP server with shared components
+      const mcpServer = new IrisMcpServer(sessionManager, processPool, configManager);
+
+      // Start web server if enabled
+      if (config.dashboard?.enabled) {
+        try {
+          logger.info("Starting web dashboard...");
+          const webServer = new IrisWebServer(processPool, notificationQueue, configManager);
+          await webServer.start(config.dashboard);
+        } catch (error) {
+          logger.error("Failed to start web dashboard", error);
+          logger.warn("Continuing without dashboard");
+        }
+      }
+
+      // Start MCP server
+      await mcpServer.run(transport, port);
     } catch (error) {
       logger.error("Fatal error", error);
       process.exit(1);
@@ -161,18 +201,55 @@ program.parse(process.argv);
 // If no arguments provided, run start command by default
 if (process.argv.length === 2) {
   // No arguments provided, run start with defaults
-  // Load config to get defaults
-  const configManager = getConfigManager();
-  const config = configManager.load();
+  (async () => {
+    try {
+      // Load config to get defaults
+      const configManager = getConfigManager();
+      const config = configManager.load();
 
-  const server = new IrisMcpServer();
-  server
-    .run(
-      (config.settings.defaultTransport as "stdio" | "http") || "http",
-      config.settings.httpPort || 1615,
-    )
-    .catch((error) => {
+      // Initialize shared components
+      logger.info("Initializing Iris MCP...", {
+        irisHome: getIrisHome(),
+        configPath: getConfigPath(),
+        dataDir: getDataDir(),
+        teams: Object.keys(config.teams),
+        maxProcesses: config.settings.maxProcesses,
+      });
+
+      const sessionManager = new SessionManager(config);
+      const processPool = new ClaudeProcessPool(configManager, config.settings);
+      const notificationQueue = new NotificationQueue(
+        `${getDataDir()}/notifications.db`
+      );
+
+      // Initialize session manager
+      logger.info("Initializing session manager...");
+      await sessionManager.initialize();
+      logger.info("Session manager initialized");
+
+      // Create MCP server with shared components
+      const mcpServer = new IrisMcpServer(sessionManager, processPool, configManager);
+
+      // Start web server if enabled
+      if (config.dashboard?.enabled) {
+        try {
+          logger.info("Starting web dashboard...");
+          const webServer = new IrisWebServer(processPool, notificationQueue, configManager);
+          await webServer.start(config.dashboard);
+        } catch (error) {
+          logger.error("Failed to start web dashboard", error);
+          logger.warn("Continuing without dashboard");
+        }
+      }
+
+      // Start MCP server with defaults
+      await mcpServer.run(
+        (config.settings.defaultTransport as "stdio" | "http") || "http",
+        config.settings.httpPort || 1615,
+      );
+    } catch (error) {
       logger.error("Fatal error", error);
       process.exit(1);
-    });
+    }
+  })();
 }

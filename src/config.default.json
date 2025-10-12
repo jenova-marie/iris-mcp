@@ -7,5 +7,10 @@
     "httpPort": 1615,
     "defaultTransport": "http"
   },
+  "dashboard": {
+    "enabled": true,
+    "port": 3100,
+    "host": "localhost"
+  },
   "teams": {}
 }

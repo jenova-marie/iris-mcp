@@ -35,6 +35,15 @@ const TeamsConfigSchema = z.object({
     httpPort: z.number().int().min(1).max(65535).optional().default(1615),
     defaultTransport: z.enum(["stdio", "http"]).optional().default("stdio"),
   }),
+  dashboard: z.object({
+    enabled: z.boolean().default(true),
+    port: z.number().int().min(1).max(65535).default(3100),
+    host: z.string().default("localhost"),
+  }).optional().default({
+    enabled: true,
+    port: 3100,
+    host: "localhost",
+  }),
   teams: z.record(z.string(), TeamConfigSchema),
 });
 

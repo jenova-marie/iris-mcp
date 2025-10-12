@@ -21,8 +21,15 @@ export interface TeamConfig {
   color?: string;
 }
 
+export interface DashboardConfig {
+  enabled: boolean;
+  port: number;
+  host: string;
+}
+
 export interface TeamsConfig {
   settings: ProcessPoolConfig;
+  dashboard?: DashboardConfig;
   teams: Record<string, TeamConfig>;
 }
 

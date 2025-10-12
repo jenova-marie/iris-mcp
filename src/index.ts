@@ -29,6 +29,8 @@ import { wake } from "./actions/wake.js";
 import { sleep } from "./actions/sleep.js";
 import { wakeAll } from "./actions/wake-all.js";
 import { report } from "./actions/report.js";
+import { cacheRead, cacheClear } from "./actions/cache.js";
+import { getTeamName } from "./actions/getTeamName.js";
 
 const logger = new Logger("server");
 
@@ -179,6 +181,81 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["team"],
+    },
+  },
+  {
+    name: "team_cache_read",
+    description:
+      "Read the cache for a team's Claude process. Returns cache statistics, recent messages, and protocol data. Use this to inspect conversation history and performance metrics.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team: {
+          type: "string",
+          description: "Name of the team whose cache to read",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Optional: Name of the team requesting the cache read",
+        },
+        includeMessages: {
+          type: "boolean",
+          description: "Include recent messages in response (default: true)",
+        },
+        messageCount: {
+          type: "number",
+          description:
+            "Number of recent messages to include (default: 10, max: 100)",
+        },
+        format: {
+          type: "string",
+          description:
+            'Export format for messages: "json" or "text" (default: "json")',
+          enum: ["json", "text"],
+        },
+        includeProtocolMessages: {
+          type: "boolean",
+          description:
+            "Include raw protocol messages from Claude - contains all JSON including tool_use blocks (default: false)",
+        },
+      },
+      required: ["team"],
+    },
+  },
+  {
+    name: "team_cache_clear",
+    description:
+      "Clear the cache for a team's Claude process. Removes all cached messages and protocol data. Returns statistics about what was cleared.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team: {
+          type: "string",
+          description: "Name of the team whose cache to clear",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Optional: Name of the team requesting the cache clear",
+        },
+      },
+      required: ["team"],
+    },
+  },
+  {
+    name: "team_getTeamName",
+    description:
+      "Identify the team name from a current working directory (pwd). " +
+      "Returns the team name if the path matches a configured team. " +
+      "Note: Only works with absolute paths in config.json. Relative paths in config cannot be identified.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pwd: {
+          type: "string",
+          description: "Your current working directory to look up (use pwd)",
+        },
+      },
+      required: ["pwd"],
     },
   },
 ];
@@ -340,6 +417,48 @@ class IrisMcpServer {
                   type: "text",
                   text: JSON.stringify(
                     await report(args as any, this.processPool),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+
+          case "team_cache_read":
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await cacheRead(args as any, this.processPool),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+
+          case "team_cache_clear":
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await cacheClear(args as any, this.processPool),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+
+          case "team_getTeamName":
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await getTeamName(args as any, this.configManager),
                     null,
                     2,
                   ),

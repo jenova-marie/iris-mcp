@@ -100,7 +100,9 @@ const TOOLS: Tool[] = [
   {
     name: "team_wake",
     description:
-      "Wake up a team by ensuring its process is active in the pool. Returns immediately if team is already awake, otherwise starts the wake process.",
+      "Wake up a team by ensuring its process is active in the pool. " +
+      "Returns immediately if team is already awake, otherwise starts the wake process. " +
+      "Use 'fromTeam' to create a session-specific process for conversation isolation (e.g., fromTeam='iris' creates 'iris->alpha' instead of 'external->alpha').",
     inputSchema: {
       type: "object",
       properties: {
@@ -111,7 +113,9 @@ const TOOLS: Tool[] = [
         },
         fromTeam: {
           type: "string",
-          description: "Optional: Name of the team requesting the wake",
+          description:
+            "Optional: Identify the calling team for session-specific process. " +
+            "When provided, creates a dedicated process for this team pair to maintain conversation isolation.",
         },
       },
       required: ["team"],

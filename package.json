@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "iris-mcp": "dist/index.js"
+    "iris": "dist/index.js"
   },
   "scripts": {
     "build": "tsc && cp src/config.default.json dist/config.default.json",

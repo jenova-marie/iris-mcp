@@ -99,14 +99,14 @@ export async function wake(
     }
 
     // Team is asleep, need to wake it up
-    logger.info("Waking up team", { team });
+    logger.info("Waking up team", { team, fromTeam });
 
     try {
-      // Get or create session for external -> team
-      const session = await sessionManager.getOrCreateSession(null, team);
+      // Get or create session for fromTeam -> team (or external -> team if fromTeam not provided)
+      const session = await sessionManager.getOrCreateSession(fromTeam ?? null, team);
 
-      // Create process in pool (this will spawn it)
-      const process = await processPool.getOrCreateProcess(team, session.sessionId);
+      // Create process in pool (this will spawn it with session-specific pool key)
+      const process = await processPool.getOrCreateProcess(team, session.sessionId, fromTeam ?? null);
       const metrics = process.getMetrics();
 
       // No cache to clear in bare-bones mode

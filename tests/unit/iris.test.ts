@@ -79,11 +79,7 @@ describe("IrisOrchestrator", () => {
       getOrCreateProcess: vi.fn().mockResolvedValue(mockProcess),
       getProcessBySessionId: vi.fn().mockReturnValue(mockProcess),
       sendCommandToSession: vi.fn().mockResolvedValue("Command sent"),
-      clearOutputCache: vi.fn(),
-      getOutputCache: vi.fn().mockReturnValue({
-        stdout: "stdout output",
-        stderr: "stderr output",
-      }),
+      // clearOutputCache and getOutputCache removed in bare-bones mode
       getStatus: vi.fn().mockReturnValue({
         totalProcesses: 3,
         maxProcesses: 10,
@@ -303,25 +299,9 @@ describe("IrisOrchestrator", () => {
     });
   });
 
-  describe("clearOutputCache", () => {
-    it("should clear output cache for team", async () => {
-      await iris.clearOutputCache("team-alpha");
-
-      expect(mockProcessPool.clearOutputCache).toHaveBeenCalledWith("team-alpha");
-    });
-  });
-
-  describe("getOutputCache", () => {
-    it("should get output cache for team", () => {
-      const cache = iris.getOutputCache("team-alpha");
-
-      expect(mockProcessPool.getOutputCache).toHaveBeenCalledWith("team-alpha");
-      expect(cache).toEqual({
-        stdout: "stdout output",
-        stderr: "stderr output",
-      });
-    });
-  });
+  // clearOutputCache and getOutputCache removed in bare-bones mode
+  // These methods no longer exist on IrisOrchestrator
+  // Cache functionality has been disabled for performance
 
   describe("getAsyncQueue", () => {
     it("should return async queue instance", () => {

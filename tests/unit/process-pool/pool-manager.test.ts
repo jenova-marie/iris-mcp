@@ -331,39 +331,8 @@ describe("ClaudeProcessPool", () => {
     });
   });
 
-  describe("clearOutputCache", () => {
-    it("should clear cache for existing process", async () => {
-      await pool.getOrCreateProcess("team-alpha", "session-123");
-
-      pool.clearOutputCache("team-alpha");
-
-      expect(mockProcess.clearOutputCache).toHaveBeenCalled();
-    });
-
-    it("should handle non-existent process gracefully", () => {
-      pool.clearOutputCache("nonexistent");
-
-      // Should not throw
-      expect(mockProcess.clearOutputCache).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("getOutputCache", () => {
-    it("should return cache from process", async () => {
-      await pool.getOrCreateProcess("team-alpha", "session-123");
-
-      const cache = pool.getOutputCache("team-alpha");
-
-      expect(cache).toEqual({ stdout: "", stderr: "" });
-      expect(mockProcess.getOutputCache).toHaveBeenCalled();
-    });
-
-    it("should return null for non-existent process", () => {
-      const cache = pool.getOutputCache("nonexistent");
-
-      expect(cache).toBeNull();
-    });
-  });
+  // clearOutputCache and getOutputCache methods removed in bare-bones mode
+  // These tests have been removed as the functionality no longer exists
 
   describe("getStatus", () => {
     it("should return pool status with no processes", () => {

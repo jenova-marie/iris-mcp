@@ -312,86 +312,9 @@ describe("ClaudeCache", () => {
     });
   });
 
-  describe("legacy support", () => {
-    it("should support getText for backward compatibility", () => {
-      cache.startMessage("Message 1");
-      cache.appendToCurrentMessage("Response 1");
-      cache.completeCurrentMessage();
-
-      cache.startMessage("Message 2");
-      cache.appendToCurrentMessage("Response 2");
-      cache.completeCurrentMessage();
-
-      const text = cache.getText();
-      expect(text.stdout).toBe("Response 1\nResponse 2");
-    });
-
-    it("should support getProtocol for backward compatibility", () => {
-      cache.addProtocolMessage('{"type":"test1"}');
-      cache.addProtocolMessage('{"type":"test2"}');
-
-      const protocol = cache.getProtocol();
-      expect(protocol.stdout).toContain('{"type":"test1"}');
-      expect(protocol.stdout).toContain('{"type":"test2"}');
-    });
-
-    it("should support appendStdoutProtocol parsing", () => {
-      const multiline = '{"type":"line1"}\n{"type":"line2"}\n';
-      cache.appendStdoutProtocol(multiline);
-
-      const protocols = cache.getAllProtocolMessages();
-      expect(protocols).toHaveLength(2);
-    });
-
-    it("should support appendStdoutText", () => {
-      cache.startMessage("Test");
-      cache.appendStdoutText("Legacy text");
-
-      const current = cache.getCurrentMessage();
-      expect(current?.response).toBe("Legacy text");
-    });
-
-    it("should handle stderr caching", () => {
-      cache.appendStderr("Error line 1\n");
-      cache.appendStderr("Error line 2\n");
-
-      const text = cache.getText();
-      expect(text.stderr).toBe("Error line 1\nError line 2\n");
-    });
-
-    it("should truncate stderr when too large", () => {
-      const largeError = "x".repeat(150000);
-      cache.appendStderr(largeError);
-
-      const text = cache.getText();
-      expect(text.stderr.length).toBeLessThanOrEqual(100000);
-    });
-
-    it("should support getSizes", () => {
-      cache.startMessage("Test");
-      cache.appendToCurrentMessage("Response text");
-      cache.addProtocolMessage('{"type":"test"}');
-      cache.appendStderr("Error text");
-
-      const sizes = cache.getSizes();
-      expect(sizes.text.stdout).toBeGreaterThan(0);
-      expect(sizes.protocol.stdout).toBeGreaterThan(0);
-      expect(sizes.text.stderr).toBeGreaterThan(0);
-      expect(sizes.protocol.stderr).toBeGreaterThan(0);
-    });
-
-    it("should support truncate method", () => {
-      const longText = "x".repeat(100);
-      cache.startMessage(longText);
-      cache.appendToCurrentMessage(longText);
-
-      cache.truncate(50);
-
-      // Truncate now enforces message limits, not character truncation
-      const report = cache.getReport();
-      expect(report.totalMessages).toBeGreaterThanOrEqual(0);
-    });
-  });
+  // Legacy support tests removed - these methods (getText, getProtocol, appendStdoutProtocol,
+  // appendStdoutText, appendStderr, getSizes, truncate) have been removed from ClaudeCache
+  // in favor of the new structured message-based caching system.
 
   describe("clear functionality", () => {
     it("should clear all caches and reset state", () => {
@@ -400,7 +323,7 @@ describe("ClaudeCache", () => {
       cache.completeCurrentMessage("Response 1");
       cache.startMessage("Test 2");
       cache.addProtocolMessage('{"type":"test"}');
-      cache.appendStderr("Error");
+      // appendStderr is a legacy method that no longer exists
 
       // Clear everything
       cache.clear();
@@ -413,9 +336,9 @@ describe("ClaudeCache", () => {
       const protocols = cache.getAllProtocolMessages();
       expect(protocols).toHaveLength(0);
 
-      const text = cache.getText();
-      expect(text.stdout).toBe("");
-      expect(text.stderr).toBe("");
+      // Verify messages are cleared via report
+      const recentMessages = cache.getRecentMessages(10);
+      expect(recentMessages).toHaveLength(0);
 
       expect(cache.getCurrentMessage()).toBeNull();
     });

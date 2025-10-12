@@ -60,7 +60,8 @@ describe("tell", () => {
         async: false,
       });
 
-      expect(mockIris.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // Cache clearing disabled in bare-bones mode
+      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
         null,
         "team-alpha",
@@ -126,7 +127,8 @@ describe("tell", () => {
 
       // In async mode, message is enqueued to AsyncQueue, not sent via sendMessage
       expect(mockIris.isAwake).toHaveBeenCalledWith(null, "team-alpha");
-      expect(mockIris.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // Cache clearing disabled in bare-bones mode
+      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
 
       const mockQueue = vi.mocked(mockIris.getAsyncQueue());
       expect(mockQueue.enqueue).toHaveBeenCalledWith({
@@ -171,7 +173,7 @@ describe("tell", () => {
   });
 
   describe("cache clearing", () => {
-    it("should clear cache by default", async () => {
+    it("should not clear cache in bare-bones mode (disabled)", async () => {
       vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
 
       await tell(
@@ -182,10 +184,27 @@ describe("tell", () => {
         mockIris
       );
 
-      expect(mockIris.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // Cache clearing is disabled in bare-bones mode
+      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should skip cache clearing when clearCache=false", async () => {
+    it("should not clear cache even when clearCache=true (disabled)", async () => {
+      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
+
+      await tell(
+        {
+          toTeam: "team-alpha",
+          message: "Message",
+          clearCache: true,
+        },
+        mockIris
+      );
+
+      // Cache clearing is disabled in bare-bones mode regardless of parameter
+      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
+    });
+
+    it("should not clear cache when clearCache=false", async () => {
       vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
 
       await tell(
@@ -198,29 +217,6 @@ describe("tell", () => {
       );
 
       expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
-    });
-
-    it("should clear cache before sending message", async () => {
-      const callOrder: string[] = [];
-
-      vi.mocked(mockIris.clearOutputCache).mockImplementation(async () => {
-        callOrder.push("clearCache");
-      });
-
-      vi.mocked(mockIris.sendMessage).mockImplementation(async () => {
-        callOrder.push("sendMessage");
-        return "Response";
-      });
-
-      await tell(
-        {
-          toTeam: "team-alpha",
-          message: "Message",
-        },
-        mockIris
-      );
-
-      expect(callOrder).toEqual(["clearCache", "sendMessage"]);
     });
   });
 
@@ -284,20 +280,23 @@ describe("tell", () => {
       ).rejects.toThrow("Send failed");
     });
 
-    it("should propagate clearOutputCache errors", async () => {
+    it("should not call clearOutputCache in bare-bones mode (no errors to propagate)", async () => {
       vi.mocked(mockIris.clearOutputCache).mockRejectedValue(
         new Error("Cache clear failed")
       );
+      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
 
-      await expect(
-        tell(
-          {
-            toTeam: "team-alpha",
-            message: "Message",
-          },
-          mockIris
-        )
-      ).rejects.toThrow("Cache clear failed");
+      // Should not throw because clearOutputCache is never called
+      const result = await tell(
+        {
+          toTeam: "team-alpha",
+          message: "Message",
+        },
+        mockIris
+      );
+
+      expect(result.response).toBe("Response");
+      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
     });
 
     it("should handle timeout errors", async () => {
@@ -387,7 +386,7 @@ describe("tell", () => {
       );
     });
 
-    it("should use default clearCache=true", async () => {
+    it("should not clear cache even with default clearCache=true (disabled in bare-bones)", async () => {
       vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
 
       await tell(
@@ -398,7 +397,8 @@ describe("tell", () => {
         mockIris
       );
 
-      expect(mockIris.clearOutputCache).toHaveBeenCalled();
+      // Cache clearing disabled in bare-bones mode
+      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
     });
   });
 

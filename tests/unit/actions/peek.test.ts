@@ -44,32 +44,24 @@ describe("report", () => {
     vi.clearAllMocks();
   });
 
-  describe("basic functionality", () => {
-    it("should return cached output for a team with active process", async () => {
-      const mockCache = {
-        stdout: "Hello from stdout\nAnother line",
-        stderr: "Warning: something happened",
-      };
-
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(mockCache);
-
+  describe("basic functionality (bare-bones mode - caching disabled)", () => {
+    it("should return empty output (caching disabled in bare-bones mode)", async () => {
       const result = await report({ team: "team-alpha" }, mockProcessPool);
 
       expect(result).toMatchObject({
         team: "team-alpha",
-        stdout: "Hello from stdout\nAnother line",
-        stderr: "Warning: something happened",
-        hasProcess: true,
-        totalBytes: mockCache.stdout.length + mockCache.stderr.length,
+        stdout: "",
+        stderr: "",
+        hasProcess: false,
+        totalBytes: 0,
         timestamp: expect.any(Number),
       });
 
-      expect(mockProcessPool.getOutputCache).toHaveBeenCalledWith("team-alpha");
+      // getOutputCache not called in bare-bones mode
+      expect(mockProcessPool.getOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should return empty cache for team without active process", async () => {
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(null);
-
+    it("should return empty output for any team (caching disabled)", async () => {
       const result = await report({ team: "team-beta" }, mockProcessPool);
 
       expect(result).toMatchObject({
@@ -82,20 +74,15 @@ describe("report", () => {
       });
     });
 
-    it("should include fromTeam when provided", async () => {
-      const mockCache = {
-        stdout: "output",
-        stderr: "",
-      };
-
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(mockCache);
-
+    it("should include team name when fromTeam provided", async () => {
       const result = await report(
         { team: "team-alpha", fromTeam: "team-beta" },
         mockProcessPool,
       );
 
       expect(result.team).toBe("team-alpha");
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("");
       // fromTeam is logged but not returned in output
     });
   });
@@ -127,69 +114,36 @@ describe("report", () => {
     });
   });
 
-  describe("cache handling", () => {
-    it("should handle large stdout cache", async () => {
-      const largeStdout = "x".repeat(10000);
-      const mockCache = {
-        stdout: largeStdout,
-        stderr: "",
-      };
-
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(mockCache);
-
+  describe("cache handling (disabled in bare-bones mode)", () => {
+    it("should return empty output (caching disabled)", async () => {
       const result = await report({ team: "team-alpha" }, mockProcessPool);
 
-      expect(result.stdout).toBe(largeStdout);
-      expect(result.totalBytes).toBe(10000);
+      expect(result.stdout).toBe("");
+      expect(result.totalBytes).toBe(0);
+      expect(mockProcessPool.getOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should handle large stderr cache", async () => {
-      const largeStderr = "e".repeat(5000);
-      const mockCache = {
-        stdout: "",
-        stderr: largeStderr,
-      };
-
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(mockCache);
-
+    it("should return empty output regardless of team", async () => {
       const result = await report({ team: "team-alpha" }, mockProcessPool);
 
-      expect(result.stderr).toBe(largeStderr);
-      expect(result.totalBytes).toBe(5000);
+      expect(result.stderr).toBe("");
+      expect(result.totalBytes).toBe(0);
     });
 
-    it("should handle both stdout and stderr cache", async () => {
-      const mockCache = {
-        stdout: "stdout content",
-        stderr: "stderr content",
-      };
-
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(mockCache);
-
+    it("should always return hasProcess=false (no caching)", async () => {
       const result = await report({ team: "team-alpha" }, mockProcessPool);
 
-      expect(result.stdout).toBe("stdout content");
-      expect(result.stderr).toBe("stderr content");
-      expect(result.totalBytes).toBe(
-        "stdout content".length + "stderr content".length,
-      );
+      expect(result.hasProcess).toBe(false);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("");
     });
 
-    it("should handle unicode characters in cache", async () => {
-      const mockCache = {
-        stdout: "Hello 世界 🌍",
-        stderr: "Error: ⚠️ Warning",
-      };
-
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(mockCache);
-
+    it("should handle any team name (caching disabled)", async () => {
       const result = await report({ team: "team-alpha" }, mockProcessPool);
 
-      expect(result.stdout).toBe("Hello 世界 🌍");
-      expect(result.stderr).toBe("Error: ⚠️ Warning");
-      expect(result.totalBytes).toBe(
-        mockCache.stdout.length + mockCache.stderr.length,
-      );
+      expect(result.totalBytes).toBe(0);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("");
     });
   });
 
@@ -204,19 +158,16 @@ describe("report", () => {
       ).rejects.toThrow("Config load error");
     });
 
-    it("should propagate getOutputCache errors", async () => {
-      vi.mocked(mockProcessPool.getOutputCache).mockImplementation(() => {
-        throw new Error("Cache retrieval error");
-      });
+    // getOutputCache is not called in bare-bones mode
+    it("should not call getOutputCache (disabled in bare-bones)", async () => {
+      await report({ team: "team-alpha" }, mockProcessPool);
 
-      await expect(
-        report({ team: "team-alpha" }, mockProcessPool),
-      ).rejects.toThrow("Cache retrieval error");
+      expect(mockProcessPool.getOutputCache).not.toHaveBeenCalled();
     });
 
     it("should log errors before throwing", async () => {
       const error = new Error("Test error");
-      vi.mocked(mockProcessPool.getOutputCache).mockImplementation(() => {
+      vi.mocked(mockProcessPool.getConfig).mockImplementation(() => {
         throw error;
       });
 
@@ -228,12 +179,8 @@ describe("report", () => {
     });
   });
 
-  describe("edge cases", () => {
-    it("should handle undefined cache gracefully", async () => {
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(
-        undefined as any,
-      );
-
+  describe("edge cases (bare-bones mode)", () => {
+    it("should always return empty output (no cache in bare-bones)", async () => {
       const result = await report({ team: "team-alpha" }, mockProcessPool);
 
       expect(result).toMatchObject({
@@ -243,23 +190,19 @@ describe("report", () => {
         hasProcess: false,
         totalBytes: 0,
       });
+
+      // getOutputCache not called in bare-bones mode
+      expect(mockProcessPool.getOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should handle empty strings in cache", async () => {
-      const mockCache = {
-        stdout: "",
-        stderr: "",
-      };
-
-      vi.mocked(mockProcessPool.getOutputCache).mockReturnValue(mockCache);
-
+    it("should return consistent empty results", async () => {
       const result = await report({ team: "team-alpha" }, mockProcessPool);
 
       expect(result).toMatchObject({
         team: "team-alpha",
         stdout: "",
         stderr: "",
-        hasProcess: true,
+        hasProcess: false,
         totalBytes: 0,
       });
     });

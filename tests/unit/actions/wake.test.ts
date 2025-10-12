@@ -101,7 +101,8 @@ describe("wake", () => {
         timestamp: expect.any(Number),
       });
 
-      expect(mockProcessPool.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // clearOutputCache not called in bare-bones mode
+      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
       expect(mockSessionManager.getOrCreateSession).not.toHaveBeenCalled();
       expect(mockProcessPool.getOrCreateProcess).not.toHaveBeenCalled();
     });
@@ -182,7 +183,8 @@ describe("wake", () => {
         "team-alpha",
         "new-session-456"
       );
-      expect(mockProcessPool.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // clearOutputCache not called in bare-bones mode
+      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
 
     it("should handle session creation failure", async () => {
@@ -243,8 +245,8 @@ describe("wake", () => {
     });
   });
 
-  describe("cache clearing", () => {
-    it("should clear cache for newly woken team", async () => {
+  describe("cache clearing (disabled in bare-bones mode)", () => {
+    it("should not clear cache for newly woken team (caching disabled)", async () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(undefined);
       vi.mocked(mockProcessPool.getOrCreateProcess).mockResolvedValue(mockProcess);
 
@@ -255,10 +257,11 @@ describe("wake", () => {
         mockSessionManager
       );
 
-      expect(mockProcessPool.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // clearOutputCache not called in bare-bones mode
+      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should clear cache after spawning process", async () => {
+    it("should only create process (no cache clearing)", async () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(undefined);
 
       const callOrder: string[] = [];
@@ -268,10 +271,6 @@ describe("wake", () => {
         return mockProcess;
       });
 
-      vi.mocked(mockProcessPool.clearOutputCache).mockImplementation(() => {
-        callOrder.push("clearCache");
-      });
-
       await wake(
         { team: "team-alpha" },
         mockIris,
@@ -279,10 +278,12 @@ describe("wake", () => {
         mockSessionManager
       );
 
-      expect(callOrder).toEqual(["createProcess", "clearCache"]);
+      // Only createProcess called, no clearCache in bare-bones mode
+      expect(callOrder).toEqual(["createProcess"]);
+      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should skip cache clearing when clearCache=false for new process", async () => {
+    it("should not clear cache regardless of clearCache parameter", async () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(undefined);
       vi.mocked(mockProcessPool.getOrCreateProcess).mockResolvedValue(mockProcess);
 

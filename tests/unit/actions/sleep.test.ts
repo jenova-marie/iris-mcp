@@ -81,7 +81,8 @@ describe("sleep", () => {
       });
 
       expect(mockProcessPool.terminateProcess).toHaveBeenCalledWith("team-alpha");
-      expect(mockProcessPool.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // clearOutputCache not called in bare-bones mode
+      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
 
     it("should return already_asleep for inactive team", async () => {
@@ -158,16 +159,17 @@ describe("sleep", () => {
     });
   });
 
-  describe("cache clearing", () => {
-    it("should clear cache by default", async () => {
+  describe("cache clearing (disabled in bare-bones mode)", () => {
+    it("should not clear cache (caching disabled in bare-bones mode)", async () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
 
       await sleep({ team: "team-alpha" }, mockProcessPool);
 
-      expect(mockProcessPool.clearOutputCache).toHaveBeenCalledWith("team-alpha");
+      // Cache clearing is disabled in bare-bones mode
+      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should skip cache clearing when clearCache=false", async () => {
+    it("should not clear cache even when clearCache=false", async () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
 
       await sleep({ team: "team-alpha", clearCache: false }, mockProcessPool);
@@ -175,20 +177,13 @@ describe("sleep", () => {
       expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
 
-    it("should clear cache before terminating process", async () => {
+    it("should only terminate process (no cache clearing)", async () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
-
-      const callOrder: string[] = [];
-      vi.mocked(mockProcessPool.clearOutputCache).mockImplementation(() => {
-        callOrder.push("clearCache");
-      });
-      vi.mocked(mockProcessPool.terminateProcess).mockImplementation(async () => {
-        callOrder.push("terminate");
-      });
 
       await sleep({ team: "team-alpha" }, mockProcessPool);
 
-      expect(callOrder).toEqual(["clearCache", "terminate"]);
+      expect(mockProcessPool.terminateProcess).toHaveBeenCalledWith("team-alpha");
+      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
   });
 

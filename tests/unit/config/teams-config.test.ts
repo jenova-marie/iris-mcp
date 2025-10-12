@@ -138,15 +138,23 @@ describe("TeamsConfigManager", () => {
       expect(config.teams["team-alpha"].path).toBe("/absolute/path");
     });
 
-    it("should throw ConfigurationError if file does not exist", async () => {
+    it("should call process.exit when file does not exist (new CLI behavior)", async () => {
       const { existsSync } = await import("fs");
 
       vi.mocked(existsSync).mockReturnValue(false);
 
+      // Mock process.exit to prevent actual exit in tests
+      const mockExit = vi.spyOn(process, "exit").mockImplementation((() => {
+        throw new Error("process.exit called");
+      }) as any);
+
       manager = new TeamsConfigManager("/missing/config.json");
 
-      expect(() => manager.load()).toThrow(ConfigurationError);
-      expect(() => manager.load()).toThrow("Configuration file not found");
+      // Should call process.exit(0) with helpful message
+      expect(() => manager.load()).toThrow("process.exit called");
+      expect(mockExit).toHaveBeenCalledWith(0);
+
+      mockExit.mockRestore();
     });
 
     it("should throw ConfigurationError on invalid JSON", async () => {

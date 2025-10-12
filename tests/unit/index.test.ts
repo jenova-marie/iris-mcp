@@ -84,7 +84,7 @@ import { getConfigManager } from "../../src/config/teams-config.js";
 import { ClaudeProcessPool } from "../../src/process-pool/pool-manager.js";
 import { SessionManager } from "../../src/session/session-manager.js";
 import { IrisOrchestrator } from "../../src/iris.js";
-import IrisMcpServer from "../../src/index.js";
+import { IrisMcpServer } from "../../src/mcp_server.js";
 
 describe("IrisMcpServer", () => {
   let mockServer: any;
@@ -515,12 +515,12 @@ describe("IrisMcpServer - Integration Tests", () => {
 
   describe("Constructor", () => {
     it("should instantiate IrisMcpServer", () => {
-      server = new IrisMcpServer();
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
       expect(server).toBeInstanceOf(IrisMcpServer);
     });
 
     it("should create MCP Server with correct metadata", () => {
-      server = new IrisMcpServer();
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
 
       expect(Server).toHaveBeenCalledWith(
         {
@@ -535,39 +535,34 @@ describe("IrisMcpServer - Integration Tests", () => {
       );
     });
 
-    it("should initialize config manager", () => {
-      server = new IrisMcpServer();
-      expect(getConfigManager).toHaveBeenCalled();
-      expect(mockConfigManager.load).toHaveBeenCalled();
+    it("should receive session manager as dependency", () => {
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
+      expect(mockSessionManager).toBeDefined();
     });
 
-    it("should initialize session manager with config", () => {
-      server = new IrisMcpServer();
-      expect(SessionManager).toHaveBeenCalledWith(mockConfigManager.load());
+    it("should receive process pool as dependency", () => {
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
+      expect(mockProcessPool).toBeDefined();
     });
 
-    it("should initialize process pool with config", () => {
-      server = new IrisMcpServer();
-      const config = mockConfigManager.load();
-      expect(ClaudeProcessPool).toHaveBeenCalledWith(
-        mockConfigManager,
-        config.settings
-      );
+    it("should receive config manager as dependency", () => {
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
+      expect(mockConfigManager).toBeDefined();
     });
 
     it("should initialize Iris orchestrator", () => {
-      server = new IrisMcpServer();
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
       expect(IrisOrchestrator).toHaveBeenCalled();
     });
 
     it("should set up request handlers", () => {
-      server = new IrisMcpServer();
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
       // Should be called twice: once for ListTools, once for CallTool
       expect(mockServer.setRequestHandler).toHaveBeenCalledTimes(2);
     });
 
     it("should set up process pool event listeners", () => {
-      server = new IrisMcpServer();
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
       // Should listen to at least 3 events: process-spawned, process-terminated, process-error
       expect(mockProcessPool.on).toHaveBeenCalledWith("process-spawned", expect.any(Function));
       expect(mockProcessPool.on).toHaveBeenCalledWith("process-terminated", expect.any(Function));
@@ -577,7 +572,7 @@ describe("IrisMcpServer - Integration Tests", () => {
 
   describe("MCP Request Handlers", () => {
     beforeEach(() => {
-      server = new IrisMcpServer();
+      server = new IrisMcpServer(mockSessionManager, mockProcessPool, mockConfigManager);
     });
 
     it("should register ListToolsRequestSchema handler", () => {

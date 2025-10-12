@@ -1,671 +1,178 @@
 #!/usr/bin/env node
 
 /**
- * Iris MCP Server
- * Model Context Protocol server for cross-project Claude Code coordination
+ * Iris MCP CLI
+ * Command-line interface for Iris MCP server
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-  Tool,
-} from "@modelcontextprotocol/sdk/types.js";
-import express from "express";
 import { Command } from "commander";
-
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { getConfigManager } from "./config/teams-config.js";
-import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
-// import { MessageQueue } from "./messages/queue.js";
-import { SessionManager } from "./session/session-manager.js";
-import { IrisOrchestrator } from "./iris.js";
+import { IrisMcpServer } from "./mcp_server.js";
 import { Logger } from "./utils/logger.js";
-import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
-import { tell } from "./actions/tell.js";
-import { isAwake } from "./actions/isAwake.js";
-import { wake } from "./actions/wake.js";
-import { sleep } from "./actions/sleep.js";
-import { wakeAll } from "./actions/wake-all.js";
-import { report } from "./actions/report.js";
-import { cacheRead, cacheClear } from "./actions/cache.js";
-import { getTeamName } from "./actions/getTeamName.js";
+import { addTeam, install, uninstall } from "./cli/index.js";
 
-const logger = new Logger("server");
+const logger = new Logger("cli");
 
-// MCP Tool Definitions
-const TOOLS: Tool[] = [
-  {
-    name: "team_tell",
-    description:
-      "Tell a message to a specific team. Supports three modes: " +
-      "1) Synchronous (waitForResponse=true): Tell team and wait for response. " +
-      "2) Asynchronous (waitForResponse=false): Tell team without waiting. " +
-      "3) Persistent notification (persist=true): Fire-and-forget to persistent queue.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        toTeam: {
-          type: "string",
-          description:
-            'Name of the team to send message to (e.g., "frontend", "backend", "mobile")',
-        },
-        message: {
-          type: "string",
-          description: "The message content to send",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team sending the message",
-        },
-        waitForResponse: {
-          type: "boolean",
-          description:
-            "Wait for response (default: true). Ignored if persist=true.",
-        },
-        timeout: {
-          type: "number",
-          description:
-            "Optional timeout in milliseconds (default: 30000). Only used when waitForResponse=true.",
-        },
-        persist: {
-          type: "boolean",
-          description:
-            "Use persistent queue for fire-and-forget (default: false). When true, message is queued in SQLite.",
-        },
-        ttlDays: {
-          type: "number",
-          description:
-            "Optional: TTL in days for persistent notifications (default: 30). Only used when persist=true.",
-        },
-      },
-      required: ["toTeam", "message"],
-    },
-  },
-  {
-    name: "team_isAwake",
-    description:
-      "Check if teams are awake (active) or asleep (inactive) and get their current status. Returns process details for active teams.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Optional: Check status for a specific team only",
-        },
-        includeNotifications: {
-          type: "boolean",
-          description: "Include notification queue statistics (default: true)",
-        },
-      },
-    },
-  },
-  {
-    name: "team_wake",
-    description:
-      "Wake up a team by ensuring its process is active in the pool. Returns immediately if team is already awake, otherwise starts the wake process.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description:
-            'Name of the team to wake up (e.g., "frontend", "backend", "mobile")',
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the wake",
-        },
-      },
-      required: ["team"],
-    },
-  },
-  {
-    name: "team_sleep",
-    description:
-      "Put a team to sleep by removing its process from the pool. Terminates the team process and frees resources.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Name of the team to put to sleep",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the sleep",
-        },
-        force: {
-          type: "boolean",
-          description:
-            "Force termination even if process is busy (default: false)",
-        },
-      },
-      required: ["team"],
-    },
-  },
-  {
-    name: "team_wake_all",
-    description:
-      "Wake up all configured teams. Sounds the air-raid siren and brings all teams online.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the wake-all",
-        },
-        parallel: {
-          type: "boolean",
-          description:
-            "Wake teams in parallel for faster startup (default: false)",
-        },
-      },
-    },
-  },
-  {
-    name: "team_report",
-    description:
-      "View the output cache (stdout and stderr) for a team without clearing it. Returns all output since the last cache clear.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Name of the team whose output cache to view",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the report",
-        },
-      },
-      required: ["team"],
-    },
-  },
-  {
-    name: "team_cache_read",
-    description:
-      "Read the cache for a team's Claude process. Returns cache statistics, recent messages, and protocol data. Use this to inspect conversation history and performance metrics.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Name of the team whose cache to read",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the cache read",
-        },
-        includeMessages: {
-          type: "boolean",
-          description: "Include recent messages in response (default: true)",
-        },
-        messageCount: {
-          type: "number",
-          description:
-            "Number of recent messages to include (default: 10, max: 100)",
-        },
-        format: {
-          type: "string",
-          description:
-            'Export format for messages: "json" or "text" (default: "json")',
-          enum: ["json", "text"],
-        },
-        includeProtocolMessages: {
-          type: "boolean",
-          description:
-            "Include raw protocol messages from Claude - contains all JSON including tool_use blocks (default: false)",
-        },
-      },
-      required: ["team"],
-    },
-  },
-  {
-    name: "team_cache_clear",
-    description:
-      "Clear the cache for a team's Claude process. Removes all cached messages and protocol data. Returns statistics about what was cleared.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Name of the team whose cache to clear",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the cache clear",
-        },
-      },
-      required: ["team"],
-    },
-  },
-  {
-    name: "team_getTeamName",
-    description:
-      "Identify the team name from a current working directory (pwd). " +
-      "Returns the team name if the path matches a configured team. " +
-      "Note: Only works with absolute paths in config.json. Relative paths in config cannot be identified.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        pwd: {
-          type: "string",
-          description: "Your current working directory to look up (use pwd)",
-        },
-      },
-      required: ["pwd"],
-    },
-  },
-];
+// Load package.json to get version
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const packageJson = JSON.parse(
+  readFileSync(join(__dirname, "..", "package.json"), "utf-8"),
+);
 
-class IrisMcpServer {
-  private server: Server;
-  private configManager: ReturnType<typeof getConfigManager>;
-  private sessionManager: SessionManager;
-  private processPool: ClaudeProcessPool;
-  // private messageQueue: MessageQueue;
-  private iris: IrisOrchestrator;
+const program = new Command();
 
-  constructor() {
-    this.server = new Server(
-      {
-        name: "@iris-mcp/server",
-        version: "1.0.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      },
+program
+  .name("iris")
+  .description("🌈 Iris MCP - Bridge your AI agents across codebases")
+  .version(packageJson.version);
+
+// Start command - runs the MCP server
+program
+  .command("start")
+  .description("Start the Iris MCP server")
+  .option("-t, --transport <type>", "Transport type (stdio or http)", "http")
+  .option("-p, --port <number>", "HTTP server port (default: 1615)", "1615")
+  .action(async (options) => {
+    // Load config inside the start command
+    const configManager = getConfigManager();
+    const config = configManager.load();
+
+    // Use config defaults if options not provided
+    const transport = (options.transport ||
+      config.settings.defaultTransport ||
+      "http") as "stdio" | "http";
+    const port = parseInt(
+      options.port || String(config.settings.httpPort || 1615),
+      10,
     );
 
-    // Initialize components
-    this.configManager = getConfigManager();
-    const config = this.configManager.load();
-
-    // Initialize session manager
-    this.sessionManager = new SessionManager(config);
-
-    this.processPool = new ClaudeProcessPool(
-      this.configManager,
-      config.settings,
-    );
-
-    // this.messageQueue = new MessageQueue();
-
-    // Initialize Iris orchestrator (BLL)
-    this.iris = new IrisOrchestrator(this.sessionManager, this.processPool);
-
-    // Set up MCP handlers
-    this.setupHandlers();
-
-    // Set up process pool event listeners
-    this.setupEventListeners();
-
-    logger.info("Iris MCP Server initialized", {
-      irisHome: getIrisHome(),
-      configPath: getConfigPath(),
-      dataDir: getDataDir(),
-      teams: Object.keys(config.teams),
-      maxProcesses: config.settings.maxProcesses,
-    });
-  }
-
-  private setupHandlers(): void {
-    // List available tools
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-      return { tools: TOOLS };
-    });
-
-    // Handle tool calls
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
-
-      try {
-        switch (name) {
-          case "team_tell":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await tell(args as any, this.iris),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_isAwake":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await isAwake(
-                      args as any,
-                      this.iris,
-                      this.processPool,
-                      this.configManager,
-                    ),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_wake":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await wake(
-                      args as any,
-                      this.iris,
-                      this.processPool,
-                      this.sessionManager,
-                    ),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_sleep":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await sleep(args as any, this.processPool),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_wake_all":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await wakeAll(
-                      args as any,
-                      this.iris,
-                      this.processPool,
-                      this.sessionManager,
-                    ),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_report":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await report(args as any, this.processPool),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_cache_read":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await cacheRead(args as any, this.processPool),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_cache_clear":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await cacheClear(args as any, this.processPool),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          case "team_getTeamName":
-            return {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await getTeamName(args as any, this.configManager),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-
-          default:
-            throw new Error(`Unknown tool: ${name}`);
-        }
-      } catch (error) {
-        logger.error(`Tool ${name} failed`, error);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(
-                {
-                  error: error instanceof Error ? error.message : String(error),
-                  tool: name,
-                },
-                null,
-                2,
-              ),
-            },
-          ],
-          isError: true,
-        };
-      }
-    });
-  }
-
-  private setupEventListeners(): void {
-    // Log important pool events
-    this.processPool.on("process-spawned", (data) => {
-      logger.info("Process spawned", data);
-    });
-
-    this.processPool.on("process-terminated", (data) => {
-      logger.info("Process terminated", data);
-    });
-
-    this.processPool.on("process-error", (data) => {
-      logger.error("Process error", data.error);
-    });
-  }
-
-  async run(
-    transport: "stdio" | "http" = "stdio",
-    port: number = 1615,
-  ): Promise<void> {
-    // Initialize session manager
-    logger.info("Initializing session manager...");
-    await this.sessionManager.initialize();
-    logger.info("Session manager initialized");
-
-    if (transport === "http") {
-      // HTTP transport mode using StreamableHTTPServerTransport
-      const app = express();
-      app.use(express.json());
-
-      // Store transports for stateless mode (one per request)
-      const transports = new Map<string, StreamableHTTPServerTransport>();
-
-      // Handle MCP requests with proper SDK transport (POST for JSON-RPC, GET for SSE)
-      app.all("/mcp", async (req, res) => {
-        logger.debug("Received HTTP request", {
-          method: req.method,
-          body: req.body,
-          headers: req.headers,
-        });
-
-        try {
-          // Create a new transport for each request (stateless mode)
-          const requestId = Math.random().toString(36).substring(7);
-          const httpTransport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined, // Stateless mode
-            enableJsonResponse: true,
-          });
-
-          transports.set(requestId, httpTransport);
-
-          // Clean up when connection closes
-          res.on("close", () => {
-            transports.delete(requestId);
-            httpTransport.close();
-          });
-
-          // Connect the transport to our server
-          await this.server.connect(httpTransport);
-
-          // Handle the request (works for both POST and GET)
-          await httpTransport.handleRequest(req, res, req.body);
-        } catch (error) {
-          logger.error("Error handling MCP request:", error);
-          if (!res.headersSent) {
-            res.status(500).json({
-              jsonrpc: "2.0",
-              error: {
-                code: -32603,
-                message: "Internal server error",
-              },
-              id: req.body?.id || null,
-            });
-          }
-        }
-      });
-
-      // Health check endpoint
-      app.get("/health", (req, res) => {
-        res.json({
-          status: "ok",
-          transport: "http",
-          server: "@iris-mcp/server",
-          version: "1.0.0",
-        });
-      });
-
-      app
-        .listen(port, () => {
-          logger.info(`Iris MCP Server running on HTTP port ${port}`);
-          logger.info(`MCP endpoint: http://localhost:${port}/mcp`);
-          logger.info(`Health check: http://localhost:${port}/health`);
-        })
-        .on("error", (error) => {
-          logger.error("HTTP server error:", error);
-          process.exit(1);
-        });
-    } else {
-      // Stdio transport mode (default)
-      const stdioTransport = new StdioServerTransport();
-      await this.server.connect(stdioTransport);
-      logger.info("Iris MCP Server running on stdio");
-    }
-
-    // Graceful shutdown
-    process.on("SIGINT", () => this.shutdown());
-    process.on("SIGTERM", () => this.shutdown());
-  }
-
-  private async shutdown(): Promise<void> {
-    logger.info("Shutting down Iris MCP Server...");
-
-    try {
-      await this.processPool.terminateAll();
-      // this.messageQueue.close();
-      this.sessionManager.close();
-
-      logger.info("Shutdown complete");
-      process.exit(0);
-    } catch (error) {
-      logger.error("Error during shutdown", error);
+    // Validate transport type
+    if (transport !== "stdio" && transport !== "http") {
+      logger.error(
+        `Invalid transport type: ${transport}. Must be 'stdio' or 'http'`,
+      );
       process.exit(1);
     }
-  }
-}
 
-// Start the server with command-line argument parsing
-if (import.meta.url === `file://${process.argv[1]}`) {
+    // Validate port number
+    if (transport === "http" && (isNaN(port) || port < 1 || port > 65535)) {
+      logger.error(
+        `Invalid port number: ${options.port}. Must be between 1 and 65535`,
+      );
+      process.exit(1);
+    }
+
+    try {
+      const server = new IrisMcpServer();
+      await server.run(transport, port);
+    } catch (error) {
+      logger.error("Fatal error", error);
+      process.exit(1);
+    }
+  });
+
+// Add Team command - adds a new team to the configuration
+program
+  .command("add-team <name> [path]")
+  .description("Add a new team to the Iris MCP configuration")
+  .option("-d, --description <text>", "Team description")
+  .option("-t, --idle-timeout <ms>", "Idle timeout in milliseconds", (value) =>
+    parseInt(value, 10),
+  )
+  .option(
+    "-s, --skip-permissions",
+    "Auto-approve Claude actions (dangerously-skip-permissions)",
+  )
+  .option("-c, --color <hex>", "Team color for UI (hex format)")
+  .action(async (name, path, options) => {
+    try {
+      await addTeam(name, path, {
+        description: options.description,
+        idleTimeout: options.idleTimeout,
+        skipPermissions: options.skipPermissions,
+        color: options.color,
+      });
+    } catch (error) {
+      logger.error("Failed to add team", error);
+      process.exit(1);
+    }
+  });
+
+// Install command - installs Iris MCP to Claude's global configuration
+program
+  .command("install")
+  .description(
+    "Install Iris MCP server to Claude CLI configuration (~/.claude.json)",
+  )
+  .option(
+    "-u, --url <url>",
+    "MCP server URL (default: http://localhost:1615/mcp)",
+  )
+  .option("-p, --port <number>", "HTTP server port (default: 1615)", (value) =>
+    parseInt(value, 10),
+  )
+  .option("-f, --force", "Force overwrite if Iris is already installed")
+  // .option("-d, --desktop", "Install to Claude Desktop config instead of CLI config") // DISABLED: stdio server not working with Desktop
+  .action(async (options) => {
+    try {
+      await install({
+        url: options.url,
+        port: options.port,
+        force: options.force,
+        // desktop: options.desktop, // DISABLED
+      });
+    } catch (error) {
+      logger.error("Failed to install Iris MCP", error);
+      process.exit(1);
+    }
+  });
+
+// Uninstall command - removes Iris MCP from Claude's configurations
+program
+  .command("uninstall")
+  .description("Remove Iris MCP server from Claude CLI configuration (~/.claude.json)")
+  // .option("--cli", "Only remove from CLI config (~/.claude.json)") // DISABLED: Desktop support disabled
+  // .option("--desktop", "Only remove from Desktop config") // DISABLED: stdio server not working with Desktop
+  .action(async (options) => {
+    try {
+      await uninstall({
+        // cli: options.cli, // DISABLED
+        // desktop: options.desktop, // DISABLED
+      });
+    } catch (error) {
+      logger.error("Failed to uninstall Iris MCP", error);
+      process.exit(1);
+    }
+  });
+
+// Default action when no command is provided - run start command
+program.action(() => {
+  // If no command specified, show help
+  program.help();
+});
+
+// Parse command line arguments
+program.parse(process.argv);
+
+// If no arguments provided, run start command by default
+if (process.argv.length === 2) {
+  // No arguments provided, run start with defaults
   // Load config to get defaults
   const configManager = getConfigManager();
   const config = configManager.load();
 
-  const program = new Command();
-
-  program
-    .name("iris-mcp")
-    .description("Iris MCP Server - Cross-project Claude Code coordination")
-    .version("1.0.0")
-    .option(
-      "-t, --transport <type>",
-      "Transport type (stdio or http)",
-      config.settings.defaultTransport || "stdio",
-    )
-    .option(
-      "-p, --port <number>",
-      `HTTP server port (default: ${config.settings.httpPort || 1615})`,
-      String(config.settings.httpPort || 1615),
-    )
-    .parse(process.argv);
-
-  const options = program.opts();
-  const transport = options.transport as "stdio" | "http";
-  const port = parseInt(options.port, 10);
-
-  // Validate transport type
-  if (transport !== "stdio" && transport !== "http") {
-    logger.error(
-      `Invalid transport type: ${transport}. Must be 'stdio' or 'http'`,
-    );
-    process.exit(1);
-  }
-
-  // Validate port number
-  if (transport === "http" && (isNaN(port) || port < 1 || port > 65535)) {
-    logger.error(
-      `Invalid port number: ${options.port}. Must be between 1 and 65535`,
-    );
-    process.exit(1);
-  }
-
   const server = new IrisMcpServer();
-  server.run(transport, port).catch((error) => {
-    logger.error("Fatal error", error);
-    process.exit(1);
-  });
+  server
+    .run(
+      (config.settings.defaultTransport as "stdio" | "http") || "http",
+      config.settings.httpPort || 1615,
+    )
+    .catch((error) => {
+      logger.error("Fatal error", error);
+      process.exit(1);
+    });
 }
-
-export default IrisMcpServer;

@@ -263,7 +263,11 @@ export class IrisMcpServer {
   private processPool: ClaudeProcessPool;
   private iris: IrisOrchestrator;
 
-  constructor() {
+  constructor(
+    sessionManager: SessionManager,
+    processPool: ClaudeProcessPool,
+    configManager: ReturnType<typeof getConfigManager>,
+  ) {
     this.server = new Server(
       {
         name: "@iris-mcp/server",
@@ -276,17 +280,10 @@ export class IrisMcpServer {
       },
     );
 
-    // Initialize components
-    this.configManager = getConfigManager();
-    const config = this.configManager.load();
-
-    // Initialize session manager
-    this.sessionManager = new SessionManager(config);
-
-    this.processPool = new ClaudeProcessPool(
-      this.configManager,
-      config.settings,
-    );
+    // Store shared components
+    this.sessionManager = sessionManager;
+    this.processPool = processPool;
+    this.configManager = configManager;
 
     // Initialize Iris orchestrator (BLL)
     this.iris = new IrisOrchestrator(this.sessionManager, this.processPool);
@@ -297,13 +294,7 @@ export class IrisMcpServer {
     // Set up process pool event listeners
     this.setupEventListeners();
 
-    logger.info("Iris MCP Server initialized", {
-      irisHome: getIrisHome(),
-      configPath: getConfigPath(),
-      dataDir: getDataDir(),
-      teams: Object.keys(config.teams),
-      maxProcesses: config.settings.maxProcesses,
-    });
+    logger.info("Iris MCP Server initialized");
   }
 
   private setupHandlers(): void {

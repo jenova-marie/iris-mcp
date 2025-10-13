@@ -239,7 +239,7 @@ describe("SessionManager Integration (New Architecture)", () => {
     }, sessionInitTimeout);
 
     it("should filter sessions by status", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-gamma");
+      const session = await manager.getOrCreateSession("team-iris", "team-alpha");
 
       const activeSessions = manager.listSessions({ status: "active" });
       expect(activeSessions.length).toBeGreaterThan(0);
@@ -249,7 +249,7 @@ describe("SessionManager Integration (New Architecture)", () => {
 
   describe("Session metadata operations", () => {
     it("should record usage", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-delta");
+      const session = await manager.getOrCreateSession("team-iris", "team-alpha");
       const originalLastUsed = session.lastUsedAt;
 
       // Wait a bit to ensure timestamp changes
@@ -262,7 +262,7 @@ describe("SessionManager Integration (New Architecture)", () => {
     }, sessionInitTimeout);
 
     it("should increment message count", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-epsilon");
+      const session = await manager.getOrCreateSession("team-iris", "team-beta");
 
       manager.incrementMessageCount(session.sessionId);
       manager.incrementMessageCount(session.sessionId);
@@ -272,7 +272,7 @@ describe("SessionManager Integration (New Architecture)", () => {
     }, sessionInitTimeout);
 
     it("should update process state", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-zeta");
+      const session = await manager.getOrCreateSession("team-iris", "team-beta");
 
       manager.updateProcessState(session.sessionId, "processing");
 

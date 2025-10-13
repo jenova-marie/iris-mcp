@@ -114,8 +114,9 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
         );
 
         expect(process).toBeDefined();
-        const metrics = process.getMetrics();
-        expect(metrics.status).toBe("idle");
+        const metrics = process.getBasicMetrics();
+        // Process might be "processing" (waiting for result) or "idle" (result arrived)
+        expect(["idle", "processing"]).toContain(metrics.status);
         expect(metrics.pid).toBeDefined();
       },
       sessionInitTimeout,
@@ -133,14 +134,14 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
         session.sessionId,
         "team-iris",
       );
-      const pid1 = process1.getMetrics().pid;
+      const pid1 = process1.getBasicMetrics().pid;
 
       const process2 = await pool.getOrCreateProcess(
         "team-beta",
         session.sessionId,
         "team-iris",
       );
-      const pid2 = process2.getMetrics().pid;
+      const pid2 = process2.getBasicMetrics().pid;
 
       // Should be the same process (same PID)
       expect(pid1).toBe(pid2);
@@ -166,16 +167,16 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
       );
 
       // Check status immediately
-      expect(process.getMetrics().status).toBe("idle");
-      const pid = process.getMetrics().pid;
+      expect(["idle", "processing"]).toContain(process.getBasicMetrics().status);
+      const pid = process.getBasicMetrics().pid;
       expect(pid).toBeDefined();
 
       // Wait 1 second
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Check status again - should still be idle
-      expect(process.getMetrics().status).toBe("idle");
-      expect(process.getMetrics().pid).toBe(pid);
+      expect(process.getBasicMetrics().status).toBe("idle");
+      expect(process.getBasicMetrics().pid).toBe(pid);
 
       // Pool should have processes from all previous tests
       const status = pool.getStatus();
@@ -201,14 +202,14 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
           sessionAlpha.sessionId,
           "team-iris",
         );
-        expect(processAlpha.getMetrics().status).toBe("idle");
+        expect(["idle", "processing"]).toContain(processAlpha.getBasicMetrics().status);
 
         // Give it a moment to stabilize
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Verify alpha is still healthy
-        expect(processAlpha.getMetrics().status).toBe("idle");
-        const pidAlpha = processAlpha.getMetrics().pid;
+        expect(processAlpha.getBasicMetrics().status).toBe("idle");
+        const pidAlpha = processAlpha.getBasicMetrics().pid;
         expect(pidAlpha).toBeDefined();
 
         // Now spawn beta as second process
@@ -217,8 +218,8 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
           sessionBeta.sessionId,
           "team-iris",
         );
-        expect(processBeta.getMetrics().status).toBe("idle");
-        const pidBeta = processBeta.getMetrics().pid;
+        expect(["idle", "processing"]).toContain(processBeta.getBasicMetrics().status);
+        const pidBeta = processBeta.getBasicMetrics().pid;
         expect(pidBeta).toBeDefined();
 
         // Should be different processes
@@ -258,17 +259,17 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
       // Should have at least these 2 teams (may have more from previous tests)
       expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
       expect(status.maxProcesses).toBe(10); // From config.json config
-      expect(status.processes).toHaveProperty("team-beta->team-alpha");
-      expect(status.processes).toHaveProperty("team-beta->team-beta");
-      expect(status.processes["team-beta->team-alpha"].status).toBe("idle");
-      expect(status.processes["team-beta->team-beta"].status).toBe("idle");
+      expect(status.processes).toHaveProperty("team-iris->team-alpha");
+      expect(status.processes).toHaveProperty("team-iris->team-beta");
+      expect(["idle", "processing"]).toContain(status.processes["team-iris->team-alpha"].status);
+      expect(["idle", "processing"]).toContain(status.processes["team-iris->team-beta"].status);
     });
 
     it("should get individual process from pool", async () => {
       // Process from earlier test should still be in pool
       const process = pool.getProcess("team-alpha");
       expect(process).toBeDefined();
-      expect(process?.getMetrics().status).toBe("idle");
+      expect(process?.getBasicMetrics().status).toBe("idle");
 
       const nonExistent = pool.getProcess("unknown-team");
       expect(nonExistent).toBeUndefined();
@@ -332,8 +333,8 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
         // Both processes should exist in pool (may have others from previous tests)
         const status = pool.getStatus();
         expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
-        expect(status.processes).toHaveProperty("team-beta->team-alpha");
-        expect(status.processes).toHaveProperty("team-beta->team-beta");
+        expect(status.processes).toHaveProperty("team-iris->team-alpha");
+        expect(status.processes).toHaveProperty("team-iris->team-beta");
       },
       sessionInitTimeout,
     );
@@ -496,7 +497,7 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
       // Process should be removed from pool (back to initial count or less)
       const status = pool.getStatus();
       expect(status.totalProcesses).toBeLessThanOrEqual(initialCount);
-      expect(status.processes).not.toHaveProperty("team-beta->team-alpha");
+      expect(status.processes).not.toHaveProperty("team-iris->team-alpha");
     });
 
     it(

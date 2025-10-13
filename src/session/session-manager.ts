@@ -8,10 +8,7 @@
 import type { TeamsConfig, TeamConfig } from "../process-pool/types.js";
 import { ClaudeProcess } from "../process-pool/claude-process.js";
 import { Logger } from "../utils/logger.js";
-import {
-  ConfigurationError,
-  ProcessError,
-} from "../utils/errors.js";
+import { ConfigurationError, ProcessError } from "../utils/errors.js";
 import { SessionStore } from "./session-store.js";
 import {
   validateProjectPath,
@@ -29,6 +26,7 @@ import type {
   SessionInfo,
   SessionFilters,
   CreateSessionOptions,
+  ProcessState,
 } from "./types.js";
 
 const logger = new Logger("session-manager");
@@ -84,7 +82,9 @@ export class SessionManager {
     }
 
     this.initialized = true;
-    logger.info("Session manager initialized - sessions will be created on-demand");
+    logger.info(
+      "Session manager initialized - sessions will be created on-demand",
+    );
   }
 
   /**
@@ -108,8 +108,8 @@ export class SessionManager {
       throw new ConfigurationError(`Unknown team: ${toTeam}`);
     }
 
-    // Validate fromTeam exists (unless it's the special "external" keyword)
-    if (fromTeam !== "external" && !this.teamsConfig.teams[fromTeam]) {
+    // Validate fromTeam exists
+    if (!this.teamsConfig.teams[fromTeam]) {
       throw new ConfigurationError(`Unknown team: ${fromTeam}`);
     }
 
@@ -447,7 +447,7 @@ export class SessionManager {
   /**
    * Update process state (called by Iris)
    */
-  updateProcessState(sessionId: string, state: string): void {
+  updateProcessState(sessionId: string, state: ProcessState): void {
     this.ensureInitialized();
     this.store.updateProcessState(sessionId, state);
 

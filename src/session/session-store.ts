@@ -15,6 +15,7 @@ import type {
   SessionRow,
   SessionFilters,
   SessionStatus,
+  ProcessState,
 } from "./types.js";
 
 const logger = new Logger("session-store");
@@ -52,14 +53,14 @@ export class SessionStore {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS team_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        from_team TEXT,
+        from_team TEXT NOT NULL,
         to_team TEXT NOT NULL,
         session_id TEXT NOT NULL UNIQUE,
         created_at INTEGER NOT NULL,
         last_used_at INTEGER NOT NULL,
         message_count INTEGER DEFAULT 0,
         status TEXT DEFAULT 'active',
-        process_state TEXT DEFAULT 'stopped',
+        process_state TEXT NOT NULL DEFAULT 'stopped',
         current_cache_session_id TEXT,
         last_response_at INTEGER,
         UNIQUE(from_team, to_team)
@@ -75,44 +76,7 @@ export class SessionStore {
         ON team_sessions(status);
     `);
 
-    // Migration: Add new columns if they don't exist (for existing databases)
-    this.migrateSchema();
-
     logger.debug("Schema initialized");
-  }
-
-  /**
-   * Migrate schema for existing databases
-   */
-  private migrateSchema(): void {
-    try {
-      // Check if process_state column exists
-      const columns = this.db
-        .prepare("PRAGMA table_info(team_sessions)")
-        .all() as any[];
-
-      const hasProcessState = columns.some(col => col.name === "process_state");
-      const hasCurrentCacheSessionId = columns.some(col => col.name === "current_cache_session_id");
-      const hasLastResponseAt = columns.some(col => col.name === "last_response_at");
-
-      if (!hasProcessState) {
-        logger.info("Migrating: Adding process_state column");
-        this.db.exec("ALTER TABLE team_sessions ADD COLUMN process_state TEXT DEFAULT 'stopped'");
-      }
-
-      if (!hasCurrentCacheSessionId) {
-        logger.info("Migrating: Adding current_cache_session_id column");
-        this.db.exec("ALTER TABLE team_sessions ADD COLUMN current_cache_session_id TEXT");
-      }
-
-      if (!hasLastResponseAt) {
-        logger.info("Migrating: Adding last_response_at column");
-        this.db.exec("ALTER TABLE team_sessions ADD COLUMN last_response_at INTEGER");
-      }
-    } catch (error) {
-      logger.error("Schema migration failed", error);
-      throw error;
-    }
   }
 
   /**
@@ -128,21 +92,16 @@ export class SessionStore {
       lastUsedAt: new Date(row.last_used_at),
       messageCount: row.message_count,
       status: row.status,
-      // NEW: Process state fields
       processState: row.process_state,
-      currentCacheSessionId: row.current_cache_session_id,
-      lastResponseAt: row.last_response_at,
+      currentCacheSessionId: row.current_cache_session_id ?? null,
+      lastResponseAt: row.last_response_at ?? null,
     };
   }
 
   /**
    * Create a new session record
    */
-  create(
-    fromTeam: string,
-    toTeam: string,
-    sessionId: string,
-  ): SessionInfo {
+  create(fromTeam: string, toTeam: string, sessionId: string): SessionInfo {
     const now = Date.now();
 
     const stmt = this.db.prepare(`
@@ -179,10 +138,7 @@ export class SessionStore {
   /**
    * Get session by team pair
    */
-  getByTeamPair(
-    fromTeam: string,
-    toTeam: string,
-  ): SessionInfo | null {
+  getByTeamPair(fromTeam: string, toTeam: string): SessionInfo | null {
     const stmt = this.db.prepare(`
       SELECT * FROM team_sessions
       WHERE from_team = ? AND to_team = ?
@@ -222,7 +178,7 @@ export class SessionStore {
     let query = "SELECT * FROM team_sessions WHERE 1=1";
     const params: any[] = [];
 
-    if (filters?.fromTeam !== undefined) {
+    if (filters?.fromTeam) {
       query += " AND from_team = ?";
       params.push(filters.fromTeam);
     }
@@ -435,7 +391,7 @@ export class SessionStore {
   /**
    * Update process state
    */
-  updateProcessState(sessionId: string, processState: string): void {
+  updateProcessState(sessionId: string, processState: ProcessState): void {
     const stmt = this.db.prepare(`
       UPDATE team_sessions
       SET process_state = ?

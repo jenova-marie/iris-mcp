@@ -9,13 +9,13 @@
  * Session status lifecycle
  */
 export type SessionStatus =
-  | "active"           // Currently in use
-  | "idle"             // No active process
-  | "compact_pending"  // Needs compaction
-  | "compacting"       // Currently being compacted
-  | "archived"         // Historical reference only
-  | "error"            // Failed state
-  | "migrating";       // Being moved/upgraded
+  | "active" // Currently in use
+  | "idle" // No active process
+  | "compact_pending" // Needs compaction
+  | "compacting" // Currently being compacted
+  | "archived" // Historical reference only
+  | "error" // Failed state
+  | "migrating"; // Being moved/upgraded
 
 /**
  * Process state (managed by Iris)
@@ -34,7 +34,7 @@ export interface SessionInfo {
   /** Database row ID */
   id: number;
 
-  /** Source team (required in new architecture) */
+  /** Source team */
   fromTeam: string;
 
   /** Destination team */
@@ -55,7 +55,6 @@ export interface SessionInfo {
   /** Current session status */
   status: SessionStatus;
 
-  // NEW: Process state (managed by Iris)
   /** Current process state */
   processState: ProcessState;
 
@@ -78,7 +77,6 @@ export interface SessionRow {
   last_used_at: number; // Unix timestamp (ms)
   message_count: number;
   status: SessionStatus;
-  // NEW: Process state fields
   process_state: ProcessState;
   current_cache_session_id: string | null;
   last_response_at: number | null;

@@ -2,9 +2,6 @@
  * Iris MCP Module: tell
  * Core MCP functionality for sending messages to teams
  *
- * Modes:
- * 1. Synchronous (waitForResponse=true): Send message and wait for response (uses provided timeout)
- * 2. Asynchronous (waitForResponse=false): Send message without waiting (uses timeout=-1)
  */
 
 import type { IrisOrchestrator } from "../iris.js";
@@ -27,10 +24,7 @@ export interface TellInput {
   /** Team sending the message */
   fromTeam: string;
 
-  /** Wait for response (default: true). Ignored if persist=true */
-  waitForResponse?: boolean;
-
-  /** Timeout in milliseconds (default: 30000). Only used when waitForResponse=true */
+  /** Timeout in milliseconds (default: 30000) */
   timeout?: number;
 
   /** Use persistent queue for fire-and-forget (default: false) */
@@ -50,17 +44,14 @@ export interface TellOutput {
   /** Message content */
   message: string;
 
-  /** Response from team (only when waitForResponse=true and persist=false) */
+  /** Response from team */
   response?: string;
 
-  /** Duration in milliseconds (only when waitForResponse=true) */
+  /** Duration in milliseconds */
   duration?: number;
 
   /** Timestamp of request */
   timestamp: number;
-
-  /** Whether this was an async request */
-  async: boolean;
 
   /** Notification ID (only when persist=true) */
   notificationId?: string;
@@ -80,7 +71,6 @@ export async function tell(
     fromTeam,
     toTeam,
     message,
-    waitForResponse = true,
     timeout = 30000,
     persist = false,
     ttlDays = 30,
@@ -91,25 +81,20 @@ export async function tell(
   validateTeamName(fromTeam);
   validateMessage(message);
 
-  // Determine timeout value based on waitForResponse
-  // waitForResponse=false → timeout=-1 (async mode)
-  // waitForResponse=true → use provided timeout
-  const actualTimeout = waitForResponse ? timeout : -1;
-
-  if (waitForResponse) {
-    validateTimeout(timeout);
-  }
+  validateTimeout(timeout);
 
   const startTime = Date.now();
 
-  logger.info({
-    from: fromTeam,
-    to: toTeam,
-    async: !waitForResponse,
-    timeout: actualTimeout,
-    messageLength: message.length,
-    messagePreview: message.substring(0, 50),
-  }, "Sending message to team");
+  logger.info(
+    {
+      from: fromTeam,
+      to: toTeam,
+      timeout,
+      messageLength: message.length,
+      messagePreview: message.substring(0, 50),
+    },
+    "Sending message to team",
+  );
 
   try {
     const result = await iris.sendMessage(fromTeam, toTeam, message, {
@@ -124,26 +109,31 @@ export async function tell(
 
       // Async mode response
       if (resultObj.status === "async") {
-        logger.info({
-          toTeam,
-          sessionId: resultObj.sessionId,
-        }, "Message sent in async mode");
+        logger.info(
+          {
+            toTeam,
+            sessionId: resultObj.sessionId,
+          },
+          "Message sent in async mode",
+        );
 
         return {
           from: fromTeam,
           to: toTeam,
           message,
           timestamp: Date.now(),
-          async: true,
         };
       }
 
       // Busy or other status
-      logger.warn({
-        toTeam,
-        status: resultObj.status,
-        result: JSON.stringify(result),
-      }, "Received non-string response");
+      logger.warn(
+        {
+          toTeam,
+          status: resultObj.status,
+          result: JSON.stringify(result),
+        },
+        "Received non-string response",
+      );
 
       return {
         from: fromTeam,
@@ -152,29 +142,34 @@ export async function tell(
         response: resultObj.message || JSON.stringify(result),
         duration,
         timestamp: Date.now(),
-        async: false,
       };
     }
 
     // Handle string response (successful completion)
     const response = result as string;
 
-    logger.info({
-      toTeam,
-      duration,
-      responseLength: response?.length || 0,
-      responsePreview: response?.substring(0, 100),
-      isEmpty: !response || response.length === 0,
-    }, "Received response from team");
+    logger.info(
+      {
+        toTeam,
+        duration,
+        responseLength: response?.length || 0,
+        responsePreview: response?.substring(0, 100),
+        isEmpty: !response || response.length === 0,
+      },
+      "Received response from team",
+    );
 
     if (!response || response.length === 0) {
-      logger.warn({
-        toTeam,
-        fromTeam,
-        message,
-        duration,
-        responseValue: JSON.stringify(response),
-      }, "EMPTY RESPONSE DETECTED");
+      logger.warn(
+        {
+          toTeam,
+          fromTeam,
+          message,
+          duration,
+          responseValue: JSON.stringify(response),
+        },
+        "EMPTY RESPONSE DETECTED",
+      );
     }
 
     return {
@@ -184,14 +179,16 @@ export async function tell(
       response,
       duration,
       timestamp: Date.now(),
-      async: false,
     };
   } catch (error) {
-    logger.error({
-      err: error instanceof Error ? error : new Error(String(error)),
-      toTeam,
-      fromTeam,
-    }, "Failed to send message to team");
+    logger.error(
+      {
+        err: error instanceof Error ? error : new Error(String(error)),
+        toTeam,
+        fromTeam,
+      },
+      "Failed to send message to team",
+    );
     throw error;
   }
 }

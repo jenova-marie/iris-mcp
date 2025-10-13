@@ -6,9 +6,9 @@
 import { readFileSync, writeFileSync, existsSync, copyFileSync } from "fs";
 import { join, dirname } from "path";
 import { homedir, platform } from "os";
-import { Logger } from "../../utils/logger.js";
+import { getChildLogger } from "../../utils/logger.js";
 
-const logger = new Logger("cli:uninstall");
+const logger = getChildLogger("cli:uninstall");
 
 export interface UninstallOptions {
   desktop?: boolean;
@@ -51,7 +51,7 @@ function uninstallFromConfig(configPath: string, configType: string): boolean {
     const content = readFileSync(configPath, "utf-8");
     config = JSON.parse(content);
   } catch (error) {
-    logger.error(`Failed to read ${configType} configuration: ${error}`);
+    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, `Failed to read ${configType} configuration`);
     return false;
   }
 
@@ -81,7 +81,7 @@ function uninstallFromConfig(configPath: string, configType: string): boolean {
     logger.info(`   Config file: ${configPath}`);
     return true;
   } catch (error) {
-    logger.error(`Failed to write ${configType} configuration: ${error}`);
+    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, `Failed to write ${configType} configuration`);
     return false;
   }
 }

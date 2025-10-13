@@ -7,10 +7,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from
 import { join, dirname, resolve } from "path";
 import { homedir, platform } from "os";
 import { fileURLToPath } from "url";
-import { Logger } from "../../utils/logger.js";
+import { getChildLogger } from "../../utils/logger.js";
 import { getConfigPath, ensureIrisHome } from "../../utils/paths.js";
 
-const logger = new Logger("cli:install");
+const logger = getChildLogger("cli:install");
 
 export interface InstallOptions {
   url?: string;
@@ -110,7 +110,7 @@ export async function install(options: InstallOptions): Promise<void> {
       config = JSON.parse(content);
       logger.info(`Loaded existing ${configType} configuration`);
     } catch (error) {
-      logger.error(`Failed to read ${configType} configuration: ${error}`);
+      logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, `Failed to read ${configType} configuration`);
       process.exit(1);
     }
   } else {
@@ -193,7 +193,7 @@ export async function install(options: InstallOptions): Promise<void> {
       logger.info(`   3. Verify the connection with: claude mcp list`);
     }
   } catch (error) {
-    logger.error(`Failed to write ${configType} configuration: ${error}`);
+    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, `Failed to write ${configType} configuration`);
     process.exit(1);
   }
 }

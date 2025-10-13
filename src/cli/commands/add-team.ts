@@ -5,10 +5,10 @@
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve, join } from "path";
-import { Logger } from "../../utils/logger.js";
+import { getChildLogger } from "../../utils/logger.js";
 import { getConfigPath } from "../../utils/paths.js";
 
-const logger = new Logger("cli:add-team");
+const logger = getChildLogger("cli:add-team");
 
 export interface AddTeamOptions {
   description?: string;
@@ -51,7 +51,7 @@ export async function addTeam(
     const configContent = readFileSync(configPath, "utf-8");
     config = JSON.parse(configContent);
   } catch (error) {
-    logger.error(`Failed to read config file: ${error}`);
+    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "Failed to read config file");
     process.exit(1);
   }
 
@@ -107,7 +107,7 @@ export async function addTeam(
       );
     }
   } catch (error) {
-    logger.error(`Failed to write config file: ${error}`);
+    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "Failed to write config file");
     process.exit(1);
   }
 }

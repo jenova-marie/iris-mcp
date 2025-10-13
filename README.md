@@ -10,6 +10,7 @@
   [![npm version](https://badge.fury.io/js/@iris-mcp%2Fserver.svg)](https://badge.fury.io/js/@iris-mcp%2Fserver)
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
   Iris MCP enables Claude Code instances across different project directories to communicate and coordinate. Stay in one project while asking questions to teams in other codebases.
 </div>
 
@@ -17,7 +18,23 @@
 
 ## 🎯 What is Iris MCP?
 
-Iris MCP is a revolutionary MCP server that lets Claude Code teams talk to each other. Instead of manually context-switching between projects, you can:
+Iris MCP is a **groundbreaking Model Context Protocol server** that enables direct communication between Claude Code instances across different project directories. It creates the **first true cross-codebase AI collaboration system**.
+
+### The Problem
+
+Modern software development involves multiple codebases (frontend, backend, mobile, infrastructure) that must stay synchronized. Currently, when you need to coordinate changes across projects:
+
+1. **Context Switch**: Stop work, manually navigate to other project
+2. **Launch New Claude**: Start fresh Claude Code session, losing context
+3. **Explain Everything**: Re-explain what changed and why
+4. **Copy/Paste**: Manually transfer information between projects
+5. **Repeat**: Do this for every affected project
+
+This workflow is **slow, error-prone, and breaks your flow state**. Studies show developers lose **23 minutes of productivity** on average when context switching.
+
+### The Iris Solution
+
+Stay in your current project while Claude coordinates with other teams automatically:
 
 ```
 You (in frontend project):
@@ -30,39 +47,54 @@ Claude (in frontend) → Iris MCP → Claude (in backend) → analyzes backend c
 
 **You never left the frontend project.** Iris handled the coordination automatically.
 
----
+### What Makes Iris Revolutionary
 
-## 🆕 What's New in Phase 1 (Current)
+Iris fills **critical gaps** that no existing multi-agent system addresses:
 
-### Architecture Improvements
+| Feature | Iris MCP | Symphony of One | Claude-Flow | Agent-MCP | Others |
+|---------|-----------|-----------------|-------------|-----------|--------|
+| **Cross-Project Communication** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Independent Team Contexts** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Direct Agent-to-Agent Messaging** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Per-Team MCP Server Access** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Zero Shared State** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Natural Language Coordination** | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-✅ **Three-Layer Design**: Clean separation between SessionManager, ProcessPool, and IrisOrchestrator
-✅ **Session Persistence**: Team-to-team conversations maintained across restarts
-✅ **Eager Initialization**: All team sessions pre-created at startup (no cold starts!)
-✅ **LRU Process Pooling**: 10-20x faster warm starts with intelligent eviction
-✅ **Dual-Role ClaudeProcess**: Static session initialization + instance process management
+**All existing solutions** work within a **single project boundary**. Iris breaks this limitation by enabling communication between completely independent codebases, each with their own:
+- Directory structure and dependencies
+- `.claude/` configuration
+- MCP servers and tools
+- Git repositories
+- Team-specific context
 
-### Performance Gains
+### Context Isolation = Better Results
 
-- **52%+ faster responses** with process pooling
-- **85% faster test suite** with `beforeAll` optimization
-- **Warm starts**: 500ms-2s (vs 8-14s cold starts)
-- **Proper timeout cleanup**: Fixed spurious errors 20s after completion
+Each team's Claude instance maintains **complete context isolation**, meaning **more accurate, specialized responses**:
 
-### New Features
+```
+Team Frontend Claude knows:
+✅ React components, Tailwind classes, Redux patterns
+✅ Frontend-specific MCP servers (Figma, Storybook)
+✅ Frontend CLAUDE.md instructions
+❌ Backend database schemas (not needed!)
+❌ Mobile iOS/Android specifics (not needed!)
 
-- **Session database** (SQLite) tracks metadata for all team interactions
-- **Health monitoring** every 30 seconds detects unhealthy processes
-- **Configurable timeouts** per team (`idleTimeout`, `sessionInitTimeout`)
-- **Event system** emits lifecycle events for observability
-- **Comprehensive docs** (SESSION.md, CLAUDE.md, POOL.md)
+Team Backend Claude knows:
+✅ Database schemas, API endpoints, migrations
+✅ Backend-specific MCP servers (PostgreSQL, Redis)
+✅ Backend CLAUDE.md instructions
+❌ Frontend component structure (not needed!)
+```
 
-### Developer Experience
+Your frontend in TypeScript/React can coordinate with your backend in Python/Django, and your mobile app in Swift—**all simultaneously, all with perfect context**.
 
-- **203 unit tests** passing in <2 seconds
-- **Integration tests** optimized for speed
-- **Structured JSON logging** to stderr
-- **Type-safe configuration** with Zod validation
+### Real Developer Pain Solved
+
+From GitHub Issue [#2929](https://github.com/anthropics/claude-code/issues/2929):
+
+> "Use cases are infinite. I could have a specialist claude run on my specific server answering to natural language requests, while a local generalist claude call it, having no clue of the specific API."
+
+**Developers are already asking for this!** Iris MCP delivers it.
 
 ---
 
@@ -187,7 +219,7 @@ Claude will automatically use Iris MCP to coordinate!
 
 ```javascript
 {
-  fromTeam: "frontend",      // optional
+  fromTeam: "frontend",      // required: calling team name
   toTeam: "backend",
   message: "Breaking change: User model now requires email field",
   waitForResponse: true,     // optional, default true
@@ -221,7 +253,7 @@ Claude will automatically use Iris MCP to coordinate!
 
 ```javascript
 {
-  fromTeam: "backend",    // optional
+  fromTeam: "backend",    // required: calling team name
   toTeam: "frontend",
   message: "New API endpoint available: GET /api/v2/users",
   ttlDays: 30            // optional, default 30
@@ -352,7 +384,7 @@ iris-mcp/
 
 ## 🏗️ Architecture
 
-### Three-Layer Design (Phase 1)
+### Three-Layer Design
 
 Iris uses a clean three-layer architecture with strict separation of concerns:
 
@@ -405,7 +437,8 @@ Iris uses a clean three-layer architecture with strict separation of concerns:
 
 **Persistent team-to-team sessions** maintain conversation continuity:
 
-- Each `(fromTeam, toTeam)` pair has exactly one session
+- Each `(fromTeam, toTeam)` pair has exactly one session (e.g., `iris→alpha`, `alpha→beta`)
+- ALL sessions require both fromTeam and toTeam (no "external" or null sessions)
 - Sessions stored at `~/.claude/projects/{escaped-path}/{sessionId}.jsonl`
 - Database tracks metadata (message count, last used, status)
 - Sessions resume across process restarts
@@ -602,7 +635,7 @@ All logs go to stderr in JSON format:
 
 ### Test Suite Performance
 
-**Phase 1 Refactor Improvements**:
+**Test Optimizations**:
 - Unit tests: 203 passing in <2 seconds
 - Integration tests: 85% faster (7min → 1min) with `beforeAll` optimization
 - Timeout handling: Fixed spurious errors 20s after completion
@@ -692,14 +725,16 @@ All logs go to stderr in JSON format:
 
 ## 🗺️ Roadmap
 
-### ✅ Phase 1: Core MCP Server (CURRENT)
+### ✅ Core MCP Server
 
-- MCP tools for team coordination
-- Process pool management
-- Notification queue
-- Configuration system
+- 10 MCP tools for team coordination
+- Process pool with LRU eviction
+- SQLite notification queue
+- Hot-reloadable configuration system
+- Session persistence and resumption
+- Event-driven architecture
 
-### 🚧 Phase 2: Web Dashboard
+### 🚧 Web Dashboard
 
 - React SPA for monitoring
 - Real-time WebSocket updates
@@ -708,7 +743,7 @@ All logs go to stderr in JSON format:
 
 See `src/dashboard/README.md`
 
-### 🔮 Phase 3: Programmatic API
+### 🔮 Programmatic API
 
 - RESTful HTTP endpoints
 - WebSocket streaming
@@ -717,7 +752,7 @@ See `src/dashboard/README.md`
 
 See `src/api/README.md`
 
-### 🔮 Phase 4: CLI
+### 🔮 CLI Interface
 
 - `iris ask` command
 - `iris status` monitoring
@@ -726,7 +761,7 @@ See `src/api/README.md`
 
 See `src/cli/README.md`
 
-### 🔮 Phase 5: Intelligence Layer
+### 🔮 Intelligence Layer
 
 - Loop detection
 - Destructive action prevention
@@ -739,20 +774,21 @@ See `src/intelligence/README.md`
 
 ## 📚 Documentation
 
-### Phase 1 Architecture (Current)
+### Architecture Documentation
 
-- **[Architecture Overview](docs/ARCHITECTURE.md)** - System design and component interaction
-- **[SessionManager Deep Dive](docs/SESSION.md)** - Session database and file management
-- **[ClaudeProcess Deep Dive](docs/CLAUDE.md)** - Process wrapper and stdio communication
-- **[ProcessPool Deep Dive](docs/POOL.md)** - Pool management and LRU eviction
-- **[Breaking Changes](docs/BREAKING.md)** - Migration guide for Phase 1 refactor
+- **[Architecture Overview](docs/new/ARCHITECTURE.md)** - System design and component interaction
+- **[Session Management](docs/new/SESSION.md)** - Session database and file management
+- **[Process Pool](docs/new/PROCESS_POOL.md)** - Pool management and LRU eviction
+- **[Cache System](docs/new/CACHE.md)** - Hierarchical cache with RxJS
+- **[MCP Actions](docs/new/ACTIONS.md)** - All 10 MCP tools documentation
+- **[Breaking Changes](docs/BREAKING.md)** - Migration guide for refactorings
 
 ### Future Phases (Planned)
 
-- [Dashboard Spec](docs/DASHBOARD.md) - React web UI (Phase 2)
-- [API Spec](docs/API.md) - RESTful + WebSocket API (Phase 3)
-- [CLI Spec](docs/CLI.md) - Ink terminal interface (Phase 4)
-- [Intelligence Layer](docs/AGENT.md) - Autonomous coordination (Phase 5)
+- [Dashboard Spec](docs/DASHBOARD.md) - React web UI for monitoring
+- [API Spec](docs/API.md) - RESTful + WebSocket API
+- [CLI Spec](docs/CLI.md) - Ink terminal interface
+- [Intelligence Layer](docs/AGENT.md) - Autonomous coordination
 
 ---
 

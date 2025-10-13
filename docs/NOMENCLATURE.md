@@ -3,91 +3,123 @@
 ## Core Concepts
 
 ### Session
-An Anthropic Claude Code conversation context. Sessions are created per requesting team and destination team pair.
+An Anthropic Claude Code conversation context stored as a `.jsonl` file. Sessions are created per `(fromTeam, toTeam)` pair.
 
 **Key Points:**
-- Sessions persist across multiple interactions
-- Format: `fromTeam->toTeam` or `null->toTeam` for external/testing
-- SessionManager initializes with `null->teamName` for all configured teams (testing/bootstrap purposes)
-- In production, all `tell()` commands should include the requesting team name
+- Sessions persist across multiple interactions and server restarts
+- Format: `fromTeam->toTeam` (e.g., `iris->alpha`, `alpha->beta`)
+- **ALL sessions require both fromTeam and toTeam** (no null or "external" sessions)
+- SessionManager tracks session metadata in SQLite database (`data/sessions.db`)
+- Session files stored at `~/.claude/projects/{escaped-path}/{sessionId}.jsonl`
+- Each team pair has exactly ONE persistent session
 
-### Instance
-A specific execution context of a session, tied to a requesting team and destination team pair.
+### Pool Key
+A unique identifier for a process in the pool, derived from the session's team pair.
 
-**Lifecycle:**
-1. First call `wake(team-req, team-dest)` to create the session instance
-2. Subsequent `tell()` commands use this specific req/dest session
-3. Provides isolated, independent communication channels between team pairs
+**Format:** `fromTeam->toTeam` (e.g., `iris->alpha`, `frontend->backend`)
 
-**Caching:**
-- Each instance maintains its own output cache (stdout + stderr)
-- Cache persists until explicitly cleared
-- Cache cleared by default on: `wake()`, `tell()`, `sleep()`, `wakeAll()`
+**Key Points:**
+- Pool key = session identifier for process management
+- One process per unique `(fromTeam, toTeam)` pair in the pool
+- Process resumes its specific session via `--resume {sessionId}`
+- LRU eviction removes least recently used pool key when pool is full
+- Provides isolated, independent communication channels between team pairs
 
 ### Process
-The actual Claude Code subprocess (`claude --headless`) managed by the pool.
+The actual Claude Code subprocess (`claude --headless`) managed by ClaudeProcessPool.
 
 **Management:**
 - Pooled for performance (52% improvement over cold starts)
-- LRU eviction when pool limit reached
-- Health checks every 30 seconds
+- LRU eviction when pool limit reached (default: 10 processes max)
+- Health checks every 30 seconds detect and restart unhealthy processes
+- Idle timeout (default: 5 minutes) terminates inactive processes
+- Process status: `stopped → spawning → idle → processing → terminating`
 
-## Future Enhancements (Backlog)
+**Communication:**
+- Stream-JSON protocol via stdin/stdout
+- Message queue prevents concurrent sends
+- Response streaming with text accumulation
 
-### Session Forking (Not Implemented)
-**Concept:** Improve performance by forking from base sessions
+### Cache
+A hierarchical, event-driven cache system built on RxJS that captures all process I/O and protocol messages.
 
-**Proposed Implementation:**
-1. SessionManager initializes with `null->teamName` base sessions for all teams
-2. New instances fork from base session for faster startup
-3. Challenge: Getting new session ID from forked session
-
-**Potential Solution Using Hooks:**
-```json
-{
-  "hooks": {
-    "Start": "echo $CLAUDE_SESSION_ID > /tmp/current-session-id.txt"
-  }
-}
+**Architecture:**
 ```
-This would allow capturing the forked session ID for subsequent operations.
+CacheManager
+└── CacheSession (one per fromTeam->toTeam pair)
+    └── CacheEntry[] (chronological messages/events)
+```
 
-### Message Queueing
-**Question:** Does Claude Code automatically queue messages when busy, or do we need to track completion?
+**Hierarchy:**
+- **CacheManager**: Top-level cache managing all sessions
+- **CacheSession**: Per `(fromTeam, toTeam)` pair, contains chronological entries
+- **CacheEntry**: Individual message, event, or output with timestamp and type
 
-**Current Behavior:**
-- Messages sent while Claude is processing may queue automatically
-- Need to verify Claude Code's internal queueing behavior
-- Consider tracking "tell in progress" state in pool-manager
+**Entry Types:**
+- `user` - User message sent to Claude
+- `assistant` - Claude's text response
+- `tool_use` - Claude invoked a tool
+- `tool_result` - Tool execution result
+- `stdout` - Process stdout output
+- `stderr` - Process stderr output
+- `event` - Process lifecycle event
 
-## MCP Commands
+**Key Features:**
+- **RxJS Observables**: Real-time streaming via `cache.observe()`
+- **Session Isolation**: Each team pair has independent cache
+- **Automatic Pruning**: Configurable max entries per session (default: 1000)
+- **Identity**: One cache session per `(fromTeam, toTeam)` pair
+- **Persistence**: In-memory only (not persisted to disk)
 
-### Core Communication
-- **`team_tell`** - Send message to a team (clears cache by default)
-- **`team_wake`** - Activate team process (clears cache by default)
-- **`team_sleep`** - Deactivate team process (clears cache by default)
-- **`team_wake_all`** - Activate all teams (wrapper around wake, clears cache)
+**Access Patterns:**
+- `team_cache_read(sessionId)` - Read all entries for a session
+- `team_cache_clear(sessionId)` - Clear specific session cache
+- `cache.observe()` - Subscribe to real-time cache events
+
+## MCP Tools (All 10)
+
+### Communication
+- **`team_tell`** - Send message to a team and optionally wait for response
+  - Modes: `sync` (wait), `async` (background), `persistent` (queue for later)
+  - Required: `fromTeam`, `toTeam`, `message`
+  - Optional: `waitForResponse`, `timeout`
+
+### Process Management
+- **`team_wake`** - Wake up a team's process (spawn if needed)
+  - Required: `team`, `fromTeam`
+  - Optional: `clearCache` (default: true)
+
+- **`team_sleep`** - Put a team's process to sleep (terminate gracefully)
+  - Required: `team`, `fromTeam`
+  - Optional: `force` (SIGKILL vs SIGTERM)
+
+- **`team_wake_all`** - Wake up all configured teams
+  - Required: `fromTeam`
+  - Optional: `parallel` (default: false - sequential mode)
 
 ### Status & Monitoring
-- **`team_isAwake`** - Check if team is active
-- **`team_report`** - View current output cache without clearing
+- **`team_isAwake`** - Check if team processes are active
+  - Required: `teams` (array of team names)
+  - Returns: Status for each team (active/inactive)
 
-## Cache Behavior
+- **`team_report`** - View process output (stdout/stderr)
+  - Required: `team`, `fromTeam`
+  - Returns: Recent process output without clearing
 
-### Default Clear Operations
-These operations clear the output cache by default (configurable via `clearCache` flag):
-- `wake()`
-- `tell()`
-- `sleep()`
-- `wakeAll()`
+### Cache Operations
+- **`team_cache_read`** - Read conversation cache and protocol messages
+  - Required: `sessionId`, `fromTeam`
+  - Returns: All cache entries for the session
 
-### Cache Contents
-- **stdout**: Standard output from Claude process
-- **stderr**: Error output from Claude process
-- **Format**: Raw text (no structured data)
-- **Persistence**: In-memory only, cleared on specified operations
+- **`team_cache_clear`** - Clear conversation cache
+  - Required: `sessionId`, `fromTeam`
+  - Removes all entries for the session
 
-### Cache Access
-- **`report()`**: Returns all cached output since last clear
-- No read markers - cache exists until next clear operation
-- Instance-specific - each team pair maintains separate cache
+### Team Identification
+- **`team_getTeamName`** - Identify team name from current directory
+  - Required: `pwd` (current working directory)
+  - Returns: Team name matching the directory path
+
+- **`team_teams`** - List all configured teams
+  - No parameters required
+  - Returns: Array of all team configurations

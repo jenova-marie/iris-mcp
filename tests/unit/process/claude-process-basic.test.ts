@@ -16,18 +16,19 @@ describe("ClaudeProcess Unit Tests", () => {
   };
 
   beforeEach(() => {
-    claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, 300000);
+    claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, null);
   });
 
   describe("constructor", () => {
     it("should create instance with correct initial state", () => {
-      const metrics = claudeProcess.getMetrics();
+      const metrics = claudeProcess.getBasicMetrics();
 
-      expect(metrics.status).toBe("stopped");
-      expect(metrics.pid).toBeUndefined();
-      expect(metrics.messagesProcessed).toBe(0);
-      expect(metrics.queueLength).toBe(0);
+      expect(metrics.teamName).toBe("team-alpha");
+      expect(metrics.pid).toBeNull();
       expect(metrics.uptime).toBe(0);
+      expect(metrics.isReady).toBe(false);
+      expect(metrics.isSpawning).toBe(false);
+      expect(metrics.isBusy).toBe(false);
     });
 
     it("should be an EventEmitter", () => {
@@ -37,42 +38,32 @@ describe("ClaudeProcess Unit Tests", () => {
     });
   });
 
-  describe("getMetrics", () => {
+  describe("getBasicMetrics", () => {
     it("should return current metrics", () => {
-      const metrics = claudeProcess.getMetrics();
+      const metrics = claudeProcess.getBasicMetrics();
 
       expect(metrics).toMatchObject({
-        pid: undefined,
-        status: "stopped",
-        messagesProcessed: 0,
-        lastUsed: expect.any(Number),
+        teamName: "team-alpha",
+        pid: null,
         uptime: 0,
-        idleTimeRemaining: 0,
-        queueLength: 0,
+        isReady: false,
+        isSpawning: false,
+        isBusy: false,
       });
     });
 
     it("should return consistent metrics on multiple calls", () => {
-      const metrics1 = claudeProcess.getMetrics();
-      const metrics2 = claudeProcess.getMetrics();
+      const metrics1 = claudeProcess.getBasicMetrics();
+      const metrics2 = claudeProcess.getBasicMetrics();
 
-      expect(metrics1.status).toBe(metrics2.status);
-      expect(metrics1.messagesProcessed).toBe(metrics2.messagesProcessed);
-      expect(metrics1.queueLength).toBe(metrics2.queueLength);
+      expect(metrics1.teamName).toBe(metrics2.teamName);
+      expect(metrics1.isReady).toBe(metrics2.isReady);
+      expect(metrics1.isBusy).toBe(metrics2.isBusy);
     });
   });
 
-  describe("sendMessage when stopped", () => {
-    it("should reject when process is not running", async () => {
-      await expect(claudeProcess.sendMessage("test message")).rejects.toThrow(
-        ProcessError,
-      );
-
-      await expect(claudeProcess.sendMessage("test message")).rejects.toThrow(
-        "Process not running",
-      );
-    });
-  });
+  // sendMessage removed - ClaudeProcess is now a dumb pipe
+  // Use executeTell(cacheEntry) instead, but that requires Iris orchestration
 
   describe("terminate when stopped", () => {
     it("should resolve immediately when no process exists", async () => {
@@ -98,26 +89,29 @@ describe("ClaudeProcess Unit Tests", () => {
   });
 
   describe("state transitions", () => {
-    it("should start in stopped state", () => {
-      expect(claudeProcess.getMetrics().status).toBe("stopped");
+    it("should start in stopped state (not ready, not spawning, not busy)", () => {
+      const metrics = claudeProcess.getBasicMetrics();
+      expect(metrics.isReady).toBe(false);
+      expect(metrics.isSpawning).toBe(false);
+      expect(metrics.isBusy).toBe(false);
     });
 
-    it("should reject spawn if already has process", async () => {
-      // This is a bit tricky to test without actually spawning, but we can
-      // verify the error handling logic exists by checking the implementation
-      // For now, just verify initial state
-      expect(claudeProcess.getMetrics().status).toBe("stopped");
+    it("should verify initial state flags are consistent", () => {
+      const metrics = claudeProcess.getBasicMetrics();
+      // Not ready and not spawning means stopped
+      expect(metrics.isReady).toBe(false);
+      expect(metrics.isSpawning).toBe(false);
     });
   });
 
   describe("configuration", () => {
-    it("should accept different idle timeouts", () => {
-      const process1 = new ClaudeProcess("team1", testTeamConfig, 60000);
-      const process2 = new ClaudeProcess("team2", testTeamConfig, 120000);
+    it("should accept different session IDs", () => {
+      const process1 = new ClaudeProcess("team1", testTeamConfig, "session-1");
+      const process2 = new ClaudeProcess("team2", testTeamConfig, "session-2");
 
-      // Both should start in stopped state regardless of timeout
-      expect(process1.getMetrics().status).toBe("stopped");
-      expect(process2.getMetrics().status).toBe("stopped");
+      // Both should start in stopped state regardless of session
+      expect(process1.getBasicMetrics().isReady).toBe(false);
+      expect(process2.getBasicMetrics().isReady).toBe(false);
     });
 
     it("should handle different team configurations", () => {
@@ -134,36 +128,36 @@ describe("ClaudeProcess Unit Tests", () => {
         color: "#ff0000",
       };
 
-      const process1 = new ClaudeProcess("team1", config1, 300000);
-      const process2 = new ClaudeProcess("team2", config2, 300000);
+      const process1 = new ClaudeProcess("team1", config1, null);
+      const process2 = new ClaudeProcess("team2", config2, "session-2");
 
-      expect(process1.getMetrics().status).toBe("stopped");
-      expect(process2.getMetrics().status).toBe("stopped");
+      expect(process1.getBasicMetrics().isReady).toBe(false);
+      expect(process2.getBasicMetrics().isReady).toBe(false);
     });
   });
 
   describe("error handling", () => {
     it("should handle invalid team names gracefully", () => {
       expect(() => {
-        new ClaudeProcess("", testTeamConfig, 300000);
+        new ClaudeProcess("", testTeamConfig, null);
       }).not.toThrow();
 
       expect(() => {
-        new ClaudeProcess("team-with-special-chars!@#", testTeamConfig, 300000);
+        new ClaudeProcess("team-with-special-chars!@#", testTeamConfig, "session-1");
       }).not.toThrow();
     });
 
-    it("should handle edge case timeouts", () => {
+    it("should handle edge case session IDs", () => {
       expect(() => {
-        new ClaudeProcess("team", testTeamConfig, 0);
+        new ClaudeProcess("team", testTeamConfig, null);
       }).not.toThrow();
 
       expect(() => {
-        new ClaudeProcess("team", testTeamConfig, -1);
+        new ClaudeProcess("team", testTeamConfig, "");
       }).not.toThrow();
 
       expect(() => {
-        new ClaudeProcess("team", testTeamConfig, Number.MAX_SAFE_INTEGER);
+        new ClaudeProcess("team", testTeamConfig, "very-long-session-id-".repeat(10));
       }).not.toThrow();
     });
   });

@@ -63,6 +63,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -91,6 +92,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -120,6 +122,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -200,6 +203,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -234,6 +238,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -272,6 +277,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -330,6 +336,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -364,6 +371,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -398,6 +406,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {
@@ -451,6 +460,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          responseTimeout: 120000,
         },
         teams: {
           "team-alpha": {

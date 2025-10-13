@@ -46,13 +46,13 @@ A hierarchical, event-driven cache system built on RxJS that captures all proces
 **Architecture:**
 ```
 CacheManager
-└── CacheSession (one per fromTeam->toTeam pair)
+└── MessageCache (one per fromTeam->toTeam pair)
     └── CacheEntry[] (chronological messages/events)
 ```
 
 **Hierarchy:**
-- **CacheManager**: Top-level cache managing all sessions
-- **CacheSession**: Per `(fromTeam, toTeam)` pair, contains chronological entries
+- **CacheManager**: Top-level cache managing all message caches
+- **MessageCache**: Per `(fromTeam, toTeam)` pair, contains chronological entries (links to SessionInfo via sessionId)
 - **CacheEntry**: Individual message, event, or output with timestamp and type
 
 **Entry Types:**

@@ -22,14 +22,14 @@
 
 The Cache subsystem provides **persistent, event-driven storage** for Claude protocol messages. It implements a **hierarchical structure** that mirrors the system's organizational model:
 
-- **CacheManager**: Singleton coordinator for all cache sessions
-- **CacheSession**: One per team pair (fromTeam→toTeam)
+- **CacheManager**: Singleton coordinator for all message caches
+- **MessageCache**: One per team pair (fromTeam→toTeam)
 - **CacheEntry**: One per operation (spawn ping or tell)
 - **CacheMessage**: Individual protocol messages from Claude
 
 **Key Innovation:** Uses **RxJS observables** to emit events when new messages arrive, enabling Iris to react in real-time without polling.
 
-**Survivability:** Cache sessions **survive process crashes**, preserving partial responses for retrieval even after process recreation.
+**Survivability:** Message caches **survive process crashes**, preserving partial responses for retrieval even after process recreation.
 
 ---
 
@@ -42,20 +42,20 @@ The Cache subsystem provides **persistent, event-driven storage** for Claude pro
 │                     CacheManager                              │
 │                    (cache-manager.ts)                         │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │ sessions: Map<sessionId, CacheSession>                 │  │
+│  │ caches: Map<sessionId, MessageCache>                   │  │
 │  │                                                        │  │
 │  │ Methods:                                               │  │
-│  │ • createSession(sessionId, fromTeam, toTeam)          │  │
-│  │ • getSession(sessionId)                               │  │
-│  │ • getAllSessions()                                     │  │
+│  │ • getOrCreateCache(sessionId, fromTeam, toTeam)       │  │
+│  │ • getCache(sessionId)                                 │  │
+│  │ • getAllCaches()                                       │  │
 │  │ • destroyAll()                                         │  │
 │  └────────────────────────────────────────────────────────┘  │
 └────────────────────┬─────────────────────────────────────────┘
                      │ manages
                      ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                    CacheSession                               │
-│                   (cache-session.ts)                          │
+│                     MessageCache                              │
+│                   (message-cache.ts)                          │
 │  ┌────────────────────────────────────────────────────────┐  │
 │  │ sessionId: string                                      │  │
 │  │ fromTeam: string                                       │  │
@@ -118,7 +118,7 @@ The Cache subsystem provides **persistent, event-driven storage** for Claude pro
 src/cache/
 ├── types.ts              # TypeScript interfaces, enums, types
 ├── cache-manager.ts      # Top-level manager (singleton)
-├── cache-session.ts      # Per-team-pair cache
+├── message-cache.ts      # Per-team-pair cache
 ├── cache-entry.ts        # Per-operation cache with RxJS
 └── README.md             # Future phase placeholder
 ```
@@ -134,25 +134,25 @@ src/cache/
 **State:**
 ```typescript
 class CacheManager {
-  private sessions = new Map<string, CacheSession>();
+  private caches = new Map<string, MessageCache>();
 }
 ```
 
 **Key Methods:**
 
 ```typescript
-// Create new cache session (called by Iris)
-createSession(
+// Get or create message cache (called by Iris)
+getOrCreateCache(
   sessionId: string,
   fromTeam: string,
   toTeam: string
-): CacheSession
+): MessageCache
 
-// Get existing session
-getSession(sessionId: string): CacheSession | null
+// Get existing cache
+getCache(sessionId: string): MessageCache | null
 
-// Get all sessions (for monitoring)
-getAllSessions(): CacheSession[]
+// Get all caches (for monitoring)
+getAllCaches(): MessageCache[]
 
 // Aggregate statistics
 getStats(): {
@@ -178,18 +178,18 @@ destroyAll(): void
 
 ---
 
-### 2. CacheSession (cache-session.ts)
+### 2. MessageCache (message-cache.ts)
 
 **Responsibility:** Manage cache entries for a specific team pair
 
-**Identity:** One session per `(fromTeam, toTeam)` pair
-- `iris → alpha` = one session
-- `alpha → beta` = different session
-- Matches the session isolation model in SessionManager
+**Identity:** One cache per `(fromTeam, toTeam)` pair
+- `iris → alpha` = one cache
+- `alpha → beta` = different cache
+- Links to SessionInfo (persistent metadata) via sessionId
 
 **State:**
 ```typescript
-class CacheSession {
+class MessageCache {
   readonly sessionId: string;
   readonly fromTeam: string;
   readonly toTeam: string;
@@ -236,7 +236,7 @@ destroy(): void
 **Example Usage:**
 ```typescript
 // Iris creates entry for spawn
-const spawnEntry = cacheSession.createEntry(
+const spawnEntry = messageCache.createEntry(
   CacheEntryType.SPAWN,
   "ping"
 );
@@ -245,7 +245,7 @@ const spawnEntry = cacheSession.createEntry(
 await process.spawn(spawnEntry);
 
 // Iris creates entry for tell
-const tellEntry = cacheSession.createEntry(
+const tellEntry = messageCache.createEntry(
   CacheEntryType.TELL,
   "What is 2+2?"
 );
@@ -622,16 +622,16 @@ cacheEntry.messages$
    - Status = `TERMINATED`
 
 4. **COMPLETED/TERMINATED → DESTROY**
-   - `cacheSession.destroy()` called by CacheManager
-   - Entry removed from session
+   - `messageCache.destroy()` called by CacheManager
+   - Entry removed from cache
    - Memory freed
 
-### Cache Session Lifetime
+### MessageCache Lifetime
 
 **Creation:**
 ```typescript
-// Iris creates session first time team pair communicates
-const session = cacheManager.createSession(
+// Iris gets or creates cache first time team pair communicates
+const cache = cacheManager.getOrCreateCache(
   sessionId,
   fromTeam,
   toTeam
@@ -639,28 +639,28 @@ const session = cacheManager.createSession(
 ```
 
 **Survival:**
-- Cache session **survives** process crashes
-- Cache session **survives** process recreation
-- Cache session **preserves** all entries and messages
+- MessageCache **survives** process crashes
+- MessageCache **survives** process recreation
+- MessageCache **preserves** all entries and messages
 
 **Example:**
 ```
 1. Tell sent to alpha team
 2. Process responding...
 3. ⚠️ Process crashes (responseTimeout)
-4. ✅ Cache session STILL EXISTS in CacheManager
+4. ✅ MessageCache STILL EXISTS in CacheManager
 5. ✅ All messages preserved in cache entries
 6. 📖 Caller can retrieve partial results via team_cache_read
 7. Next tell creates NEW process
-8. ✅ SAME cache session reused
-9. New cache entry added to existing session
+8. ✅ SAME MessageCache reused
+9. New cache entry added to existing cache
 ```
 
 **Destruction:**
 ```typescript
 // Only destroyed on explicit cleanup
 cacheManager.destroyAll();  // Shutdown
-cacheManager.deleteSession(sessionId);  // Manual cleanup
+cacheManager.deleteCache(sessionId);  // Manual cleanup
 ```
 
 ---
@@ -671,21 +671,21 @@ cacheManager.deleteSession(sessionId);  // Manual cleanup
 
 ```typescript
 class CacheManager {
-  // Create new cache session
-  createSession(
+  // Get or create message cache (idempotent)
+  getOrCreateCache(
     sessionId: string,
     fromTeam: string,
     toTeam: string
-  ): CacheSession;
+  ): MessageCache;
 
-  // Get existing session (returns null if not found)
-  getSession(sessionId: string): CacheSession | null;
+  // Get existing cache (returns null if not found)
+  getCache(sessionId: string): MessageCache | null;
 
-  // Get all sessions
-  getAllSessions(): CacheSession[];
+  // Get all caches
+  getAllCaches(): MessageCache[];
 
-  // Delete specific session
-  deleteSession(sessionId: string): void;
+  // Delete specific cache
+  deleteCache(sessionId: string): void;
 
   // Get aggregate statistics
   getStats(): {
@@ -694,15 +694,15 @@ class CacheManager {
     sessionStats: Array<{...}>;
   };
 
-  // Destroy all sessions (shutdown)
+  // Destroy all caches (shutdown)
   destroyAll(): void;
 }
 ```
 
-### CacheSession
+### MessageCache
 
 ```typescript
-class CacheSession {
+class MessageCache {
   readonly sessionId: string;
   readonly fromTeam: string;
   readonly toTeam: string;
@@ -814,16 +814,13 @@ class IrisOrchestrator {
   private cacheManager: CacheManager;
 
   async sendMessage(fromTeam, toTeam, message) {
-    // Get or create cache session
-    let cacheSession = this.cacheManager.getSession(sessionId);
-    if (!cacheSession) {
-      cacheSession = this.cacheManager.createSession(
-        sessionId, fromTeam, toTeam
-      );
-    }
+    // Get or create message cache
+    const messageCache = this.cacheManager.getOrCreateCache(
+      sessionId, fromTeam, toTeam
+    );
 
     // Create cache entry
-    const tellEntry = cacheSession.createEntry(
+    const tellEntry = messageCache.createEntry(
       CacheEntryType.TELL, message
     );
 
@@ -870,10 +867,10 @@ class ClaudeProcess {
 **team_cache_read tool:**
 ```typescript
 async function team_cache_read(sessionId: string) {
-  const cacheSession = iris.cacheManager.getSession(sessionId);
-  if (!cacheSession) return { error: "Session not found" };
+  const messageCache = iris.cacheManager.getCache(sessionId);
+  if (!messageCache) return { error: "Cache not found" };
 
-  const entries = cacheSession.getAllEntries();
+  const entries = messageCache.getAllEntries();
 
   return {
     sessionId,
@@ -890,7 +887,7 @@ async function team_cache_read(sessionId: string) {
 **team_cache_clear tool:**
 ```typescript
 async function team_cache_clear(sessionId: string) {
-  iris.cacheManager.deleteSession(sessionId);
+  iris.cacheManager.deleteCache(sessionId);
   return { success: true };
 }
 ```
@@ -902,8 +899,8 @@ async function team_cache_clear(sessionId: string) {
 **Memory:**
 - CacheMessage: ~200 bytes (average)
 - CacheEntry: ~1-5 KB (10-50 messages)
-- CacheSession: ~10-100 KB (10-20 entries)
-- CacheManager: ~1-10 MB (100 sessions)
+- MessageCache: ~10-100 KB (10-20 entries)
+- CacheManager: ~1-10 MB (100 caches)
 
 **Typical Sizes:**
 - Short tell: 10-20 messages (~2 KB)
@@ -916,7 +913,7 @@ async function team_cache_clear(sessionId: string) {
 - Negligible compared to message data
 
 **Scalability:**
-- 1000 cache sessions: ~100 MB RAM
+- 1000 message caches: ~100 MB RAM
 - 10,000 messages: ~2 MB RAM
 - Observable cleanup prevents memory leaks
 
@@ -938,8 +935,8 @@ cacheEntry.messages$.subscribe(msg => {
 ```typescript
 // WebSocket streaming
 app.ws('/cache/:sessionId/stream', (ws) => {
-  const session = cacheManager.getSession(sessionId);
-  const sub = session.getLatestEntry()?.messages$.subscribe(msg => {
+  const cache = cacheManager.getCache(sessionId);
+  const sub = cache?.getLatestEntry()?.messages$.subscribe(msg => {
     ws.send(JSON.stringify(msg));
   });
 });
@@ -965,8 +962,8 @@ cacheEntry.messages$
 
 **Unit Tests:**
 - CacheEntry message addition and observable emission
-- CacheSession entry management and filtering
-- CacheManager session CRUD operations
+- MessageCache entry management and filtering
+- CacheManager cache CRUD operations
 - Observable completion on entry lifecycle
 
 **Integration Tests:**

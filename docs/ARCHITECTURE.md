@@ -155,7 +155,7 @@ System handles failures gracefully:
 │ PROCESS POOL   │ │  CACHE MANAGER  │ │  SESSION MANAGER     │
 │ (pool-manager) │ │ (cache-manager) │ │ (session-manager)    │
 ├────────────────┤ ├─────────────────┤ ├──────────────────────┤
-│ LRU Eviction   │ │ CacheSessions   │ │ SQLite Storage       │
+│ LRU Eviction   │ │ MessageCaches   │ │ SQLite Storage       │
 │ Health Checks  │ │ RxJS Observables│ │ Process State        │
 │ Max 10 Process │ │ Message History │ │ Usage Statistics     │
 └────────────────┘ └─────────────────┘ └──────────────────────┘
@@ -163,7 +163,7 @@ System handles failures gracefully:
    │ contains          │ contains           │ persists
    ▼                   ▼                    ▼
 ┌────────────────┐ ┌─────────────────┐ ┌──────────────────────┐
-│ CLAUDE PROCESS │ │  CACHE SESSION  │ │  SQLite Database     │
+│ CLAUDE PROCESS │ │  MESSAGE CACHE  │ │  SQLite Database     │
 │ (dumb pipe)    │ │ (per team pair) │ │ team-sessions.db     │
 ├────────────────┤ ├─────────────────┤ ├──────────────────────┤
 │ spawn()        │ │ createEntry()   │ │ from_team            │
@@ -204,8 +204,8 @@ System handles failures gracefully:
 | **Iris Orchestrator** | ALL business logic | ✅ YES |
 | **Process Pool** | Manage process lifecycle, LRU | Limited (lifecycle) |
 | **ClaudeProcess** | Spawn, stdio piping | ❌ NO |
-| **Cache Manager** | Manage cache sessions | Minimal |
-| **Cache Session** | Store entries for team pair | No |
+| **Cache Manager** | Manage message caches | Minimal |
+| **MessageCache** | Store entries for team pair | No |
 | **Cache Entry** | Store messages, emit events | No (just storage) |
 | **Session Manager** | Persist session metadata | No (just CRUD) |
 | **Config Manager** | Load/validate config | No (just I/O) |
@@ -219,7 +219,7 @@ System handles failures gracefully:
 ```
 CacheManager (singleton)
   │
-  ├── CacheSession (sessionId: "uuid-1", fromTeam: null, toTeam: "alpha")
+  ├── MessageCache (sessionId: "uuid-1", fromTeam: null, toTeam: "alpha")
   │     │
   │     ├── CacheEntry (type: SPAWN, tellString: "ping")
   │     │     └── CacheMessage[] (system/init, assistant, result)
@@ -230,14 +230,14 @@ CacheManager (singleton)
   │     └── CacheEntry (type: TELL, tellString: "Explain quantum physics")
   │           └── CacheMessage[] (user, assistant, assistant, result)
   │
-  └── CacheSession (sessionId: "uuid-2", fromTeam: "alpha", toTeam: "beta")
+  └── MessageCache (sessionId: "uuid-2", fromTeam: "alpha", toTeam: "beta")
         └── CacheEntry (type: TELL, tellString: "Review this PR")
               └── CacheMessage[] (...)
 ```
 
 **Lifetime:**
 - `CacheManager`: Lives for entire Iris process lifetime
-- `CacheSession`: Lives until explicitly destroyed (survives process crashes)
+- `MessageCache`: Lives until explicitly destroyed (survives process crashes)
 - `CacheEntry`: Lives until completed/terminated
 - `CacheMessage`: Immutable once added
 
@@ -386,7 +386,7 @@ Time    Event
 │            2. Iris Orchestrator (THE BRAIN)                       │
 │  a. Get/create session → SessionManager                           │
 │  b. Check if busy → session.processState === "processing"?       │
-│  c. Get/create CacheSession → CacheManager                        │
+│  c. Get/create MessageCache → CacheManager                        │
 │  d. Get/create ClaudeProcess → ProcessPool                        │
 │  e. Spawn if needed (with SPAWN cache entry)                     │
 │  f. Create TELL cache entry                                      │
@@ -465,7 +465,7 @@ Time    Event
 │     - Sets terminationReason                                      │
 │     - Completes RxJS observable (messagesSubject.complete())      │
 │                                                                   │
-│  2. Get CacheSession (still alive in CacheManager!)               │
+│  2. Get MessageCache (still alive in CacheManager!)               │
 │                                                                   │
 │  3. Terminate old process                                         │
 │     - oldProcess.terminate() → SIGTERM/SIGKILL                    │
@@ -476,12 +476,12 @@ Time    Event
 │     - sessionManager.setCurrentCacheSessionId(null)               │
 │                                                                   │
 │  5. Cache preserved for retrieval!                                │
-│     - CacheSession still contains all entries                     │
+│     - MessageCache still contains all entries                     │
 │     - Partial responses available via team_cache_read             │
 │                                                                   │
 │  6. Next tell will create new process                             │
-│     - Same CacheSession reused                                    │
-│     - New cache entry added to same session                       │
+│     - Same MessageCache reused                                    │
+│     - New cache entry added to same cache                         │
 └───────────────────────────────────────────────────────────────────┘
 ```
 

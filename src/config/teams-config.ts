@@ -7,11 +7,11 @@ import { readFileSync, existsSync, watchFile } from 'fs';
 import { resolve, dirname, isAbsolute } from 'path';
 import { z } from 'zod';
 import type { TeamsConfig } from '../process-pool/types.js';
-import { Logger } from '../utils/logger.js';
+import { getChildLogger } from '../utils/logger.js';
 import { ConfigurationError } from '../utils/errors.js';
 import { getConfigPath, ensureIrisHome } from '../utils/paths.js';
 
-const logger = new Logger('config');
+const logger = getChildLogger('config:teams');
 
 // Zod schema for validation
 const TeamConfigSchema = z.object({
@@ -120,15 +120,15 @@ export class TeamsConfigManager {
 
         // Validate team paths exist
         if (!existsSync(team.path)) {
-          logger.warn(`Team "${name}" path does not exist: ${team.path}`);
+          logger.warn({ name, path: team.path }, `Team "${name}" path does not exist`);
         }
       }
 
       this.config = validated;
-      logger.info('Configuration loaded successfully', {
+      logger.info({
         teams: Object.keys(validated.teams),
         maxProcesses: validated.settings.maxProcesses,
-      });
+      }, 'Configuration loaded successfully');
 
       return this.config;
     } catch (error) {
@@ -198,7 +198,9 @@ export class TeamsConfigManager {
           this.watchCallback(newConfig);
         }
       } catch (error) {
-        logger.error('Failed to reload configuration', error);
+        logger.error({
+          err: error instanceof Error ? error : new Error(String(error))
+        }, 'Failed to reload configuration');
       }
     });
 

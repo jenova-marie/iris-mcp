@@ -15,7 +15,7 @@ import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
 import type { TeamConfig } from "./types.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import { ProcessError } from "../utils/errors.js";
 import { CacheEntry } from "../cache/types.js";
 
@@ -59,7 +59,7 @@ export class ClaudeProcess extends EventEmitter {
   private isReady = false;
   private spawnTime = 0;
   private responseBuffer = "";
-  private logger: Logger;
+  private logger: ReturnType<typeof getChildLogger>;
 
   // Init promise for spawn()
   private initResolve: (() => void) | null = null;
@@ -77,7 +77,7 @@ export class ClaudeProcess extends EventEmitter {
     public readonly sessionId: string,
   ) {
     super();
-    this.logger = new Logger(`process:${teamName}`);
+    this.logger = getChildLogger(`pool:process:${teamName}`);
   }
 
   /**
@@ -89,7 +89,7 @@ export class ClaudeProcess extends EventEmitter {
     sessionId: string,
     sessionInitTimeout = 30000,
   ): Promise<void> {
-    const logger = new Logger(`session-init:${teamConfig.path}`);
+    const logger = getChildLogger("session:init");
     const projectPath = teamConfig.path;
 
     logger.info("Initializing session file", {
@@ -136,11 +136,10 @@ export class ClaudeProcess extends EventEmitter {
       let debugLogPath: string | null = null;
 
       claudeProcess.on("error", (err) => {
-        logger.error("Process spawn error", {
+        logger.error({
+          err,
           sessionId,
-          error: err.message,
-          stack: err.stack,
-        });
+        }, "Process spawn error");
         spawnError = err;
       });
 
@@ -195,31 +194,29 @@ export class ClaudeProcess extends EventEmitter {
           }
 
           if (spawnError) {
-            logger.error("Process exited with spawn error", {
+            logger.error({
+              err: spawnError,
               sessionId,
               code,
               stdoutLength: stdoutData.length,
               stderrLength: stderrData.length,
               stdout: stdoutData.substring(0, 1000),
               stderr: stderrData.substring(0, 1000),
-            });
+            }, "Process exited with spawn error");
             reject(spawnError);
           } else if (code !== 0 && code !== 143) {
             // 143 is SIGTERM which is ok
-            logger.error(
-              "Session initialization failed with non-zero exit code",
-              {
-                sessionId,
-                code,
-                command: `claude ${args.join(" ")}`,
-                cwd: projectPath,
-                stdoutLength: stdoutData.length,
-                stderrLength: stderrData.length,
-                stdout: stdoutData,
-                stderr: stderrData,
-                debugLogPath,
-              },
-            );
+            logger.error({
+              sessionId,
+              code,
+              command: `claude ${args.join(" ")}`,
+              cwd: projectPath,
+              stdoutLength: stdoutData.length,
+              stderrLength: stderrData.length,
+              stdout: stdoutData,
+              stderr: stderrData,
+              debugLogPath,
+            }, "Session initialization failed with non-zero exit code");
 
             const errorMsg = [
               `Session initialization failed with exit code ${code}`,
@@ -231,20 +228,17 @@ export class ClaudeProcess extends EventEmitter {
 
             reject(new ProcessError(errorMsg, projectPath));
           } else if (!responseReceived) {
-            logger.error(
-              "Session initialization completed but no response received",
-              {
-                sessionId,
-                code,
-                command: `${claudePath} ${args.join(" ")}`,
-                cwd: projectPath,
-                stdoutLength: stdoutData.length,
-                stderrLength: stderrData.length,
-                stdout: stdoutData,
-                stderr: stderrData,
-                debugLogPath,
-              },
-            );
+            logger.error({
+              sessionId,
+              code,
+              command: `${claudePath} ${args.join(" ")}`,
+              cwd: projectPath,
+              stdoutLength: stdoutData.length,
+              stderrLength: stderrData.length,
+              stdout: stdoutData,
+              stderr: stderrData,
+              debugLogPath,
+            }, "Session initialization completed but no response received");
 
             const errorMsg = [
               "Session initialization completed but no response received",
@@ -274,7 +268,7 @@ export class ClaudeProcess extends EventEmitter {
         // Timeout after configured duration
         timeoutHandle = setTimeout(() => {
           timeoutHandle = null; // Clear reference
-          logger.error("Session initialization timed out", {
+          logger.error({
             sessionId,
             timeout: sessionInitTimeout,
             responseReceived,
@@ -285,7 +279,7 @@ export class ClaudeProcess extends EventEmitter {
             stdout: stdoutData,
             stderr: stderrData,
             debugLogPath,
-          });
+          }, "Session initialization timed out");
           claudeProcess.kill();
 
           const errorMsg = [
@@ -314,12 +308,11 @@ export class ClaudeProcess extends EventEmitter {
         );
       }
 
-      logger.info("Session file initialized successfully", {
-        sessionId,
-        filePath: sessionFilePath,
-      });
+      logger.info({ sessionId, filePath: sessionFilePath }, "Session file initialized successfully");
     } catch (error) {
-      logger.error("Failed to initialize session file", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error)),
+      }, "Failed to initialize session file");
       throw error;
     }
   }
@@ -479,10 +472,10 @@ export class ClaudeProcess extends EventEmitter {
 
     // Error handler
     this.childProcess.on("error", (error) => {
-      this.logger.error("Process error", {
+      this.logger.error({
+        err: error,
         teamName: this.teamName,
-        error: error.message,
-      });
+      }, "Process error");
 
       this.emit("process-error", {
         teamName: this.teamName,

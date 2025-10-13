@@ -8,7 +8,7 @@
 import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "fs";
 import { dirname, resolve } from "path";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import { getSessionDbPath } from "../utils/paths.js";
 import type {
   SessionInfo,
@@ -18,7 +18,7 @@ import type {
   ProcessState,
 } from "./types.js";
 
-const logger = new Logger("session-store");
+const logger = getChildLogger("session:store");
 
 /**
  * SQLite-based session storage

@@ -7,7 +7,7 @@
 
 import type { TeamsConfig, TeamConfig } from "../process-pool/types.js";
 import { ClaudeProcess } from "../process-pool/claude-process.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import { ConfigurationError, ProcessError } from "../utils/errors.js";
 import { SessionStore } from "./session-store.js";
 import {
@@ -29,7 +29,7 @@ import type {
   ProcessState,
 } from "./types.js";
 
-const logger = new Logger("session-manager");
+const logger = getChildLogger("session:manager");
 
 /**
  * Manages persistent team-to-team sessions
@@ -187,12 +187,12 @@ export class SessionManager {
 
       return sessionInfo;
     } catch (error) {
-      logger.error("Failed to create session", {
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error)),
         fromTeam,
         toTeam,
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      }, "Failed to create session");
 
       throw new ProcessError(
         `Failed to create session: ${error instanceof Error ? error.message : String(error)}`,
@@ -331,13 +331,13 @@ export class SessionManager {
         try {
           const fs = await import("fs/promises");
           await fs.unlink(filePath);
-          logger.info("Deleted session file", { sessionId, filePath });
+          logger.info({ sessionId, filePath }, "Deleted session file");
         } catch (error) {
-          logger.warn("Failed to delete session file", {
+          logger.warn({
+            err: error instanceof Error ? error : new Error(String(error)),
             sessionId,
             filePath,
-            error: error instanceof Error ? error.message : String(error),
-          });
+          }, "Failed to delete session file");
         }
       }
     }
@@ -375,12 +375,12 @@ export class SessionManager {
       this.store.resetMessageCount(sessionId);
       this.store.updateStatus(sessionId, "active");
 
-      logger.info("Session metadata compaction completed", { sessionId });
+      logger.info({ sessionId }, "Session metadata compaction completed");
     } catch (error) {
-      logger.error("Session compaction failed", {
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error)),
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      }, "Session compaction failed");
 
       // Mark as error state
       this.store.updateStatus(sessionId, "error");

@@ -7,7 +7,7 @@ import { EventEmitter } from "events";
 import { ClaudeProcess } from "./claude-process.js";
 import type { ProcessPoolStatus, ProcessPoolConfig } from "./types.js";
 import { TeamsConfigManager } from "../config/teams-config.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
 import { CacheEntryImpl } from "../cache/cache-entry.js";
 import { CacheEntryType } from "../cache/types.js";
@@ -18,7 +18,7 @@ export class ClaudeProcessPool extends EventEmitter {
   private sessionToProcess = new Map<string, string>(); // sessionId -> poolKey mapping
   private accessOrder: string[] = []; // For LRU tracking
   private healthCheckInterval: NodeJS.Timeout | null = null;
-  private logger = new Logger("pool");
+  private logger = getChildLogger("pool:manager");
 
   constructor(
     private configManager: TeamsConfigManager,
@@ -145,20 +145,19 @@ export class ClaudeProcessPool extends EventEmitter {
     } catch (error) {
       // CRITICAL: Clean up the failed process
       // The process object exists but spawn failed, so it's in a zombie state
-      this.logger.error("Process spawn failed, cleaning up", {
+      this.logger.error({
+        err: error instanceof Error ? error : new Error(String(error)),
         poolKey,
         teamName,
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      }, "Process spawn failed, cleaning up");
 
       // Terminate the zombie process to clean up any resources
       await process.terminate().catch((termError) => {
-        this.logger.warn("Failed to terminate zombie process", {
+        this.logger.warn({
+          err: termError instanceof Error ? termError : new Error(String(termError)),
           poolKey,
-          error:
-            termError instanceof Error ? termError.message : String(termError),
-        });
+        }, "Failed to terminate zombie process");
       });
 
       // Re-throw the original error
@@ -323,14 +322,14 @@ export class ClaudeProcessPool extends EventEmitter {
           });
       });
 
-      this.logger.info("Command sent to session", { sessionId, command });
+      this.logger.info({ sessionId, command }, "Command sent to session");
       return response;
     } catch (error) {
-      this.logger.error("Failed to send command to session", {
+      this.logger.error({
+        err: error instanceof Error ? error : new Error(String(error)),
         sessionId,
         command,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      }, "Failed to send command to session");
       throw error;
     }
   }

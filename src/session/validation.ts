@@ -9,9 +9,9 @@ import { existsSync, realpathSync } from "fs";
 import { resolve, normalize } from "path";
 import { randomUUID } from "crypto";
 import { ConfigurationError, ValidationError } from "../utils/errors.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("session-validation");
+const logger = getChildLogger("session:validation");
 
 /**
  * UUID v4 regex pattern
@@ -76,18 +76,18 @@ export function validateSecureProjectPath(projectPath: string): void {
   try {
     const realPath = realpathSync(resolved);
     if (realPath !== resolved) {
-      logger.warn("Project path contains symlinks", {
+      logger.warn({
         original: projectPath,
         resolved,
         realPath,
         note: "Symlinks are allowed but may cause unexpected behavior",
-      });
+      }, "Project path contains symlinks");
     }
   } catch (error) {
-    logger.error("Failed to resolve real path", {
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error)),
       projectPath,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    }, "Failed to resolve real path");
   }
 
   // Check for suspicious path patterns

@@ -5,10 +5,10 @@
  * to enable informed decisions about compaction, caching, and resource allocation.
  */
 
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import type { SessionInfo, SessionMetrics } from "./types.js";
 
-const logger = new Logger("session-metrics");
+const logger = getChildLogger("session:metrics");
 
 /**
  * Collects and analyzes session performance metrics
@@ -35,11 +35,11 @@ export class SessionMetricsCollector {
     // Update calculated metrics
     this.updateCalculatedMetrics(metric);
 
-    logger.debug("Recorded response time", {
+    logger.debug({
       sessionId,
       responseTime,
       avgResponseTime: metric.avgResponseTime,
-    });
+    }, "Recorded response time");
   }
 
   /**
@@ -49,11 +49,11 @@ export class SessionMetricsCollector {
     const metric = this.getOrCreateMetric(sessionId);
     metric.tokenUsage += tokens;
 
-    logger.debug("Recorded token usage", {
+    logger.debug({
       sessionId,
       tokens,
       totalTokens: metric.tokenUsage,
-    });
+    }, "Recorded token usage");
   }
 
   /**
@@ -66,10 +66,10 @@ export class SessionMetricsCollector {
     const messageCount = metric.responseTime.length || 1;
     metric.errorRate = ((metric.errorRate * (messageCount - 1)) + 100) / messageCount;
 
-    logger.debug("Recorded error", {
+    logger.debug({
       sessionId,
       errorRate: metric.errorRate.toFixed(2),
-    });
+    }, "Recorded error");
   }
 
   /**
@@ -106,20 +106,20 @@ export class SessionMetricsCollector {
 
     // Compact if token usage exceeds threshold
     if (metric.tokenUsage > this.compactionThreshold) {
-      logger.info("Session should be compacted due to token usage", {
+      logger.info({
         sessionId,
         tokenUsage: metric.tokenUsage,
         threshold: this.compactionThreshold,
-      });
+      }, "Session should be compacted due to token usage");
       return true;
     }
 
     // Compact if error rate is high and session has significant history
     if (metric.errorRate > 10 && metric.responseTime.length > 50) {
-      logger.info("Session should be compacted due to high error rate", {
+      logger.info({
         sessionId,
         errorRate: metric.errorRate.toFixed(2),
-      });
+      }, "Session should be compacted due to high error rate");
       return true;
     }
 
@@ -156,7 +156,7 @@ export class SessionMetricsCollector {
    */
   clearMetrics(sessionId: string): void {
     this.metrics.delete(sessionId);
-    logger.debug("Cleared metrics for session", { sessionId });
+    logger.debug({ sessionId }, "Cleared metrics for session");
   }
 
   /**
@@ -171,7 +171,7 @@ export class SessionMetricsCollector {
       metric.lastHealthCheck = new Date();
       this.updateCalculatedMetrics(metric);
 
-      logger.info("Reset metrics after compaction", { sessionId });
+      logger.info({ sessionId }, "Reset metrics after compaction");
     }
   }
 

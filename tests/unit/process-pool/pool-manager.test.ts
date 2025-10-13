@@ -9,22 +9,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+// Mock logger BEFORE imports using hoisting
+vi.mock("../../../src/utils/logger.js", () => ({
+  getChildLogger: vi.fn(() => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+  })),
+}));
+
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
 import { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
 import type { TeamsConfig } from "../../../src/process-pool/types.js";
-
-// Mock logger with a proper class
-vi.mock("../../../src/utils/logger.js", () => {
-  return {
-    Logger: class MockLogger {
-      info = vi.fn();
-      error = vi.fn();
-      debug = vi.fn();
-      warn = vi.fn();
-      constructor(context?: string) {}
-    },
-  };
-});
 
 // Mock ClaudeProcess with proper EventEmitter interface
 vi.mock("../../../src/process-pool/claude-process.js", () => {

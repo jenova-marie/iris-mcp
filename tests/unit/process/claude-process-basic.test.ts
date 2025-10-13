@@ -2,7 +2,18 @@
  * Unit tests for ClaudeProcess - basic functionality without real process spawning
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// Mock logger BEFORE imports using hoisting
+vi.mock("../../../src/utils/logger.js", () => ({
+  getChildLogger: vi.fn(() => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+  })),
+}));
+
 import { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
 import type { TeamConfig } from "../../../src/process-pool/types.js";
 import { ProcessError } from "../../../src/utils/errors.js";

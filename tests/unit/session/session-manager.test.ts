@@ -6,6 +6,17 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+// Mock logger BEFORE imports using hoisting
+vi.mock("../../../src/utils/logger.js", () => ({
+  getChildLogger: vi.fn(() => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+  })),
+}));
+
 import { existsSync, unlinkSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";

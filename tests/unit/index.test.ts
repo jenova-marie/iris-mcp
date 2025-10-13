@@ -14,12 +14,12 @@ import {
 // Mock all dependencies
 vi.mock("@modelcontextprotocol/sdk/server/index.js");
 vi.mock("../../../src/utils/logger.js", () => ({
-  Logger: vi.fn().mockImplementation(() => ({
+  getChildLogger: vi.fn().mockReturnValue({
     info: vi.fn(),
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  })),
+  }),
 }));
 
 // Mock action handlers

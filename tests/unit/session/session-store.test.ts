@@ -5,7 +5,18 @@
  * as documented in docs/SESSION.md
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+// Mock logger BEFORE imports using hoisting
+vi.mock("../../../src/utils/logger.js", () => ({
+  getChildLogger: vi.fn(() => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+  })),
+}));
+
 import { existsSync, unlinkSync } from "fs";
 import { resolve } from "path";
 import { SessionStore } from "../../../src/session/session-store.js";

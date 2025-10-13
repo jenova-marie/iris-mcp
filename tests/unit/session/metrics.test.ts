@@ -3,12 +3,12 @@ import { SessionMetricsCollector } from "../../../src/session/metrics.js";
 
 // Mock logger
 vi.mock("../../../src/utils/logger.js", () => ({
-  Logger: vi.fn().mockImplementation(() => ({
+  getChildLogger: vi.fn().mockReturnValue({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
     debug: vi.fn(),
-  })),
+  }),
 }));
 
 describe("SessionMetricsCollector", () => {

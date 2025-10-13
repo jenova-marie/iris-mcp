@@ -5,12 +5,12 @@ import { ConfigurationError } from "../../../src/utils/errors.js";
 // Mock modules
 vi.mock("fs");
 vi.mock("../../../src/utils/logger.js", () => ({
-  Logger: vi.fn().mockImplementation(() => ({
+  getChildLogger: vi.fn().mockReturnValue({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
     debug: vi.fn(),
-  })),
+  }),
 }));
 vi.mock("../../../src/utils/paths.js", () => ({
   getConfigPath: vi.fn(() => "/default/iris/config.json"),

@@ -12,12 +12,12 @@ import { ConfigurationError, ValidationError } from "../../../src/utils/errors.j
 // Mock fs module
 vi.mock("fs");
 vi.mock("../../../src/utils/logger.js", () => ({
-  Logger: vi.fn().mockImplementation(() => ({
+  getChildLogger: vi.fn().mockReturnValue({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
     debug: vi.fn(),
-  })),
+  }),
 }));
 
 describe("Session Validation", () => {
@@ -145,7 +145,6 @@ describe("Session Validation", () => {
 
     it("should warn about symlinks but allow them", async () => {
       const { existsSync, realpathSync } = await import("fs");
-      const { Logger } = await import("../../../src/utils/logger.js");
 
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(realpathSync).mockReturnValue("/real/path");
@@ -154,7 +153,7 @@ describe("Session Validation", () => {
         validateSecureProjectPath("/symlink/path")
       ).not.toThrow();
 
-      // Logger should be called (but we can't easily verify it due to mock setup)
+      // Logger warning should be called (but we can't easily verify it due to mock setup)
     });
 
     it("should handle realpathSync errors gracefully", async () => {

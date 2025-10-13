@@ -1,13 +1,20 @@
 {
   "settings": {
+    "sessionInitTimeout": 60000,
+    "responseTimeout": 120000,
     "idleTimeout": 300000,
     "maxProcesses": 10,
     "healthCheckInterval": 30000,
-    "sessionInitTimeout": 60000,
     "httpPort": 1616,
     "defaultTransport": "stdio"
   },
   "teams": {
+    "team-iris": {
+      "path": "/Users/jenova/projects/jenova-marie/iris-mcp",
+      "description": "Iris MCP Team - the calling team for tests",
+      "skipPermissions": true,
+      "color": "#9C27B0"
+    },
     "team-alpha": {
       "path": "./teams/team-alpha",
       "description": "Iris MCP Team Alpha - testing team",

@@ -4,12 +4,12 @@ import type { TeamsConfigManager } from "../../../src/config/teams-config.js";
 
 // Mock the logger
 vi.mock("../../../src/utils/logger.js", () => ({
-  Logger: vi.fn().mockImplementation(() => ({
+  getChildLogger: vi.fn().mockReturnValue({
     info: vi.fn(),
     error: vi.fn(),
     debug: vi.fn(),
     warn: vi.fn(),
-  })),
+  }),
 }));
 
 describe("getTeamName", () => {

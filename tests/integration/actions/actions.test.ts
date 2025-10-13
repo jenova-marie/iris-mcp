@@ -188,7 +188,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
             fromTeam: "team-iris",
             toTeam: "team-alpha",
             message: "Hello from integration test",
-            waitForResponse: true,
           },
           iris,
         );
@@ -196,7 +195,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
         expect(result).toBeDefined();
         expect(result.to).toBe("team-alpha");
         expect(result.message).toBe("Hello from integration test");
-        expect(result.async).toBe(false);
         expect(result.response).toBeTruthy(); // Should get actual Claude response
         expect(result.duration).toBeGreaterThan(0);
       },
@@ -273,14 +271,12 @@ describe("Actions Integration Tests (New Architecture)", () => {
           fromTeam: "team-iris",
           toTeam: "team-beta",
           message: "Async test message",
-          waitForResponse: false,
         },
         iris,
       );
 
       expect(result).toBeDefined();
       expect(result.to).toBe("team-beta");
-      expect(result.async).toBe(true);
       expect(result.response).toBeUndefined(); // No response in async mode
     });
   });
@@ -294,7 +290,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
             team: "team-alpha",
             fromTeam: "team-iris",
             command: "compact",
-            waitForResponse: true,
             timeout: 15000,
           },
           iris,
@@ -317,7 +312,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
           team: "team-beta",
           fromTeam: "team-iris",
           command: "compact",
-          waitForResponse: false,
         },
         iris,
       );
@@ -326,7 +320,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
       expect(result.team).toBe("team-beta");
       expect(result.command).toBe("/compact");
       expect(result.success).toBe(true);
-      expect(result.async).toBe(true);
       expect(result.response).toBeUndefined();
     });
 
@@ -344,27 +337,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
       );
 
       expect(status.teams[0].status).toBe("awake");
-    });
-  });
-
-  describe.skip("11. Test command action - unsupported command", () => {
-    it("should return 'not implemented' for unsupported commands", async () => {
-      const result = await command(
-        {
-          team: "team-alpha",
-          fromTeam: "team-iris",
-          command: "help",
-          waitForResponse: true,
-        },
-        iris,
-      );
-
-      expect(result).toBeDefined();
-      expect(result.team).toBe("team-alpha");
-      expect(result.command).toBe("/help");
-      expect(result.success).toBe(false);
-      expect(result.response).toContain("not implemented");
-      expect(result.response).toContain("Only /compact is currently supported");
     });
   });
 
@@ -396,7 +368,9 @@ describe("Actions Integration Tests (New Architecture)", () => {
         attempts++;
 
         if (!process) {
-          console.log(`✓ Process disappeared after ${attempts} attempts (${Date.now() - startTime}ms)`);
+          console.log(
+            `✓ Process disappeared after ${attempts} attempts (${Date.now() - startTime}ms)`,
+          );
           isAsleep = true;
           break;
         }
@@ -404,7 +378,9 @@ describe("Actions Integration Tests (New Architecture)", () => {
         // Log process state every 5 attempts
         if (attempts % 5 === 0) {
           const metrics = process.getBasicMetrics();
-          console.log(`Still waiting for process to disappear - attempt ${attempts}, status: ${metrics.status}`);
+          console.log(
+            `Still waiting for process to disappear - attempt ${attempts}, status: ${metrics.status}`,
+          );
         }
 
         await new Promise((resolve) => setTimeout(resolve, pollInterval));

@@ -5,9 +5,9 @@
 import { Subject, Observable } from "rxjs";
 import { CacheEntry, CacheEntryType, CacheEntryStatus } from "./types.js";
 import { CacheEntryImpl } from "./cache-entry.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("cache-session");
+const logger = getChildLogger("cache:session");
 
 /**
  * Cache session for a team pair (fromTeam→toTeam)

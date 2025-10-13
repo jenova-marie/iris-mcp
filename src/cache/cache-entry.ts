@@ -10,9 +10,9 @@ import {
   CacheEntryStatus,
   TerminationReason,
 } from "./types.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("cache-entry");
+const logger = getChildLogger("cache:entry");
 
 /**
  * Implementation of CacheEntry

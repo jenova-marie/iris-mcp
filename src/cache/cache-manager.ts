@@ -3,9 +3,9 @@
  */
 
 import { CacheSession } from "./cache-session.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("cache-manager");
+const logger = getChildLogger("cache:manager");
 
 /**
  * Manages all cache sessions (one per fromTeam→toTeam pair)

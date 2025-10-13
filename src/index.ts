@@ -14,7 +14,6 @@ import { IrisMcpServer } from "./mcp_server.js";
 import { IrisWebServer } from "./web_server.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
 import { SessionManager } from "./session/session-manager.js";
-import { NotificationQueue } from "./notifications/queue.js";
 import { Logger } from "./utils/logger.js";
 import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { addTeam, install, uninstall } from "./cli/index.js";
@@ -83,9 +82,6 @@ program
 
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);
-      const notificationQueue = new NotificationQueue(
-        `${getDataDir()}/notifications.db`
-      );
 
       // Initialize session manager
       logger.info("Initializing session manager...");
@@ -93,13 +89,20 @@ program
       logger.info("Session manager initialized");
 
       // Create MCP server with shared components
-      const mcpServer = new IrisMcpServer(sessionManager, processPool, configManager);
+      const mcpServer = new IrisMcpServer(
+        sessionManager,
+        processPool,
+        configManager,
+      );
 
       // Start web server if enabled
       if (config.dashboard?.enabled) {
         try {
           logger.info("Starting web dashboard...");
-          const webServer = new IrisWebServer(processPool, notificationQueue, configManager);
+          const webServer = new IrisWebServer(
+            processPool,
+            configManager,
+          );
           await webServer.start(config.dashboard);
         } catch (error) {
           logger.error("Failed to start web dashboard", error);
@@ -174,7 +177,9 @@ program
 // Uninstall command - removes Iris MCP from Claude's configurations
 program
   .command("uninstall")
-  .description("Remove Iris MCP server from Claude CLI configuration (~/.claude.json)")
+  .description(
+    "Remove Iris MCP server from Claude CLI configuration (~/.claude.json)",
+  )
   // .option("--cli", "Only remove from CLI config (~/.claude.json)") // DISABLED: Desktop support disabled
   // .option("--desktop", "Only remove from Desktop config") // DISABLED: stdio server not working with Desktop
   .action(async (options) => {
@@ -218,9 +223,6 @@ if (process.argv.length === 2) {
 
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);
-      const notificationQueue = new NotificationQueue(
-        `${getDataDir()}/notifications.db`
-      );
 
       // Initialize session manager
       logger.info("Initializing session manager...");
@@ -228,13 +230,20 @@ if (process.argv.length === 2) {
       logger.info("Session manager initialized");
 
       // Create MCP server with shared components
-      const mcpServer = new IrisMcpServer(sessionManager, processPool, configManager);
+      const mcpServer = new IrisMcpServer(
+        sessionManager,
+        processPool,
+        configManager,
+      );
 
       // Start web server if enabled
       if (config.dashboard?.enabled) {
         try {
           logger.info("Starting web dashboard...");
-          const webServer = new IrisWebServer(processPool, notificationQueue, configManager);
+          const webServer = new IrisWebServer(
+            processPool,
+            configManager,
+          );
           await webServer.start(config.dashboard);
         } catch (error) {
           logger.error("Failed to start web dashboard", error);

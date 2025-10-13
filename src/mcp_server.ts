@@ -25,7 +25,6 @@ import { wake } from "./actions/wake.js";
 import { sleep } from "./actions/sleep.js";
 import { wakeAll } from "./actions/wake-all.js";
 import { report } from "./actions/report.js";
-import { cacheRead, cacheClear } from "./actions/cache.js";
 import { getTeamName } from "./actions/getTeamName.js";
 import { teams } from "./actions/teams.js";
 
@@ -54,7 +53,7 @@ const TOOLS: Tool[] = [
         },
         fromTeam: {
           type: "string",
-          description: "Optional: Name of the team sending the message",
+          description: "Name of the team sending the message",
         },
         waitForResponse: {
           type: "boolean",
@@ -77,7 +76,7 @@ const TOOLS: Tool[] = [
             "Optional: TTL in days for persistent notifications (default: 30). Only used when persist=true.",
         },
       },
-      required: ["toTeam", "message"],
+      required: ["toTeam", "message", "fromTeam"],
     },
   },
   {
@@ -115,11 +114,11 @@ const TOOLS: Tool[] = [
         fromTeam: {
           type: "string",
           description:
-            "Optional: Identify the calling team for session-specific process. " +
-            "When provided, creates a dedicated process for this team pair to maintain conversation isolation.",
+            "Identify the calling team for session-specific process. " +
+            "Creates a dedicated process for this team pair to maintain conversation isolation.",
         },
       },
-      required: ["team"],
+      required: ["team", "fromTeam"],
     },
   },
   {
@@ -135,7 +134,7 @@ const TOOLS: Tool[] = [
         },
         fromTeam: {
           type: "string",
-          description: "Optional: Name of the team requesting the sleep",
+          description: "Name of the team requesting the sleep",
         },
         force: {
           type: "boolean",
@@ -143,7 +142,7 @@ const TOOLS: Tool[] = [
             "Force termination even if process is busy (default: false)",
         },
       },
-      required: ["team"],
+      required: ["team", "fromTeam"],
     },
   },
   {
@@ -156,7 +155,7 @@ const TOOLS: Tool[] = [
       properties: {
         fromTeam: {
           type: "string",
-          description: "Optional: Name of the team requesting the wake-all",
+          description: "Name of the team requesting the wake-all",
         },
         parallel: {
           type: "boolean",
@@ -164,6 +163,7 @@ const TOOLS: Tool[] = [
             "Wake teams in parallel (NOT RECOMMENDED - unstable, causes timeouts. Default: false)",
         },
       },
+      required: ["fromTeam"],
     },
   },
   {
@@ -179,68 +179,10 @@ const TOOLS: Tool[] = [
         },
         fromTeam: {
           type: "string",
-          description: "Optional: Name of the team requesting the report",
+          description: "Name of the team requesting the report",
         },
       },
-      required: ["team"],
-    },
-  },
-  {
-    name: "team_cache_read",
-    description:
-      "Read the cache for a team's Claude process. Returns cache statistics, recent messages, and protocol data. Use this to inspect conversation history and performance metrics.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Name of the team whose cache to read",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the cache read",
-        },
-        includeMessages: {
-          type: "boolean",
-          description: "Include recent messages in response (default: true)",
-        },
-        messageCount: {
-          type: "number",
-          description:
-            "Number of recent messages to include (default: 10, max: 100)",
-        },
-        format: {
-          type: "string",
-          description:
-            'Export format for messages: "json" or "text" (default: "json")',
-          enum: ["json", "text"],
-        },
-        includeProtocolMessages: {
-          type: "boolean",
-          description:
-            "Include raw protocol messages from Claude - contains all JSON including tool_use blocks (default: false)",
-        },
-      },
-      required: ["team"],
-    },
-  },
-  {
-    name: "team_cache_clear",
-    description:
-      "Clear the cache for a team's Claude process. Removes all cached messages and protocol data. Returns statistics about what was cleared.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Name of the team whose cache to clear",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Optional: Name of the team requesting the cache clear",
-        },
-      },
-      required: ["team"],
+      required: ["team", "fromTeam"],
     },
   },
   {
@@ -308,7 +250,11 @@ export class IrisMcpServer {
     this.configManager = configManager;
 
     // Initialize Iris orchestrator (BLL)
-    this.iris = new IrisOrchestrator(this.sessionManager, this.processPool);
+    this.iris = new IrisOrchestrator(
+      this.sessionManager,
+      this.processPool,
+      this.configManager.getConfig(),
+    );
 
     // Set up MCP handlers
     this.setupHandlers();
@@ -434,36 +380,6 @@ export class IrisMcpServer {
                   type: "text",
                   text: JSON.stringify(
                     await report(args as any, this.processPool),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-            break;
-
-          case "team_cache_read":
-            result = {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await cacheRead(args as any, this.processPool),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-            break;
-
-          case "team_cache_clear":
-            result = {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await cacheClear(args as any, this.processPool),
                     null,
                     2,
                   ),

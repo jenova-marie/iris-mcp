@@ -10,9 +10,9 @@ import type { TeamsConfigManager } from "./config/teams-config.js";
 import type { DashboardConfig } from "./process-pool/types.js";
 import { DashboardStateBridge } from "./dashboard/server/state-bridge.js";
 import { startDashboardServer } from "./dashboard/server/index.js";
-import { Logger } from "./utils/logger.js";
+import { getChildLogger } from "./utils/logger.js";
 
-const logger = new Logger("web-server");
+const logger = getChildLogger("iris:web");
 
 export class IrisWebServer {
   private bridge: DashboardStateBridge;
@@ -37,18 +37,20 @@ export class IrisWebServer {
    */
   async start(config: DashboardConfig): Promise<void> {
     try {
-      logger.info("Starting web server...", {
+      logger.info({
         host: config.host,
         port: config.port,
-      });
+      }, "Starting web server...");
 
       await startDashboardServer(this.bridge, config);
 
-      logger.info("Web server started successfully", {
+      logger.info({
         url: `http://${config.host}:${config.port}`,
-      });
+      }, "Web server started successfully");
     } catch (error) {
-      logger.error("Failed to start web server", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, "Failed to start web server");
       throw error;
     }
   }

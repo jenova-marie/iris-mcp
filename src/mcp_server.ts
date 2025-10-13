@@ -17,7 +17,7 @@ import { getConfigManager } from "./config/teams-config.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
 import { SessionManager } from "./session/session-manager.js";
 import { IrisOrchestrator } from "./iris.js";
-import { Logger } from "./utils/logger.js";
+import { getChildLogger } from "./utils/logger.js";
 import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { tell } from "./actions/tell.js";
 import { isAwake } from "./actions/isAwake.js";
@@ -28,7 +28,7 @@ import { report } from "./actions/report.js";
 import { getTeamName } from "./actions/getTeamName.js";
 import { teams } from "./actions/teams.js";
 
-const logger = new Logger("server");
+const logger = getChildLogger("iris:mcp");
 
 // MCP Tool Definitions
 const TOOLS: Tool[] = [
@@ -430,7 +430,10 @@ export class IrisMcpServer {
 
         return result;
       } catch (error) {
-        logger.error(`Tool ${name} failed`, error);
+        logger.error({
+          err: error instanceof Error ? error : new Error(String(error)),
+          tool: name
+        }, `Tool ${name} failed`);
 
         // Log pool state AFTER failed tool execution (when DEBUG env is set)
         if (process.env.DEBUG) {
@@ -460,15 +463,17 @@ export class IrisMcpServer {
   private setupEventListeners(): void {
     // Log important pool events
     this.processPool.on("process-spawned", (data) => {
-      logger.info("Process spawned", data);
+      logger.info(data, "Process spawned");
     });
 
     this.processPool.on("process-terminated", (data) => {
-      logger.info("Process terminated", data);
+      logger.info(data, "Process terminated");
     });
 
     this.processPool.on("process-error", (data) => {
-      logger.error("Process error", data.error);
+      logger.error({
+        err: data.error instanceof Error ? data.error : new Error(String(data.error))
+      }, "Process error");
     });
   }
 
@@ -491,11 +496,11 @@ export class IrisMcpServer {
 
       // Handle MCP requests with proper SDK transport (POST for JSON-RPC, GET for SSE)
       app.all("/mcp", async (req, res) => {
-        logger.debug("Received HTTP request", {
+        logger.debug({
           method: req.method,
           body: req.body,
           headers: req.headers,
-        });
+        }, "Received HTTP request");
 
         try {
           // Create a new transport for each request (stateless mode)
@@ -519,7 +524,9 @@ export class IrisMcpServer {
           // Handle the request (works for both POST and GET)
           await httpTransport.handleRequest(req, res, req.body);
         } catch (error) {
-          logger.error("Error handling MCP request:", error);
+          logger.error({
+            err: error instanceof Error ? error : new Error(String(error))
+          }, "Error handling MCP request");
           if (!res.headersSent) {
             res.status(500).json({
               jsonrpc: "2.0",
@@ -550,7 +557,9 @@ export class IrisMcpServer {
           logger.info(`Health check: http://localhost:${port}/health`);
         })
         .on("error", (error) => {
-          logger.error("HTTP server error:", error);
+          logger.error({
+            err: error instanceof Error ? error : new Error(String(error))
+          }, "HTTP server error");
           process.exit(1);
         });
     } else {
@@ -575,7 +584,9 @@ export class IrisMcpServer {
       logger.info("Shutdown complete");
       process.exit(0);
     } catch (error) {
-      logger.error("Error during shutdown", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, "Error during shutdown");
       process.exit(1);
     }
   }

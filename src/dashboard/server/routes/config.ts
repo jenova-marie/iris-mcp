@@ -7,10 +7,10 @@ import { Router } from 'express';
 import { writeFileSync } from 'fs';
 import { z } from 'zod';
 import type { DashboardStateBridge } from '../state-bridge.js';
-import { Logger } from '../../../utils/logger.js';
+import { getChildLogger } from '../../../utils/logger.js';
 import { getConfigPath } from '../../../utils/paths.js';
 
-const logger = new Logger('api:config');
+const logger = getChildLogger('dashboard:routes:config');
 const router = Router();
 
 // Zod schema for config validation (same as TeamsConfigSchema)
@@ -57,7 +57,9 @@ export function createConfigRouter(bridge: DashboardStateBridge): Router {
         config,
       });
     } catch (error: any) {
-      logger.error('Failed to get config', error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to get config');
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to retrieve configuration',
@@ -81,7 +83,7 @@ export function createConfigRouter(bridge: DashboardStateBridge): Router {
           message: e.message,
         }));
 
-        logger.warn('Config validation failed', { errors });
+        logger.warn({ errors }, 'Config validation failed');
 
         return res.status(400).json({
           success: false,
@@ -98,7 +100,7 @@ export function createConfigRouter(bridge: DashboardStateBridge): Router {
       // Write to disk
       writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf8');
 
-      logger.info('Configuration saved to disk', { configPath });
+      logger.info({ configPath }, 'Configuration saved to disk');
 
       // Emit event for WebSocket clients
       bridge.emit('ws:config-saved', {
@@ -112,7 +114,9 @@ export function createConfigRouter(bridge: DashboardStateBridge): Router {
         configPath,
       });
     } catch (error: any) {
-      logger.error('Failed to save config', error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to save config');
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to save configuration',

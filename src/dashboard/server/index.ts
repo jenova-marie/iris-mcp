@@ -10,10 +10,10 @@ import { Server as SocketIOServer } from 'socket.io';
 import type { DashboardStateBridge } from './state-bridge.js';
 import { createConfigRouter } from './routes/config.js';
 import { createProcessesRouter } from './routes/processes.js';
-import { Logger } from '../../utils/logger.js';
+import { getChildLogger } from '../../utils/logger.js';
 import type { DashboardConfig } from '../../process-pool/types.js';
 
-const logger = new Logger('dashboard-server');
+const logger = getChildLogger('dashboard:server');
 
 export async function startDashboardServer(
   bridge: DashboardStateBridge,
@@ -56,9 +56,9 @@ export async function startDashboardServer(
 
   // WebSocket connection handling
   io.on('connection', (socket) => {
-    logger.info('Dashboard client connected', {
+    logger.info({
       socketId: socket.id,
-    });
+    }, 'Dashboard client connected');
 
     // Send initial state
     socket.emit('init', {
@@ -87,7 +87,7 @@ export async function startDashboardServer(
 
     // Handle client requests to stream cache for a specific session
     socket.on('stream-cache', (sessionId: string) => {
-      logger.info('Client requested cache stream', { sessionId, socketId: socket.id });
+      logger.info({ sessionId, socketId: socket.id }, 'Client requested cache stream');
       const started = bridge.streamSessionCache(sessionId);
 
       if (!started) {
@@ -99,9 +99,9 @@ export async function startDashboardServer(
 
     // Handle disconnection
     socket.on('disconnect', () => {
-      logger.info('Dashboard client disconnected', {
+      logger.info({
         socketId: socket.id,
-      });
+      }, 'Dashboard client disconnected');
 
       // Clean up event handlers
       bridge.off('ws:process-status', processStatusHandler);
@@ -131,7 +131,9 @@ export async function startDashboardServer(
 
   // Error handling middleware
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    logger.error('Express error', err);
+    logger.error({
+      err: err instanceof Error ? err : new Error(String(err))
+    }, 'Express error');
 
     res.status(err.status || 500).json({
       success: false,
@@ -142,16 +144,18 @@ export async function startDashboardServer(
   // Start server
   return new Promise((resolve, reject) => {
     httpServer.listen(config.port, config.host, () => {
-      logger.info('Dashboard server started', {
+      logger.info({
         host: config.host,
         port: config.port,
         url: `http://${config.host}:${config.port}`,
-      });
+      }, 'Dashboard server started');
       resolve();
     });
 
     httpServer.on('error', (error) => {
-      logger.error('Failed to start dashboard server', error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to start dashboard server');
       reject(error);
     });
   });

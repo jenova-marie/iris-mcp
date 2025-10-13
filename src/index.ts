@@ -14,11 +14,11 @@ import { IrisMcpServer } from "./mcp_server.js";
 import { IrisWebServer } from "./web_server.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
 import { SessionManager } from "./session/session-manager.js";
-import { Logger } from "./utils/logger.js";
+import { getChildLogger } from "./utils/logger.js";
 import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { addTeam, install, uninstall } from "./cli/index.js";
 
-const logger = new Logger("cli");
+const logger = getChildLogger("iris:cli");
 
 // Load package.json to get version
 const __filename = fileURLToPath(import.meta.url);
@@ -72,13 +72,13 @@ program
 
     try {
       // Initialize shared components
-      logger.info("Initializing Iris MCP...", {
+      logger.info({
         irisHome: getIrisHome(),
         configPath: getConfigPath(),
         dataDir: getDataDir(),
         teams: Object.keys(config.teams),
         maxProcesses: config.settings.maxProcesses,
-      });
+      }, "Initializing Iris MCP...");
 
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);
@@ -106,7 +106,9 @@ program
           );
           await webServer.start(config.dashboard);
         } catch (error) {
-          logger.error("Failed to start web dashboard", error);
+          logger.error({
+            err: error instanceof Error ? error : new Error(String(error))
+          }, "Failed to start web dashboard");
           logger.warn("Continuing without dashboard");
         }
       }
@@ -114,7 +116,9 @@ program
       // Start MCP server
       await mcpServer.run(transport, port);
     } catch (error) {
-      logger.error("Fatal error", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, "Fatal error");
       process.exit(1);
     }
   });
@@ -141,7 +145,9 @@ program
         color: options.color,
       });
     } catch (error) {
-      logger.error("Failed to add team", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, "Failed to add team");
       process.exit(1);
     }
   });
@@ -170,7 +176,9 @@ program
         // desktop: options.desktop, // DISABLED
       });
     } catch (error) {
-      logger.error("Failed to install Iris MCP", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, "Failed to install Iris MCP");
       process.exit(1);
     }
   });
@@ -190,7 +198,9 @@ program
         // desktop: options.desktop, // DISABLED
       });
     } catch (error) {
-      logger.error("Failed to uninstall Iris MCP", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, "Failed to uninstall Iris MCP");
       process.exit(1);
     }
   });
@@ -214,13 +224,13 @@ if (process.argv.length === 2) {
       const config = configManager.load();
 
       // Initialize shared components
-      logger.info("Initializing Iris MCP...", {
+      logger.info({
         irisHome: getIrisHome(),
         configPath: getConfigPath(),
         dataDir: getDataDir(),
         teams: Object.keys(config.teams),
         maxProcesses: config.settings.maxProcesses,
-      });
+      }, "Initializing Iris MCP...");
 
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);
@@ -248,7 +258,9 @@ if (process.argv.length === 2) {
           );
           await webServer.start(config.dashboard);
         } catch (error) {
-          logger.error("Failed to start web dashboard", error);
+          logger.error({
+            err: error instanceof Error ? error : new Error(String(error))
+          }, "Failed to start web dashboard");
           logger.warn("Continuing without dashboard");
         }
       }
@@ -259,7 +271,9 @@ if (process.argv.length === 2) {
         config.settings.httpPort || 1615,
       );
     } catch (error) {
-      logger.error("Fatal error", error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, "Fatal error");
       process.exit(1);
     }
   })();

@@ -14,9 +14,9 @@ import type { ClaudeProcessPool } from "../../process-pool/pool-manager.js";
 import type { SessionManager } from "../../session/session-manager.js";
 import type { TeamsConfigManager } from "../../config/teams-config.js";
 import type { TeamsConfig } from "../../process-pool/types.js";
-import { Logger } from "../../utils/logger.js";
+import { getChildLogger } from "../../utils/logger.js";
 
-const logger = new Logger("dashboard-bridge");
+const logger = getChildLogger("dashboard:state");
 
 /**
  * Session-based process info (fromTeam->toTeam pairs)
@@ -63,7 +63,7 @@ export class DashboardStateBridge extends EventEmitter {
   private setupEventForwarding(): void {
     // Forward process lifecycle events
     this.pool.on("process-spawned", (data: { poolKey: string; pid: number }) => {
-      logger.debug("Forwarding process-spawned event", data);
+      logger.debug(data, "Forwarding process-spawned event");
       this.emit("ws:process-status", {
         poolKey: data.poolKey,
         status: "spawning",
@@ -72,7 +72,7 @@ export class DashboardStateBridge extends EventEmitter {
     });
 
     this.pool.on("process-terminated", (data: { poolKey: string }) => {
-      logger.debug("Forwarding process-terminated event", data);
+      logger.debug(data, "Forwarding process-terminated event");
       this.emit("ws:process-status", {
         poolKey: data.poolKey,
         status: "stopped",
@@ -80,7 +80,7 @@ export class DashboardStateBridge extends EventEmitter {
     });
 
     this.pool.on("process-status", (data: { poolKey: string; status: string }) => {
-      logger.debug("Forwarding process-status event", data);
+      logger.debug(data, "Forwarding process-status event");
 
       const [fromTeam, toTeam] = data.poolKey.split("->") as [string, string];
 
@@ -94,12 +94,12 @@ export class DashboardStateBridge extends EventEmitter {
 
     // Forward message events
     this.pool.on("message-sent", (data: any) => {
-      logger.debug("Forwarding message-sent event", data);
+      logger.debug(data, "Forwarding message-sent event");
       this.emit("ws:message-sent", data);
     });
 
     this.pool.on("message-response", (data: any) => {
-      logger.debug("Forwarding message-response event", data);
+      logger.debug(data, "Forwarding message-response event");
       this.emit("ws:message-response", data);
     });
 
@@ -146,7 +146,7 @@ export class DashboardStateBridge extends EventEmitter {
 
       // Skip sessions with null fromTeam (shouldn't exist in new architecture)
       if (!session.fromTeam) {
-        logger.warn("Skipping session with null fromTeam", { sessionId: session.sessionId, toTeam: session.toTeam });
+        logger.warn({ sessionId: session.sessionId, toTeam: session.toTeam }, "Skipping session with null fromTeam");
         continue;
       }
 
@@ -189,7 +189,7 @@ export class DashboardStateBridge extends EventEmitter {
 
     // Skip sessions with null fromTeam (shouldn't exist in new architecture)
     if (!session.fromTeam) {
-      logger.warn("Cannot get metrics for session with null fromTeam", { sessionId: session.sessionId, toTeam: session.toTeam });
+      logger.warn({ sessionId: session.sessionId, toTeam: session.toTeam }, "Cannot get metrics for session with null fromTeam");
       return null;
     }
 
@@ -226,7 +226,7 @@ export class DashboardStateBridge extends EventEmitter {
    * TODO: Implement when CacheManager is available in dashboard
    */
   getSessionCache(sessionId: string): any[] {
-    logger.warn("getSessionCache not yet implemented", { sessionId });
+    logger.warn({ sessionId }, "getSessionCache not yet implemented");
     return [];
   }
 
@@ -235,7 +235,7 @@ export class DashboardStateBridge extends EventEmitter {
    * TODO: Implement when CacheManager is available in dashboard
    */
   streamSessionCache(sessionId: string): boolean {
-    logger.warn("streamSessionCache not yet implemented", { sessionId });
+    logger.warn({ sessionId }, "streamSessionCache not yet implemented");
     return false;
   }
 

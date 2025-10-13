@@ -18,12 +18,12 @@ import {
   TerminationReason,
   CacheEntry,
 } from "./cache/types.js";
-import { Logger } from "./utils/logger.js";
+import { getChildLogger } from "./utils/logger.js";
 import { filter } from "rxjs/operators";
 import type { Subscription } from "rxjs";
 import type { TeamsConfig } from "./process-pool/types.js";
 
-const logger = new Logger("iris");
+const logger = getChildLogger("iris:core");
 
 export interface SendMessageOptions {
   timeout?: number;
@@ -185,10 +185,10 @@ export class IrisOrchestrator {
           });
         }
       } catch (error) {
-        logger.error("Process spawn failed", {
+        logger.error({
+          err: error instanceof Error ? error : new Error(String(error)),
           teamName: toTeam,
-          error: error instanceof Error ? error.message : String(error),
-        });
+        }, "Process spawn failed");
 
         this.sessionManager.updateProcessState(session.sessionId, "stopped");
         throw error;

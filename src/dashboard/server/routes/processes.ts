@@ -5,9 +5,9 @@
 
 import { Router } from 'express';
 import type { DashboardStateBridge } from '../state-bridge.js';
-import { Logger } from '../../../utils/logger.js';
+import { getChildLogger } from '../../../utils/logger.js';
 
-const logger = new Logger('api:processes');
+const logger = getChildLogger('dashboard:routes:processes');
 const router = Router();
 
 export function createProcessesRouter(bridge: DashboardStateBridge): Router {
@@ -26,7 +26,9 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         poolStatus,
       });
     } catch (error: any) {
-      logger.error('Failed to get sessions', error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to get sessions');
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to retrieve sessions',
@@ -55,7 +57,9 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         metrics,
       });
     } catch (error: any) {
-      logger.error('Failed to get session metrics', error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to get session metrics');
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to retrieve session metrics',
@@ -78,7 +82,9 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         entries: cache,
       });
     } catch (error: any) {
-      logger.error('Failed to get session cache', error);
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to get session cache');
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to retrieve session cache',

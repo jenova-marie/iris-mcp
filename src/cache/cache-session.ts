@@ -22,14 +22,14 @@ export class CacheSession {
 
   constructor(
     public readonly sessionId: string,
-    public readonly fromTeam: string | null,
+    public readonly fromTeam: string,
     public readonly toTeam: string,
   ) {
     this.entries$ = this.entriesSubject.asObservable();
 
     logger.info("CacheSession created", {
       sessionId,
-      fromTeam: fromTeam || "external",
+      fromTeam: fromTeam,
       toTeam,
     });
   }
@@ -37,10 +37,7 @@ export class CacheSession {
   /**
    * Create new cache entry (called by Iris)
    */
-  createEntry(
-    cacheEntryType: CacheEntryType,
-    tellString: string,
-  ): CacheEntry {
+  createEntry(cacheEntryType: CacheEntryType, tellString: string): CacheEntry {
     const entry = new CacheEntryImpl(cacheEntryType, tellString);
     this.entries.push(entry);
     this.entriesSubject.next(entry);

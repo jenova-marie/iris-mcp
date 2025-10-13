@@ -19,7 +19,7 @@ export class CacheManager {
    */
   createSession(
     sessionId: string,
-    fromTeam: string | null,
+    fromTeam: string,
     toTeam: string,
   ): CacheSession {
     if (this.sessions.has(sessionId)) {
@@ -34,7 +34,7 @@ export class CacheManager {
 
     logger.info("CacheSession created in manager", {
       sessionId,
-      fromTeam: fromTeam || "external",
+      fromTeam: fromTeam,
       toTeam,
       totalSessions: this.sessions.size,
     });

@@ -101,6 +101,7 @@ program
           logger.info("Starting web dashboard...");
           const webServer = new IrisWebServer(
             processPool,
+            sessionManager,
             configManager,
           );
           await webServer.start(config.dashboard);
@@ -242,6 +243,7 @@ if (process.argv.length === 2) {
           logger.info("Starting web dashboard...");
           const webServer = new IrisWebServer(
             processPool,
+            sessionManager,
             configManager,
           );
           await webServer.start(config.dashboard);

@@ -86,6 +86,11 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {
+        fromTeam: {
+          type: "string",
+          description:
+            "Name of the calling team (required to identify sessions)",
+        },
         team: {
           type: "string",
           description: "Optional: Check status for a specific team only",
@@ -95,6 +100,7 @@ const TOOLS: Tool[] = [
           description: "Include notification queue statistics (default: true)",
         },
       },
+      required: ["fromTeam"],
     },
   },
   {
@@ -102,7 +108,7 @@ const TOOLS: Tool[] = [
     description:
       "Wake up a team by ensuring its process is active in the pool. " +
       "Returns immediately if team is already awake, otherwise starts the wake process. " +
-      "Use 'fromTeam' to create a session-specific process for conversation isolation (e.g., fromTeam='iris' creates 'iris->alpha' instead of 'external->alpha').",
+      "Use 'fromTeam' to create a session-specific process for conversation isolation (e.g., fromTeam='iris' creates 'iris->alpha').",
     inputSchema: {
       type: "object",
       properties: {
@@ -205,17 +211,11 @@ const TOOLS: Tool[] = [
   {
     name: "team_teams",
     description:
-      "Get all currently configured teams and their status. " +
-      "Returns a list of all teams with their configuration and current state (awake/asleep). " +
-      "Optionally include process details for active teams.",
+      "Get all currently configured teams. " +
+      "Returns a list of all teams with their name and configuration details (path, description, color, etc.).",
     inputSchema: {
       type: "object",
-      properties: {
-        includeProcessDetails: {
-          type: "boolean",
-          description: "Include process details for active teams (default: false)",
-        },
-      },
+      properties: {},
     },
   },
 ];
@@ -309,6 +309,7 @@ export class IrisMcpServer {
                       this.iris,
                       this.processPool,
                       this.configManager,
+                      this.sessionManager,
                     ),
                     null,
                     2,
@@ -409,11 +410,7 @@ export class IrisMcpServer {
                 {
                   type: "text",
                   text: JSON.stringify(
-                    await teams(
-                      args as any,
-                      this.processPool,
-                      this.configManager,
-                    ),
+                    await teams(args as any, this.configManager),
                     null,
                     2,
                   ),

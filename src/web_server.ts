@@ -1,10 +1,11 @@
 /**
  * Iris Web Server
  * Standalone web dashboard server for monitoring and managing Iris MCP
- * Runs independently from the MCP server, sharing process pool and notification queue
+ * Runs independently from the MCP server, sharing process pool and session manager
  */
 
 import type { ClaudeProcessPool } from "./process-pool/pool-manager.js";
+import type { SessionManager } from "./session/session-manager.js";
 import type { TeamsConfigManager } from "./config/teams-config.js";
 import type { DashboardConfig } from "./process-pool/types.js";
 import { DashboardStateBridge } from "./dashboard/server/state-bridge.js";
@@ -18,11 +19,13 @@ export class IrisWebServer {
 
   constructor(
     private processPool: ClaudeProcessPool,
+    private sessionManager: SessionManager,
     private configManager: TeamsConfigManager,
   ) {
     // Create the bridge between MCP components and dashboard
     this.bridge = new DashboardStateBridge(
       this.processPool,
+      this.sessionManager,
       this.configManager,
     );
 

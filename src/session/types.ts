@@ -18,6 +18,16 @@ export type SessionStatus =
   | "migrating";       // Being moved/upgraded
 
 /**
+ * Process state (managed by Iris)
+ */
+export type ProcessState =
+  | "stopped" // No process running
+  | "spawning" // Process starting
+  | "idle" // Process ready, not processing
+  | "processing" // Processing a tell
+  | "terminating"; // Shutting down
+
+/**
  * Complete session information including metadata
  */
 export interface SessionInfo {
@@ -44,6 +54,16 @@ export interface SessionInfo {
 
   /** Current session status */
   status: SessionStatus;
+
+  // NEW: Process state (managed by Iris)
+  /** Current process state */
+  processState: ProcessState;
+
+  /** ID of current CacheSession being processed */
+  currentCacheSessionId: string | null;
+
+  /** Timestamp of last response from Claude */
+  lastResponseAt: number | null;
 }
 
 /**
@@ -58,6 +78,10 @@ export interface SessionRow {
   last_used_at: number; // Unix timestamp (ms)
   message_count: number;
   status: SessionStatus;
+  // NEW: Process state fields
+  process_state: ProcessState;
+  current_cache_session_id: string | null;
+  last_response_at: number | null;
 }
 
 /**

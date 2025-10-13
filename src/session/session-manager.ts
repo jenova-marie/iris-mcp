@@ -185,18 +185,17 @@ export class SessionManager {
    * Get or create session for team pair
    */
   async getOrCreateSession(
-    fromTeam: string | null,
+    fromTeam: string,
     toTeam: string,
   ): Promise<SessionInfo> {
     this.ensureInitialized();
 
-    // Validate toTeam exists
+    // Validate teams exist
     if (!this.teamsConfig.teams[toTeam]) {
       throw new ConfigurationError(`Unknown team: ${toTeam}`);
     }
 
-    // Validate fromTeam if provided
-    if (fromTeam && !this.teamsConfig.teams[fromTeam]) {
+    if (!this.teamsConfig.teams[fromTeam]) {
       throw new ConfigurationError(`Unknown team: ${fromTeam}`);
     }
 
@@ -220,7 +219,7 @@ export class SessionManager {
    * Create a new session for team pair
    */
   async createSession(
-    fromTeam: string | null,
+    fromTeam: string,
     toTeam: string,
     options?: CreateSessionOptions,
   ): Promise<SessionInfo> {
@@ -228,9 +227,7 @@ export class SessionManager {
 
     // Validate teams
     validateTeamName(toTeam);
-    if (fromTeam) {
-      validateTeamName(fromTeam);
-    }
+    validateTeamName(fromTeam);
 
     const teamConfig = this.teamsConfig.teams[toTeam];
     if (!teamConfig) {
@@ -293,8 +290,8 @@ export class SessionManager {
   /**
    * Generate cache key for team pair
    */
-  private getCacheKey(fromTeam: string | null, toTeam: string): string {
-    return `${fromTeam ?? "external"}->${toTeam}`;
+  private getCacheKey(fromTeam: string, toTeam: string): string {
+    return `${fromTeam}->${toTeam}`;
   }
 
   /**
@@ -309,7 +306,7 @@ export class SessionManager {
   /**
    * Get session for team pair (does not create)
    */
-  getSession(fromTeam: string | null, toTeam: string): SessionInfo | null {
+  getSession(fromTeam: string, toTeam: string): SessionInfo | null {
     this.ensureInitialized();
 
     // Check cache first
@@ -352,7 +349,7 @@ export class SessionManager {
   /**
    * Invalidate cache for a session
    */
-  private invalidateCache(fromTeam: string | null, toTeam: string): void {
+  private invalidateCache(fromTeam: string, toTeam: string): void {
     const cacheKey = this.getCacheKey(fromTeam, toTeam);
     this.sessionCache.delete(cacheKey);
     this.cacheTimestamps.delete(cacheKey);
@@ -376,7 +373,7 @@ export class SessionManager {
 
     // Invalidate cache for this session
     const session = this.store.getBySessionId(sessionId);
-    if (session) {
+    if (session && session.fromTeam) {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
   }
@@ -390,7 +387,7 @@ export class SessionManager {
 
     // Invalidate cache for this session
     const session = this.store.getBySessionId(sessionId);
-    if (session) {
+    if (session && session.fromTeam) {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
   }
@@ -457,7 +454,9 @@ export class SessionManager {
 
     // Mark as compacting
     this.store.updateStatus(sessionId, "compacting");
-    this.invalidateCache(session.fromTeam, session.toTeam);
+    if (session.fromTeam) {
+      this.invalidateCache(session.fromTeam, session.toTeam);
+    }
 
     try {
       // Reset message count and update status
@@ -473,7 +472,9 @@ export class SessionManager {
 
       // Mark as error state
       this.store.updateStatus(sessionId, "error");
-      this.invalidateCache(session.fromTeam, session.toTeam);
+      if (session.fromTeam) {
+        this.invalidateCache(session.fromTeam, session.toTeam);
+      }
 
       throw new ProcessError(
         `Failed to compact session: ${error instanceof Error ? error.message : String(error)}`,
@@ -531,6 +532,60 @@ export class SessionManager {
     // - Set initialized to false (remains initialized)
 
     logger.info("SessionManager reset complete - initialized state preserved");
+  }
+
+  /**
+   * Update process state (called by Iris)
+   */
+  updateProcessState(sessionId: string, state: string): void {
+    this.ensureInitialized();
+    this.store.updateProcessState(sessionId, state);
+
+    // Invalidate cache
+    const session = this.store.getBySessionId(sessionId);
+    if (session && session.fromTeam) {
+      this.invalidateCache(session.fromTeam, session.toTeam);
+    }
+  }
+
+  /**
+   * Set current cache session ID (called by Iris)
+   */
+  setCurrentCacheSessionId(
+    sessionId: string,
+    cacheSessionId: string | null,
+  ): void {
+    this.ensureInitialized();
+    this.store.setCurrentCacheSessionId(sessionId, cacheSessionId);
+
+    // Invalidate cache
+    const session = this.store.getBySessionId(sessionId);
+    if (session && session.fromTeam) {
+      this.invalidateCache(session.fromTeam, session.toTeam);
+    }
+  }
+
+  /**
+   * Update last response timestamp (called by Iris)
+   */
+  updateLastResponse(sessionId: string): void {
+    this.ensureInitialized();
+    this.store.updateLastResponse(sessionId, Date.now());
+
+    // Invalidate cache
+    const session = this.store.getBySessionId(sessionId);
+    if (session && session.fromTeam) {
+      this.invalidateCache(session.fromTeam, session.toTeam);
+    }
+  }
+
+  /**
+   * Get process state
+   */
+  getProcessState(sessionId: string): string | null {
+    this.ensureInitialized();
+    const session = this.store.getBySessionId(sessionId);
+    return session?.processState ?? null;
   }
 
   /**

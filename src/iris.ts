@@ -1,23 +1,32 @@
 /**
- * Iris Orchestrator - Business Logic Layer
+ * Iris Orchestrator - THE BRAIN
  *
- * Coordinates SessionManager and PoolManager to provide high-level
- * team-to-team communication operations.
+ * All business logic lives here:
+ * - Completion detection
+ * - Timeout orchestration (two-timeout architecture)
+ * - Process state management
+ * - Cache coordination
  *
- * This layer sits between the MCP transport (index.ts) and the
- * infrastructure components (SessionManager, PoolManager).
+ * ClaudeProcess is a dumb pipe - Iris makes all decisions.
  */
 
 import { SessionManager } from "./session/session-manager.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
-import { AsyncQueue } from "./async/queue.js";
+import { CacheManager } from "./cache/cache-manager.js";
+import {
+  CacheEntryType,
+  TerminationReason,
+  CacheEntry,
+} from "./cache/types.js";
 import { Logger } from "./utils/logger.js";
+import { filter } from "rxjs/operators";
+import type { Subscription } from "rxjs";
+import type { TeamsConfig } from "./process-pool/types.js";
 
 const logger = new Logger("iris");
 
 export interface SendMessageOptions {
   timeout?: number;
-  waitForResponse?: boolean;
 }
 
 export interface IrisStatus {
@@ -32,47 +41,45 @@ export interface IrisStatus {
 }
 
 /**
- * Iris Orchestrator - Coordinates SessionManager and PoolManager
+ * Iris Orchestrator - Coordinates everything
  *
- * Provides business logic for:
- * - Team-to-team messaging
- * - Session lifecycle management
- * - Process pool coordination
- * - Status reporting
+ * Two-timeout architecture:
+ * - responseTimeout (from config): Detects stalled Claude responses, triggers process recreation
+ * - mcpTimeout (from caller): Controls how long caller waits for response
+ *   - -1: Async mode (return immediately)
+ *   - 0: Wait indefinitely
+ *   - N: Wait N ms, then return partial results
  */
 export class IrisOrchestrator {
-  private asyncQueue: AsyncQueue;
+  private cacheManager: CacheManager;
+  private responseTimeouts = new Map<string, NodeJS.Timeout>();
+  private responseSubscriptions = new Map<string, Subscription>();
 
   constructor(
     private sessionManager: SessionManager,
     private processPool: ClaudeProcessPool,
+    private config: TeamsConfig,
   ) {
-    this.asyncQueue = new AsyncQueue(this);
+    this.cacheManager = new CacheManager();
   }
 
   /**
-   * Send a message from one team to another
+   * Send message from one team to another
    *
-   * Orchestrates:
-   * 1. Get or create session for team pair
-   * 2. Get or create process with session ID
-   * 3. Check if process is spawning (return "Session starting...")
-   * 4. Send message and return response
-   * 5. Track session usage and message count
+   * @param timeout MCP timeout parameter:
+   *   -1: Async mode (returns immediately, caches responses)
+   *    0: Wait indefinitely until completion
+   *    N: Wait N milliseconds, then return partial results
    *
-   * @param fromTeam - Sending team (null for external)
-   * @param toTeam - Receiving team
-   * @param message - Message content
-   * @param options - Send options (timeout, waitForResponse)
-   * @returns Response from Claude or "Session starting..." if spawning
+   * responseTimeout (from config) is separate - detects stalled Claude responses
    */
   async sendMessage(
-    fromTeam: string | null,
+    fromTeam: string,
     toTeam: string,
     message: string,
     options: SendMessageOptions = {},
-  ): Promise<string> {
-    const { timeout = 30000, waitForResponse = true } = options;
+  ): Promise<string | object> {
+    const { timeout = 30000 } = options;
 
     logger.info("Sending message", {
       fromTeam,
@@ -81,7 +88,7 @@ export class IrisOrchestrator {
       timeout,
     });
 
-    // Step 1: Get or create session for team pair
+    // Step 1: Get or create session
     const session = await this.sessionManager.getOrCreateSession(
       fromTeam,
       toTeam,
@@ -91,120 +98,423 @@ export class IrisOrchestrator {
       sessionId: session.sessionId,
       fromTeam: session.fromTeam,
       toTeam: session.toTeam,
+      processState: session.processState,
     });
 
-    // Step 2: Get or create process with session ID
+    // Step 2: Check if process is busy
+    const processState = this.sessionManager.getProcessState(session.sessionId);
+
+    if (processState === "processing") {
+      return {
+        status: "busy",
+        message: "Process currently processing another request",
+        currentCacheSessionId: session.currentCacheSessionId,
+      };
+    }
+
+    if (processState === "spawning") {
+      return {
+        status: "spawning",
+        message: "Session starting... Please retry your request in a moment.",
+      };
+    }
+
+    // Step 3: Get or create CacheSession for this session
+    let cacheSession = this.cacheManager.getSession(session.sessionId);
+    if (!cacheSession) {
+      cacheSession = this.cacheManager.createSession(
+        session.sessionId,
+        fromTeam,
+        toTeam,
+      );
+      logger.debug("Created new CacheSession", {
+        sessionId: session.sessionId,
+      });
+    }
+
+    // Step 4: Get or create process
     const process = await this.processPool.getOrCreateProcess(
       toTeam,
       session.sessionId,
       fromTeam,
     );
 
-    // Step 3: Check if process is still spawning
-    const metrics = process.getMetrics();
-    if (metrics.status === "spawning") {
-      logger.info("Process is spawning, returning early", {
+    // Step 5: If process not spawned, spawn with ping
+    const metrics = process.getBasicMetrics();
+    if (!metrics.isReady) {
+      logger.info("Process not ready, spawning", {
+        teamName: toTeam,
         sessionId: session.sessionId,
-        toTeam,
       });
-      return "Session starting... Please retry your request in a moment.";
-    }
 
-    if (!waitForResponse) {
-      // Fire-and-forget mode
-      logger.debug("Fire-and-forget mode, not waiting for response");
-      process.sendMessage(message, timeout).catch((error) => {
-        logger.error("Fire-and-forget message failed", {
+      // Update session state
+      this.sessionManager.updateProcessState(session.sessionId, "spawning");
+
+      // Create spawn CacheEntry
+      const spawnEntry = cacheSession.createEntry(CacheEntryType.SPAWN, "ping");
+
+      try {
+        // Spawn process
+        await process.spawn(spawnEntry);
+
+        logger.info("Process spawned successfully", {
+          teamName: toTeam,
+          sessionId: session.sessionId,
+          pid: process.getBasicMetrics().pid,
+        });
+
+        // Check for pong response in spawn entry
+        const messages = spawnEntry.getMessages();
+        const hasAssistantMessage = messages.some(
+          (m) => m.type === "assistant",
+        );
+
+        if (hasAssistantMessage) {
+          logger.info("Received pong from spawn", {
+            teamName: toTeam,
+            messageCount: messages.length,
+          });
+
+          // Mark spawn complete
+          spawnEntry.complete();
+          this.sessionManager.updateProcessState(session.sessionId, "idle");
+        } else {
+          logger.warn("No pong response in spawn", {
+            teamName: toTeam,
+            messageCount: messages.length,
+          });
+        }
+      } catch (error) {
+        logger.error("Process spawn failed", {
+          teamName: toTeam,
           error: error instanceof Error ? error.message : String(error),
-          sessionId: session.sessionId,
         });
-      });
 
-      // Track usage even for fire-and-forget
-      this.sessionManager.recordUsage(session.sessionId);
-      this.sessionManager.incrementMessageCount(session.sessionId);
-
-      return "Message sent (fire-and-forget mode)";
+        this.sessionManager.updateProcessState(session.sessionId, "stopped");
+        throw error;
+      }
     }
 
-    // Step 4: Send message and wait for response
+    // Step 6: Create CacheEntry for this tell
+    const tellEntry = cacheSession.createEntry(CacheEntryType.TELL, message);
+
+    logger.debug("Created tell CacheEntry", {
+      sessionId: session.sessionId,
+      tellStringLength: message.length,
+    });
+
+    // Step 7: Update session state
+    this.sessionManager.updateProcessState(session.sessionId, "processing");
+    this.sessionManager.setCurrentCacheSessionId(
+      session.sessionId,
+      session.sessionId,
+    );
+
+    // Step 8: Start responseTimeout timer
+    this.startResponseTimeout(session.sessionId, tellEntry);
+
+    // Step 9: Execute tell (non-blocking!)
     try {
-      logger.debug("Calling process.sendMessage", {
-        sessionId: session.sessionId,
-        toTeam,
-        messageLength: message.length,
-        messagePreview: message.substring(0, 50),
-        timeout,
-      });
-
-      const response = await process.sendMessage(message, timeout);
-
-      logger.debug("Received response from process.sendMessage", {
-        sessionId: session.sessionId,
-        toTeam,
-        responseLength: response?.length || 0,
-        responseType: typeof response,
-        isEmpty: !response || response.length === 0,
-        responsePreview: response?.substring(0, 100),
-      });
-
-      if (!response || response.length === 0) {
-        logger.warn("EMPTY RESPONSE FROM PROCESS", {
-          sessionId: session.sessionId,
-          toTeam,
-          fromTeam,
-          message,
-          responseValue: JSON.stringify(response),
-        });
-      }
-
-      // Step 5: Track session usage and message count
-      this.sessionManager.recordUsage(session.sessionId);
-      this.sessionManager.incrementMessageCount(session.sessionId);
-
-      logger.info("Message sent successfully", {
-        sessionId: session.sessionId,
-        responseLength: response?.length || 0,
-        isEmpty: !response || response.length === 0,
-      });
-
-      return response;
+      process.executeTell(tellEntry);
     } catch (error) {
-      logger.error("Failed to send message", {
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-        sessionId: session.sessionId,
-        toTeam,
-      });
+      // Process busy or other error
+      this.cleanupTell(session.sessionId);
       throw error;
     }
+
+    // Step 10: Async mode - return immediately
+    if (timeout === -1) {
+      return {
+        status: "async",
+        sessionId: session.sessionId,
+        message: "Tell executing asynchronously. Check cache for results.",
+      };
+    }
+
+    // Step 11: Wait for completion or MCP timeout
+    return this.waitForCompletion(session.sessionId, tellEntry, timeout);
   }
 
   /**
-   * Ask a question to a team (convenience wrapper for sendMessage)
-   *
-   * @param fromTeam - Asking team (null for external)
-   * @param toTeam - Team to ask
-   * @param question - Question content
-   * @param timeout - Optional timeout in ms
-   * @returns Answer from Claude
+   * Start responseTimeout timer (resets on each message)
+   * This is Iris's responsibility - NOT ClaudeProcess
    */
-  async ask(
-    fromTeam: string | null,
-    toTeam: string,
-    question: string,
-    timeout?: number,
-  ): Promise<string> {
-    return this.sendMessage(fromTeam, toTeam, question, {
-      timeout,
-      waitForResponse: true,
+  private startResponseTimeout(
+    sessionId: string,
+    cacheEntry: CacheEntry,
+  ): void {
+    const responseTimeout = this.config.settings.responseTimeout ?? 120000;
+
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      // Clear existing timeout
+      if (timeoutId) clearTimeout(timeoutId);
+
+      // Set new timeout
+      timeoutId = setTimeout(() => {
+        this.handleResponseTimeout(sessionId, cacheEntry);
+      }, responseTimeout);
+    };
+
+    // Subscribe to cache messages to reset timer
+    const subscription = cacheEntry.messages$.subscribe((msg) => {
+      this.sessionManager.updateLastResponse(sessionId);
+      resetTimer(); // Reset timer on each message
+
+      logger.debug("Cache message received, timer reset", {
+        sessionId,
+        messageType: msg.type,
+      });
+
+      // Check for completion
+      if (msg.type === "result") {
+        this.handleTellCompletion(sessionId, cacheEntry);
+        subscription.unsubscribe();
+        clearTimeout(timeoutId);
+      }
+    });
+
+    // Store subscription for cleanup
+    this.responseSubscriptions.set(sessionId, subscription);
+
+    // Start initial timer
+    resetTimer();
+
+    logger.debug("Response timeout timer started", {
+      sessionId,
+      responseTimeout,
     });
   }
 
   /**
+   * Handle tell completion (called when 'result' message received)
+   */
+  private handleTellCompletion(
+    sessionId: string,
+    cacheEntry: CacheEntry,
+  ): void {
+    logger.info("Tell completed successfully", {
+      sessionId,
+      cacheEntryType: cacheEntry.cacheEntryType,
+      messageCount: cacheEntry.getMessages().length,
+    });
+
+    // Mark entry as completed
+    cacheEntry.complete();
+
+    // Update session state
+    this.sessionManager.updateProcessState(sessionId, "idle");
+    this.sessionManager.setCurrentCacheSessionId(sessionId, null);
+
+    // Update usage stats
+    this.sessionManager.recordUsage(sessionId);
+    this.sessionManager.incrementMessageCount(sessionId);
+
+    // Cleanup subscription
+    const subscription = this.responseSubscriptions.get(sessionId);
+    if (subscription) {
+      subscription.unsubscribe();
+      this.responseSubscriptions.delete(sessionId);
+    }
+
+    logger.debug("Tell completion cleanup complete", { sessionId });
+  }
+
+  /**
+   * Handle responseTimeout - recreate process
+   * This is the critical error path where Claude has stopped responding
+   */
+  private async handleResponseTimeout(
+    sessionId: string,
+    cacheEntry: CacheEntry,
+  ): Promise<void> {
+    logger.error("Response timeout - recreating process", {
+      sessionId,
+      cacheEntryType: cacheEntry.cacheEntryType,
+      timeout: this.config.settings.responseTimeout,
+      messageCount: cacheEntry.getMessages().length,
+    });
+
+    // Mark entry as terminated
+    cacheEntry.terminate(TerminationReason.RESPONSE_TIMEOUT);
+
+    // Get session info
+    const session = this.sessionManager.getSessionById(sessionId);
+    if (!session) return;
+
+    // Get CacheSession (preserve it!)
+    const cacheSession = this.cacheManager.getSession(sessionId);
+
+    // Terminate old process
+    const oldProcess = this.processPool.getProcessBySessionId(sessionId);
+    if (oldProcess) {
+      await oldProcess.terminate();
+    }
+
+    // Update session state
+    this.sessionManager.updateProcessState(sessionId, "stopped");
+    this.sessionManager.setCurrentCacheSessionId(sessionId, null);
+
+    // Note: CacheSession preserved in CacheManager
+    logger.info("Process terminated, cache preserved", {
+      sessionId,
+      cacheEntryCount: cacheSession?.getAllEntries().length,
+    });
+
+    // Cleanup subscription
+    const subscription = this.responseSubscriptions.get(sessionId);
+    if (subscription) {
+      subscription.unsubscribe();
+      this.responseSubscriptions.delete(sessionId);
+    }
+  }
+
+  /**
+   * Wait for completion or MCP timeout
+   * Iris polls cache waiting for result or timeout
+   */
+  private async waitForCompletion(
+    sessionId: string,
+    cacheEntry: CacheEntry,
+    mcpTimeout: number,
+  ): Promise<string | object> {
+    return new Promise((resolve) => {
+      let mcpTimeoutId: NodeJS.Timeout | null = null;
+      let completed = false;
+
+      // Set MCP timeout (if not 0)
+      if (mcpTimeout > 0) {
+        mcpTimeoutId = setTimeout(() => {
+          if (!completed) {
+            completed = true;
+            subscription.unsubscribe();
+
+            logger.info("MCP timeout reached, returning partial results", {
+              sessionId,
+              mcpTimeout,
+              messagesReceived: cacheEntry.getMessages().length,
+            });
+
+            // Return partial results
+            resolve({
+              status: "mcp_timeout",
+              sessionId,
+              message: "Caller timeout reached. Process still running.",
+              partialResponse: this.extractPartialResponse(cacheEntry),
+              rawMessages: cacheEntry.getMessages(),
+            });
+          }
+        }, mcpTimeout);
+      }
+
+      // Subscribe to completion
+      const subscription = cacheEntry.messages$
+        .pipe(filter((msg) => msg.type === "result"))
+        .subscribe(() => {
+          if (!completed) {
+            completed = true;
+            if (mcpTimeoutId) clearTimeout(mcpTimeoutId);
+            subscription.unsubscribe();
+
+            logger.info("Tell completed within MCP timeout", {
+              sessionId,
+              responseLength: this.extractFullResponse(cacheEntry).length,
+            });
+
+            // Extract full response
+            const response = this.extractFullResponse(cacheEntry);
+            resolve(response);
+          }
+        });
+
+      // Handle terminated case
+      if (cacheEntry.status === "terminated") {
+        if (!completed) {
+          completed = true;
+          if (mcpTimeoutId) clearTimeout(mcpTimeoutId);
+          subscription.unsubscribe();
+
+          logger.warn("Cache entry already terminated", {
+            sessionId,
+            reason: cacheEntry.terminationReason,
+          });
+
+          resolve({
+            status: "terminated",
+            sessionId,
+            reason: cacheEntry.terminationReason,
+            message: "Process terminated during tell execution",
+            partialResponse: this.extractPartialResponse(cacheEntry),
+          });
+        }
+      }
+    });
+  }
+
+  /**
+   * Extract partial response from cache entry (for timeouts)
+   */
+  private extractPartialResponse(cacheEntry: CacheEntry): string {
+    const messages = cacheEntry.getMessages();
+    const assistantMessages = messages.filter((m) => m.type === "assistant");
+
+    if (assistantMessages.length === 0) {
+      return "(No response received yet)";
+    }
+
+    return assistantMessages
+      .map((m) => m.data.message?.content?.[0]?.text || "")
+      .join("\n");
+  }
+
+  /**
+   * Extract full response from cache entry (for completion)
+   */
+  private extractFullResponse(cacheEntry: CacheEntry): string {
+    return this.extractPartialResponse(cacheEntry);
+  }
+
+  /**
+   * Cleanup tell (on error)
+   */
+  private cleanupTell(sessionId: string): void {
+    this.sessionManager.updateProcessState(sessionId, "idle");
+    this.sessionManager.setCurrentCacheSessionId(sessionId, null);
+
+    const subscription = this.responseSubscriptions.get(sessionId);
+    if (subscription) {
+      subscription.unsubscribe();
+      this.responseSubscriptions.delete(sessionId);
+    }
+
+    logger.debug("Tell cleanup complete", { sessionId });
+  }
+
+  /**
+   * Ask a question to a team (convenience wrapper for sendMessage)
+   */
+  async ask(
+    fromTeam: string,
+    toTeam: string,
+    question: string,
+    timeout?: number,
+  ): Promise<string> {
+    const result = await this.sendMessage(fromTeam, toTeam, question, {
+      timeout,
+    });
+
+    // If result is a string, return it directly
+    if (typeof result === "string") {
+      return result;
+    }
+
+    // If result is an object (timeout/error), return message field or stringify
+    return (result as any).message || JSON.stringify(result);
+  }
+
+  /**
    * Get system status
-   *
-   * @returns Status of sessions and processes
    */
   getStatus(): IrisStatus {
     const sessionStats = this.sessionManager.getStats();
@@ -254,25 +564,9 @@ export class IrisOrchestrator {
   }
 
   /**
-   * Get the async queue for direct access (e.g., stats, enqueueing)
-   */
-  getAsyncQueue(): AsyncQueue {
-    return this.asyncQueue;
-  }
-
-  /**
    * Check if a team is "awake" (has a live, ready process)
-   *
-   * A team is considered awake if:
-   * 1. It has an active session
-   * 2. It has an active process in the pool
-   * 3. The process status is NOT "spawning" or "stopped"
-   *
-   * @param fromTeam - Source team (null for external)
-   * @param toTeam - Target team to check
-   * @returns true if team has a ready process, false otherwise
    */
-  isAwake(fromTeam: string | null, toTeam: string): boolean {
+  isAwake(fromTeam: string, toTeam: string): boolean {
     // Check if session exists
     const session = this.sessionManager.getSession(fromTeam, toTeam);
     if (!session) {
@@ -291,16 +585,16 @@ export class IrisOrchestrator {
       return false;
     }
 
-    const metrics = process.getMetrics();
-    const isReady =
-      metrics.status !== "spawning" && metrics.status !== "stopped";
+    const metrics = process.getBasicMetrics();
+    const isReady = metrics.isReady && !metrics.isBusy;
 
     logger.debug("Team awake check", {
       fromTeam,
       toTeam,
       sessionId: session.sessionId,
-      status: metrics.status,
-      isReady,
+      isReady: metrics.isReady,
+      isBusy: metrics.isBusy,
+      result: isReady,
     });
 
     return isReady;
@@ -311,8 +605,25 @@ export class IrisOrchestrator {
    */
   async shutdown(): Promise<void> {
     logger.info("Shutting down Iris orchestrator");
-    this.asyncQueue.shutdown();
+
+    // Unsubscribe all
+    for (const subscription of this.responseSubscriptions.values()) {
+      subscription.unsubscribe();
+    }
+    this.responseSubscriptions.clear();
+
+    // Clear timeouts
+    for (const timeoutId of this.responseTimeouts.values()) {
+      clearTimeout(timeoutId);
+    }
+    this.responseTimeouts.clear();
+
+    // Destroy all cache sessions
+    this.cacheManager.destroyAll();
+
     await this.processPool.terminateAll();
     this.sessionManager.close();
+
+    logger.info("Iris orchestrator shut down complete");
   }
 }

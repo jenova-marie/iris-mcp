@@ -8,6 +8,7 @@ export interface ProcessPoolConfig {
   maxProcesses: number;
   healthCheckInterval: number;
   sessionInitTimeout: number;
+  responseTimeout: number;
   httpPort?: number;
   defaultTransport?: "stdio" | "http";
 }

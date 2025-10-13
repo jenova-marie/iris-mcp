@@ -9,6 +9,9 @@ import type { ProcessPoolStatus, ProcessPoolConfig } from "./types.js";
 import { TeamsConfigManager } from "../config/teams-config.js";
 import { Logger } from "../utils/logger.js";
 import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
+import { CacheEntryImpl } from "../cache/cache-entry.js";
+import { CacheEntryType } from "../cache/types.js";
+import { filter } from "rxjs/operators";
 
 export class ClaudeProcessPool extends EventEmitter {
   private processes = new Map<string, ClaudeProcess>();
@@ -82,7 +85,7 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Return existing process if available
     const existing = this.processes.get(poolKey);
-    if (existing && existing.getMetrics().status !== "stopped") {
+    if (existing && existing.getBasicMetrics().status !== "stopped") {
       this.logger.debug("Using existing process", { poolKey, sessionId });
       return existing;
     }
@@ -102,7 +105,6 @@ export class ClaudeProcessPool extends EventEmitter {
     const process = new ClaudeProcess(
       teamName,
       teamConfig,
-      teamConfig.idleTimeout || this.config.idleTimeout,
       sessionId,
     );
 
@@ -126,9 +128,10 @@ export class ClaudeProcessPool extends EventEmitter {
       this.emit("message-response", data),
     );
 
-    // Spawn the process
+    // Spawn the process with a temporary cache entry for init ping
     try {
-      await process.spawn();
+      const spawnCacheEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
+      await process.spawn(spawnCacheEntry);
 
       // Add to pool with pool key
       this.processes.set(poolKey, process);
@@ -166,25 +169,6 @@ export class ClaudeProcessPool extends EventEmitter {
     }
   }
 
-  /**
-   * Send a message to a team
-   *
-   * @param teamName - The team to send message to
-   * @param sessionId - The session ID to use
-   * @param message - The message content
-   * @param timeout - Optional timeout in ms
-   * @param fromTeam - The requesting team (null for external requests)
-   */
-  async sendMessage(
-    teamName: string,
-    sessionId: string,
-    message: string,
-    timeout?: number,
-    fromTeam: string | null = null,
-  ): Promise<string> {
-    const process = await this.getOrCreateProcess(teamName, sessionId, fromTeam);
-    return process.sendMessage(message, timeout);
-  }
 
   /**
    * Terminate a specific process
@@ -233,7 +217,7 @@ export class ClaudeProcessPool extends EventEmitter {
     const processes: Record<string, any> = {};
 
     for (const [poolKey, process] of this.processes) {
-      const metrics = process.getMetrics();
+      const metrics = process.getBasicMetrics();
 
       // Find associated session ID
       let sessionId: string | undefined;
@@ -298,6 +282,7 @@ export class ClaudeProcessPool extends EventEmitter {
 
   /**
    * Send a command to a process (for compaction, etc.)
+   * Creates a temporary cache entry to send the command using the new architecture
    */
   async sendCommandToSession(sessionId: string, command: string): Promise<string | null> {
     const process = this.getProcessBySessionId(sessionId);
@@ -307,7 +292,36 @@ export class ClaudeProcessPool extends EventEmitter {
     }
 
     try {
-      const response = await process.sendMessage(command);
+      // Create temporary cache entry for this command
+      const commandEntry = new CacheEntryImpl(CacheEntryType.TELL, command);
+
+      // Execute the command (non-blocking)
+      process.executeTell(commandEntry);
+
+      // Wait for result with timeout
+      const response = await new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Command timeout after 30s"));
+        }, 30000);
+
+        // Subscribe to result message
+        const subscription = commandEntry.messages$
+          .pipe(filter((msg) => msg.type === "result"))
+          .subscribe(() => {
+            clearTimeout(timeout);
+            subscription.unsubscribe();
+
+            // Extract response from assistant messages
+            const messages = commandEntry.getMessages();
+            const assistantMessages = messages.filter((m) => m.type === "assistant");
+            const response = assistantMessages
+              .map((m) => m.data.message?.content?.[0]?.text || "")
+              .join("\n");
+
+            resolve(response);
+          });
+      });
+
       this.logger.info("Command sent to session", { sessionId, command });
       return response;
     } catch (error) {
@@ -334,7 +348,7 @@ export class ClaudeProcessPool extends EventEmitter {
       const teamName = this.accessOrder[i];
       const process = this.processes.get(teamName);
 
-      if (process && process.getMetrics().status === 'idle') {
+      if (process && process.getBasicMetrics().status === 'idle') {
         victimIndex = i;
         break;
       }
@@ -388,7 +402,7 @@ export class ClaudeProcessPool extends EventEmitter {
     const processesToRemove: string[] = [];
 
     for (const [teamName, process] of this.processes) {
-      const metrics = process.getMetrics();
+      const metrics = process.getBasicMetrics();
 
       // Remove stopped processes
       if (metrics.status === 'stopped') {

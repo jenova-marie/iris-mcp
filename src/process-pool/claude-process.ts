@@ -1,71 +1,86 @@
 /**
- * Iris MCP - Claude Process Wrapper
- * Manages a single Claude Code process with stdio communication
+ * Claude Process - Dumb Pipe for stdio communication
  *
- * This implementation follows the Claude Code headless mode specification
- * documented in docs/HEADLESS_CLAUDE.md. All message formats and communication
- * patterns adhere to that specification.
+ * This is a SIMPLIFIED process wrapper that:
+ * - Spawns Claude CLI in headless mode
+ * - Pipes stdio/stderr messages to cache entries
+ * - Does NOT handle completion detection (that's Iris's job)
+ * - Does NOT manage timeouts (that's Iris's job)
+ * - Does NOT queue messages (return "busy" instead)
+ *
+ * Business logic lives in Iris, NOT here.
  */
 
 import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
-import type {
-  ProcessMessage,
-  ProcessStatus,
-  ProcessMetrics,
-  TeamConfig,
-} from "./types.js";
+import type { TeamConfig } from "./types.js";
 import { Logger } from "../utils/logger.js";
-import { ProcessError, TimeoutError } from "../utils/errors.js";
-import { ClaudeCache } from "./claude-cache.js";
+import { ProcessError } from "../utils/errors.js";
+import { CacheEntry } from "../cache/types.js";
 
+/**
+ * Error thrown when process is busy
+ */
+export class ProcessBusyError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProcessBusyError";
+  }
+}
+
+/**
+ * Basic process metrics - compatible with ProcessMetrics interface
+ */
+export interface BasicProcessMetrics {
+  pid: number | undefined;
+  status: 'spawning' | 'idle' | 'processing' | 'stopped';
+  messagesProcessed: number;
+  lastUsed: number;
+  uptime: number;
+  idleTimeRemaining: number;
+  queueLength: number;
+  sessionId?: string;
+  messageCount: number;
+  lastActivity: number;
+  // Helper properties derived from status
+  isReady: boolean;
+  isBusy: boolean;
+}
+
+/**
+ * Claude Process - Minimal wrapper for Claude CLI
+ */
 export class ClaudeProcess extends EventEmitter {
-  private process: ChildProcess | null = null;
-  private status: ProcessStatus = "stopped";
-  private messageQueue: ProcessMessage[] = [];
-  private currentMessage: ProcessMessage | null = null;
-  private responseBuffer: string = "";
-  private textAccumulator: string = "";
-
-  private messagesProcessed = 0;
-  private startTime = 0;
+  private childProcess: ChildProcess | null = null;
+  private currentCacheEntry: CacheEntry | null = null;
+  private isReady = false;
+  private spawnTime = 0;
+  private responseBuffer = "";
   private logger: Logger;
-  private idleTimer: NodeJS.Timeout | null = null;
-  private initPromise: Promise<void> | null = null;
+
+  // Init promise for spawn()
   private initResolve: (() => void) | null = null;
   private initReject: ((error: Error) => void) | null = null;
-  private initPingCompleted = false;
-  private debugLogPath: string | null = null;
 
-  // Track expected num_turns for sequence validation
-  private expectedNumTurns: number | null = null;
-
-  // Cache for passive message observation
-  private cache: ClaudeCache;
-  private currentCacheMessageId: string | null = null;
+  // Metrics tracking
+  private messagesProcessed = 0;
+  private messageCount = 0;
+  private lastActivity = 0;
+  private lastUsed = 0;
 
   constructor(
-    private teamName: string,
+    public readonly teamName: string,
     private teamConfig: TeamConfig,
-    private idleTimeout: number,
-    private sessionId?: string,
+    public readonly sessionId: string | null,
   ) {
     super();
     this.logger = new Logger(`process:${teamName}`);
-    this.cache = new ClaudeCache(teamName);
   }
 
   /**
-   * Initialize a session file using claude --session-id
-   * This creates the actual .jsonl file in ~/.claude/projects/
-   *
-   * This is a static method that can be called without a ClaudeProcess instance.
-   * Used by SessionManager during startup to create session files for all teams.
-   *
-   * @param teamConfig - Team configuration containing path
-   * @param sessionId - UUID for the session
-   * @param sessionInitTimeout - Optional timeout in ms (default: 30000)
+   * Static method: Initialize session file
+   * UNCHANGED from original - this works perfectly
    */
   static async initializeSessionFile(
     teamConfig: TeamConfig,
@@ -309,873 +324,349 @@ export class ClaudeProcess extends EventEmitter {
 
   /**
    * Get the path to a session file
-   * Helper method for determining where Claude stores session files
    */
   static getSessionFilePath(projectPath: string, sessionId: string): string {
-    // Claude stores sessions in ~/.claude/projects/{escaped-path}/{sessionId}.jsonl
     const homedir = process.env.HOME || process.env.USERPROFILE || "";
     const escapedPath = projectPath.replace(/\//g, "-");
     return `${homedir}/.claude/projects/${escapedPath}/${sessionId}.jsonl`;
   }
 
   /**
-   * Get debug log path if debug mode was enabled
+   * Spawn Claude process with spawn ping
+   * @param spawnCacheEntry - CacheEntry with type=SPAWN, tellString='ping'
    */
-  getDebugLogPath(): string | null {
-    return this.debugLogPath;
-  }
-
-  /**
-   * Spawn the Claude Code process
-   */
-  async spawn(): Promise<void> {
-    if (this.process) {
-      throw new ProcessError("Process already running", this.teamName);
+  async spawn(spawnCacheEntry: CacheEntry): Promise<void> {
+    if (this.childProcess) {
+      throw new ProcessError("Process already spawned", this.teamName);
     }
 
-    this.status = "spawning";
-    this.startTime = Date.now();
-
-    try {
-      const projectPath = this.teamConfig.path;
-
-      this.logger.info("Spawning Claude Code process", {
-        path: projectPath,
-        sessionId: this.sessionId,
-        skipPermissions: this.teamConfig.skipPermissions,
-      });
-
-      // Spawn Claude CLI in headless mode with stream-json I/O
-      // Use --resume to continue existing session if sessionId provided
-      // See docs/HEADLESS_CLAUDE.md and docs/SESSION.md for reference
-      const args: string[] = [];
-
-      // Only use --resume if we have a sessionId and not in test mode
-      // In test mode, session files don't exist so we can't resume
-      if (this.sessionId && process.env.NODE_ENV !== "test") {
-        args.push("--resume", this.sessionId);
-      }
-
-      // Enable debug mode in test environment for better diagnostics
-      if (process.env.NODE_ENV === "test" || process.env.DEBUG) {
-        args.push("--debug");
-      }
-
-      args.push(
-        "--print", // Non-interactive headless mode
-        "--verbose", // Required for stream-json output
-        "--input-format", // Accept JSON messages via stdin
-        "stream-json",
-        "--output-format", // Emit JSON messages via stdout
-        "stream-json",
-      );
-
-      if (this.teamConfig.skipPermissions) {
-        args.push("--dangerously-skip-permissions");
-      }
-
-      this.process = spawn("claude", args, {
-        cwd: projectPath,
-        stdio: ["pipe", "pipe", "pipe"],
-        env: {
-          ...process.env,
-        },
-      });
-
-      // Handle process events
-      this.process.on("error", (error) => {
-        this.logger.error("Process error", error);
-        this.handleProcessError(error);
-      });
-
-      this.process.on("exit", (code, signal) => {
-        this.logger.info("Process exited", { code, signal });
-        this.handleProcessExit(code, signal);
-      });
-
-      // Handle stdout (responses from Claude)
-      if (this.process.stdout) {
-        this.process.stdout.on("data", (data) => {
-          this.handleStdout(data);
-        });
-      }
-
-      // Handle stderr (logs from Claude)
-      if (this.process.stderr) {
-        this.process.stderr.on("data", (data) => {
-          const output = data.toString();
-
-          // Capture debug log path from stderr
-          // Claude outputs: "Logging to: /path/to/debug.txt"
-          const logPathMatch = output.match(/Logging to: (.+)/);
-          if (logPathMatch) {
-            this.debugLogPath = logPathMatch[1].trim();
-            this.logger.info("Claude debug logs available", {
-              path: this.debugLogPath,
-            });
-          }
-
-          this.logger.debug("Claude stderr", { output });
-        });
-      }
-
-      // Claude in stream-json mode sends init AFTER receiving first message
-      // So we need to send a dummy message to trigger initialization
-      // We send "ping" which triggers init AND generates a response that we need to consume
-      this.logger.info("Sending initialization ping to trigger init message");
-
-      const initMessage =
-        JSON.stringify({
-          type: "user",
-          message: {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "ping",
-              },
-            ],
-          },
-        }) + "\n";
-
-      this.process.stdin!.write(initMessage);
-
-      // Wait for process to be ready (init message + response to init ping)
-      // The init ping will generate a full response cycle that we need to wait for
-      await this.waitForReady();
-
-      // CRITICAL: The init ping generates a "pong" response that gets accumulated
-      // in textAccumulator. We MUST clear it or it will contaminate the first real message
-      this.textAccumulator = "";
-      this.logger.debug("Text accumulator cleared after initialization");
-
-      this.status = "idle";
-      this.resetIdleTimer();
-
-      this.logger.info("Process spawned successfully", {
-        pid: this.process.pid,
-      });
-
-      this.emit("spawned", { teamName: this.teamName, pid: this.process.pid });
-    } catch (error) {
-      this.status = "stopped";
-      throw new ProcessError(
-        `Failed to spawn process: ${error instanceof Error ? error.message : error}`,
-        this.teamName,
-      );
-    }
-  }
-
-  /**
-   * Send a message to the Claude Code process
-   */
-  async sendMessage(message: string, timeout = 30000): Promise<string> {
-    if (!this.process || this.status === "stopped") {
-      throw new ProcessError("Process not running", this.teamName);
-    }
-
-    this.logger.debug("Enqueueing message", {
-      messageLength: message.length,
-      messagePreview: message.substring(0, 100),
-      timeout,
-      currentStatus: this.status,
-      queueLength: this.messageQueue.length,
-      hasCurrentMessage: !!this.currentMessage,
+    this.logger.info("Spawning Claude process", {
+      teamName: this.teamName,
+      sessionId: this.sessionId,
+      cacheEntryType: spawnCacheEntry.cacheEntryType,
     });
 
-    return new Promise((resolve, reject) => {
-      const messageObj: ProcessMessage = { message, resolve, reject };
+    // Set current cache entry for init messages
+    this.currentCacheEntry = spawnCacheEntry;
+    this.spawnTime = Date.now();
 
-      this.messageQueue.push(messageObj);
-      this.processNextMessage();
+    // Build args
+    const args: string[] = [];
 
-      // Timeout handling
-      const timeoutId = setTimeout(() => {
-        if (this.currentMessage === messageObj) {
-          this.currentMessage = null;
-          reject(new TimeoutError("Message send", timeout));
-          this.processNextMessage();
-        } else {
-          const index = this.messageQueue.indexOf(messageObj);
-          if (index > -1) {
-            this.messageQueue.splice(index, 1);
-            reject(new TimeoutError("Message queued", timeout));
+    // Resume existing session if sessionId provided (not in test mode)
+    if (this.sessionId && process.env.NODE_ENV !== "test") {
+      args.push("--resume", this.sessionId);
+    }
+
+    // Enable debug mode in test/debug environment
+    if (process.env.NODE_ENV === "test" || process.env.DEBUG) {
+      args.push("--debug");
+    }
+
+    args.push(
+      "--print", // Non-interactive headless mode
+      "--verbose", // Required for stream-json output
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json",
+    );
+
+    if (this.teamConfig.skipPermissions) {
+      args.push("--dangerously-skip-permissions");
+    }
+
+    // Spawn process
+    this.childProcess = spawn("claude", args, {
+      cwd: this.teamConfig.path,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: process.env,
+    });
+
+    this.logger.info("Process spawned", {
+      teamName: this.teamName,
+      pid: this.childProcess.pid,
+    });
+
+    // Setup stdio handlers
+    this.setupStdioHandlers();
+
+    // Emit spawned event
+    this.emit("process-spawned", {
+      teamName: this.teamName,
+      pid: this.childProcess.pid,
+    });
+
+    // Send spawn ping
+    this.writeToStdin(spawnCacheEntry.tellString);
+
+    // Wait for init message
+    await this.waitForInit();
+
+    this.isReady = true;
+    this.logger.info("Process ready", { teamName: this.teamName });
+  }
+
+  /**
+   * Execute tell
+   * @param cacheEntry - CacheEntry with type=TELL, tellString=message
+   */
+  executeTell(cacheEntry: CacheEntry): void {
+    if (!this.isReady) {
+      throw new ProcessError("Process not ready", this.teamName);
+    }
+
+    if (this.currentCacheEntry) {
+      throw new ProcessBusyError("Process already processing a request");
+    }
+
+    this.logger.debug("Executing tell", {
+      teamName: this.teamName,
+      cacheEntryType: cacheEntry.cacheEntryType,
+      tellStringLength: cacheEntry.tellString.length,
+    });
+
+    // Set current cache entry
+    this.currentCacheEntry = cacheEntry;
+
+    // Update metrics
+    this.messageCount++;
+    this.lastUsed = Date.now();
+
+    // Write to stdin
+    this.writeToStdin(cacheEntry.tellString);
+  }
+
+  /**
+   * Setup stdio handlers (SIMPLIFIED - just pipes to cache)
+   */
+  private setupStdioHandlers(): void {
+    if (!this.childProcess) return;
+
+    // Stdout handler
+    this.childProcess.stdout!.on("data", (data) => {
+      this.handleStdoutData(data);
+    });
+
+    // Stderr handler
+    this.childProcess.stderr!.on("data", (data) => {
+      this.logger.debug("Claude stderr", {
+        teamName: this.teamName,
+        output: data.toString().substring(0, 500),
+      });
+    });
+
+    // Exit handler
+    this.childProcess.on("exit", (code, signal) => {
+      this.logger.info("Process exited", {
+        teamName: this.teamName,
+        code,
+        signal,
+      });
+
+      this.emit("process-exited", {
+        teamName: this.teamName,
+        code,
+        signal,
+      });
+
+      this.childProcess = null;
+      this.isReady = false;
+      this.currentCacheEntry = null;
+    });
+
+    // Error handler
+    this.childProcess.on("error", (error) => {
+      this.logger.error("Process error", {
+        teamName: this.teamName,
+        error: error.message,
+      });
+
+      this.emit("process-error", {
+        teamName: this.teamName,
+        error,
+      });
+    });
+  }
+
+  /**
+   * Handle stdout data (DUMB PIPE - just write to cache)
+   */
+  private handleStdoutData(data: Buffer): void {
+    const rawData = data.toString();
+    this.responseBuffer += rawData;
+
+    // Parse newline-delimited JSON
+    const lines = this.responseBuffer.split("\n");
+    this.responseBuffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      try {
+        const json = JSON.parse(line);
+
+        this.logger.debug("Parsed JSON message", {
+          type: json.type,
+          subtype: json.subtype,
+        });
+
+        // DUMB PIPE: Just write to current cache entry
+        if (this.currentCacheEntry) {
+          this.currentCacheEntry.addMessage(json);
+        }
+
+        // Special handling for init (resolve spawn promise)
+        if (json.type === "system" && json.subtype === "init") {
+          if (this.initResolve) {
+            this.initResolve();
+            this.initResolve = null;
+            this.initReject = null;
           }
         }
+
+        // Clear current cache entry on result (but don't notify anyone - that's Iris's job)
+        if (json.type === "result") {
+          this.logger.debug("Result message received, clearing cache entry", {
+            teamName: this.teamName,
+          });
+
+          // Update metrics
+          this.messagesProcessed++;
+          this.lastActivity = Date.now();
+
+          this.currentCacheEntry = null;
+        }
+      } catch (e) {
+        // Not JSON, ignore
+        this.logger.debug("Non-JSON stdout line", {
+          line: line.substring(0, 200),
+        });
+      }
+    }
+  }
+
+  /**
+   * Write message to stdin
+   */
+  private writeToStdin(message: string): void {
+    if (!this.childProcess || !this.childProcess.stdin) {
+      throw new ProcessError("Process stdin not available", this.teamName);
+    }
+
+    const userMessage = {
+      type: "user",
+      message: {
+        role: "user",
+        content: [{ type: "text", text: message }],
+      },
+    };
+
+    this.childProcess.stdin.write(JSON.stringify(userMessage) + "\n");
+
+    this.logger.debug("Wrote message to stdin", {
+      teamName: this.teamName,
+      messageLength: message.length,
+    });
+  }
+
+  /**
+   * Wait for init message during spawn
+   */
+  private async waitForInit(timeout = 20000): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.initResolve = resolve;
+      this.initReject = reject;
+
+      const timeoutId = setTimeout(() => {
+        this.initReject = null;
+        this.initResolve = null;
+        reject(new ProcessError("Init timeout", this.teamName));
       }, timeout);
 
-      // Clear timeout on resolution
-      const originalResolve = messageObj.resolve;
-      const originalReject = messageObj.reject;
-
-      messageObj.resolve = (value: any) => {
+      // Wrap resolve to clear timeout
+      const originalResolve = this.initResolve;
+      this.initResolve = () => {
         clearTimeout(timeoutId);
-        originalResolve(value);
-      };
-
-      messageObj.reject = (error: Error) => {
-        clearTimeout(timeoutId);
-        originalReject(error);
+        originalResolve();
       };
     });
   }
 
   /**
-   * Terminate the process gracefully
+   * Get basic metrics - returns all ProcessMetrics properties
    */
-  async terminate(): Promise<void> {
-    if (!this.process) {
-      return;
+  getBasicMetrics(): BasicProcessMetrics {
+    // Derive status from internal state
+    let status: 'spawning' | 'idle' | 'processing' | 'stopped';
+    if (!this.childProcess) {
+      status = 'stopped';
+    } else if (!this.isReady) {
+      status = 'spawning';
+    } else if (this.currentCacheEntry) {
+      status = 'processing';
+    } else {
+      status = 'idle';
     }
 
-    this.status = "terminating";
-    this.clearIdleTimer();
+    return {
+      pid: this.childProcess?.pid,
+      status,
+      messagesProcessed: this.messagesProcessed,
+      lastUsed: this.lastUsed || this.spawnTime,
+      uptime: this.childProcess ? Date.now() - this.spawnTime : 0,
+      idleTimeRemaining: 0, // Iris manages timeouts, not ClaudeProcess
+      queueLength: 0, // No queue in dumb pipe model
+      sessionId: this.sessionId || undefined,
+      messageCount: this.messageCount,
+      lastActivity: this.lastActivity || this.spawnTime,
+      // Helper properties
+      isReady: this.isReady,
+      isBusy: this.currentCacheEntry !== null,
+    };
+  }
 
-    this.logger.info("Terminating process");
+  /**
+   * Check if spawning
+   */
+  isSpawning(): boolean {
+    return !this.isReady && this.childProcess !== null;
+  }
 
-    return new Promise((resolve) => {
-      if (!this.process) {
+  /**
+   * Terminate process
+   */
+  async terminate(): Promise<void> {
+    if (!this.childProcess) return;
+
+    this.logger.info("Terminating process", { teamName: this.teamName });
+
+    return new Promise<void>((resolve) => {
+      if (!this.childProcess) {
         resolve();
         return;
       }
 
-      const cleanup = () => {
-        this.process = null;
-        this.status = "stopped";
-        this.emit("terminated", { teamName: this.teamName });
-        resolve();
-      };
-
       // Force kill after 5 seconds
       const killTimer = setTimeout(() => {
-        if (this.process) {
+        if (this.childProcess) {
           this.logger.warn("Force killing process");
-          this.process.kill("SIGKILL");
+          this.childProcess.kill("SIGKILL");
         }
-      });
+      }, 5000);
 
-      this.process.once("exit", () => {
+      // Clean up on exit
+      this.childProcess.once("exit", () => {
         clearTimeout(killTimer);
-        cleanup();
+        this.childProcess = null;
+        this.isReady = false;
+        this.currentCacheEntry = null;
+        this.emit("process-terminated", { teamName: this.teamName });
+        resolve();
       });
 
       // Try graceful shutdown first
-      this.process.kill("SIGTERM");
+      this.childProcess.kill("SIGTERM");
     });
-  }
-
-  /**
-   * Get process metrics
-   */
-  getMetrics(): ProcessMetrics {
-    const now = Date.now();
-    return {
-      pid: this.process?.pid,
-      status: this.status,
-      messagesProcessed: this.messagesProcessed,
-      lastUsed: now,
-      uptime: this.startTime ? now - this.startTime : 0,
-      idleTimeRemaining: this.idleTimer ? this.idleTimeout : 0,
-      queueLength: this.messageQueue.length,
-      sessionId: this.sessionId,
-      messageCount: this.messagesProcessed,
-      lastActivity: now,
-    };
-  }
-
-  /**
-   * Get the cache instance for external access
-   */
-  getCache(): ClaudeCache {
-    return this.cache;
-  }
-
-  /**
-   * Process the next message in the queue
-   */
-  private processNextMessage(): void {
-    if (this.currentMessage || this.messageQueue.length === 0) {
-      this.logger.debug("Skipping message processing", {
-        hasCurrentMessage: !!this.currentMessage,
-        queueLength: this.messageQueue.length,
-        status: this.status,
-      });
-      return;
-    }
-
-    if (!this.process || !this.process.stdin) {
-      this.logger.warn(
-        "Process stdin not available, rejecting queued messages",
-        {
-          processExists: !!this.process,
-          stdinExists: !!this.process?.stdin,
-          queueLength: this.messageQueue.length,
-        },
-      );
-      // Reject all queued messages
-      while (this.messageQueue.length > 0) {
-        const msg = this.messageQueue.shift()!;
-        msg.reject(
-          new ProcessError("Process stdin not available", this.teamName),
-        );
-      }
-      return;
-    }
-
-    this.currentMessage = this.messageQueue.shift()!;
-    this.status = "processing";
-    this.textAccumulator = ""; // Reset accumulator for new message
-    this.resetIdleTimer();
-
-    // Start tracking in cache
-    this.currentCacheMessageId = this.cache.startMessage(
-      this.currentMessage.message,
-    );
-
-    this.logger.debug("Processing message", {
-      messageLength: this.currentMessage.message.length,
-      messagePreview: this.currentMessage.message.substring(0, 100),
-      messagesProcessed: this.messagesProcessed,
-      status: this.status,
-      cacheMessageId: this.currentCacheMessageId,
-    });
-
-    try {
-      // Write message to Claude's stdin in stream-json format
-      // Format per docs: { type: 'user', message: { role: 'user', content: [{ type: 'text', text: string }] } }
-      const jsonMessage =
-        JSON.stringify({
-          type: "user",
-          message: {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: this.currentMessage.message,
-              },
-            ],
-          },
-        }) + "\n";
-
-      this.logger.debug("Writing message to stdin", {
-        jsonLength: jsonMessage.length,
-        jsonPreview: jsonMessage.substring(0, 200),
-      });
-
-      this.process.stdin.write(jsonMessage);
-      this.messagesProcessed++;
-
-      this.emit("message-sent", {
-        teamName: this.teamName,
-        message: this.currentMessage.message,
-      });
-    } catch (error) {
-      this.logger.error("Failed to write message to stdin", {
-        error: error instanceof Error ? error.message : error,
-        messagePreview: this.currentMessage.message.substring(0, 100),
-      });
-
-      this.currentMessage.reject(
-        new ProcessError(
-          `Failed to write to stdin: ${error instanceof Error ? error.message : error}`,
-          this.teamName,
-        ),
-      );
-      this.currentMessage = null;
-      this.status = "idle";
-      this.processNextMessage();
-    }
-  }
-
-  /**
-   * Handle stdout data from Claude (stream-json format)
-   *
-   * Message format reference: docs/HEADLESS_CLAUDE.md
-   *
-   * Claude CLI sends multiple message types:
-   * - system/init: Initial session info
-   * - stream_event: Real-time streaming events (message_start, content_block_delta, message_stop)
-   * - user: Echo of user message
-   * - assistant: Complete assistant response
-   * - result: Final stats
-   */
-  private handleStdout(data: Buffer): void {
-    const rawData = data.toString();
-    this.logger.debug("Raw stdout data received", {
-      data: rawData.substring(0, 1000), // First 1000 chars for debugging
-      length: rawData.length,
-      bufferLength: this.responseBuffer.length,
-      currentMessageId: this.currentMessage ? "active" : "none",
-    });
-
-    this.responseBuffer += rawData;
-
-    // Parse newline-delimited JSON responses
-    const lines = this.responseBuffer.split("\n");
-
-    // Keep the last incomplete line in buffer
-    this.responseBuffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (!line.trim()) {
-        continue;
-      }
-
-      this.logger.debug("Attempting to parse JSON line", {
-        line: line.substring(0, 200), // First 200 chars for debugging
-        fullLineLength: line.length,
-      });
-
-      try {
-        const jsonResponse = JSON.parse(line);
-
-        // Store protocol message in cache
-        this.cache.addProtocolMessage(
-          line,
-          this.currentCacheMessageId || undefined,
-        );
-
-        this.logger.debug("Successfully parsed JSON", {
-          type: jsonResponse.type,
-          subtype: jsonResponse.subtype,
-          hasMessage: !!jsonResponse.message,
-          hasEvent: !!jsonResponse.event,
-          eventType: jsonResponse.event?.type,
-          messageContent: jsonResponse.message?.content ? "present" : "missing",
-          sessionId: jsonResponse.session_id ? "present" : "missing",
-          allKeys: Object.keys(jsonResponse), // Log ALL top-level keys
-          eventKeys: jsonResponse.event ? Object.keys(jsonResponse.event) : [], // Log ALL event keys
-        });
-
-        // Handle different message types from Claude stream-json output
-        // Based on actual Claude headless documentation (see docs/HEADLESS_CLAUDE.md)
-        if (jsonResponse.type === "system" && jsonResponse.subtype === "init") {
-          // Initial system message with session ID and configuration
-          // NOTE: We don't resolve initPromise here anymore - we wait for message_stop
-          // to ensure the init ping response is fully received before proceeding
-          this.logger.debug("Received init message", {
-            sessionId: jsonResponse.session_id,
-            model: jsonResponse.model,
-            tools: jsonResponse.tools,
-          });
-        } else if (jsonResponse.type === "user") {
-          // Echo of user message
-          this.logger.debug("Received user message echo");
-        } else if (jsonResponse.type === "stream_event") {
-          // Real-time streaming events
-          const event = jsonResponse.event;
-
-          if (event?.type === "message_start") {
-            // Reset accumulator for new message
-            this.textAccumulator = "";
-            // Mark message as streaming in cache
-            this.cache.markMessageStreaming();
-            this.logger.debug("Stream event: message_start");
-          } else if (
-            event?.type === "content_block_delta" &&
-            event?.delta?.type === "text_delta"
-          ) {
-            // Accumulate text chunks from streaming
-            const deltaText = event.delta.text || "";
-            this.textAccumulator += deltaText;
-
-            // Append to cache
-            this.cache.appendToCurrentMessage(deltaText);
-
-            this.logger.debug("Stream event: text_delta", {
-              chunkLength: deltaText.length,
-              chunk: deltaText.substring(0, 100),
-              accumulatedLength: this.textAccumulator.length,
-              hasCurrentMessage: !!this.currentMessage,
-            });
-          } else if (event?.type === "message_stop") {
-            // Message stop event - don't resolve yet!
-            // When tools are used, there are multiple message_stop events.
-            // We must wait for the final "result" message to know everything is complete.
-            this.logger.debug("Stream event: message_stop", {
-              finalLength: this.textAccumulator.length,
-              hasCurrentMessage: !!this.currentMessage,
-              hasAccumulatedText: this.textAccumulator.length > 0,
-              responsePreview: this.textAccumulator.substring(0, 200),
-              initPingCompleted: this.initPingCompleted,
-            });
-
-            if (!this.initPingCompleted && this.initResolve) {
-              // This is the message_stop for the init ping response
-              // Mark as completed so waitForReady() can complete
-              this.logger.debug("Init ping response completed", {
-                accumulatedLength: this.textAccumulator.length,
-                accumulatedPreview: this.textAccumulator.substring(0, 100),
-              });
-              this.initPingCompleted = true;
-              this.initResolve();
-              this.initResolve = null;
-              this.initReject = null;
-              this.initPromise = null;
-            } else {
-              this.logger.warn("Message stop received but no current message");
-            }
-          }
-        } else if (jsonResponse.type === "assistant") {
-          // Complete assistant message with full response
-          // In stream-json format, this contains the actual response text
-          this.logger.debug("Received assistant message", {
-            stopReason: jsonResponse.message?.stop_reason,
-            hasContent: !!jsonResponse.message?.content,
-            hasCurrentMessage: !!this.currentMessage,
-            initPingCompleted: this.initPingCompleted,
-          });
-
-          // Extract text from assistant message and accumulate it
-          // Don't resolve yet - wait for the "result" message!
-          if (
-            this.currentMessage &&
-            jsonResponse.message?.content &&
-            Array.isArray(jsonResponse.message.content)
-          ) {
-            const textContent = jsonResponse.message.content
-              .filter((block: any) => block.type === "text")
-              .map((block: any) => block.text)
-              .join("\n");
-
-            if (textContent) {
-              // Accumulate this text - don't resolve yet!
-              this.textAccumulator += textContent;
-
-              // Append to cache
-              this.cache.appendToCurrentMessage(textContent);
-
-              this.logger.debug("Accumulated assistant content", {
-                chunkLength: textContent.length,
-                totalLength: this.textAccumulator.length,
-                responsePreview: textContent.substring(0, 200),
-              });
-            }
-          } else if (!this.initPingCompleted && this.initResolve) {
-            // This is the assistant message for the init ping response
-            // (Some Claude versions send assistant message instead of stream_events)
-            this.logger.debug(
-              "Init ping response completed (assistant message)",
-              {
-                hasContent: !!jsonResponse.message?.content,
-              },
-            );
-            this.initPingCompleted = true;
-            this.initResolve();
-            this.initResolve = null;
-            this.initReject = null;
-            this.initPromise = null;
-          }
-        } else if (jsonResponse.type === "result") {
-          // Final result message with stats - THIS is when we resolve!
-          // This comes after all tool executions and message cycles are complete.
-
-          const receivedNumTurns = jsonResponse.num_turns;
-
-          // CRITICAL: Validate num_turns sequence to detect timeout contamination
-          if (
-            this.expectedNumTurns !== null &&
-            receivedNumTurns !== this.expectedNumTurns
-          ) {
-            this.logger.error("⚠️  TIMEOUT CONTAMINATION DETECTED", {
-              expectedNumTurns: this.expectedNumTurns,
-              receivedNumTurns,
-              teamName: this.teamName,
-              hasCurrentMessage: !!this.currentMessage,
-              currentMessagePreview: this.currentMessage?.message.substring(
-                0,
-                100,
-              ),
-              textAccumulatorLength: this.textAccumulator.length,
-              explanation:
-                "Received response from a different (likely timed-out) request. Protocol state is corrupted.",
-            });
-
-            // Terminate process to prevent further contamination
-            this.logger.error(
-              "Terminating process due to protocol contamination",
-            );
-            this.terminate().catch((err) => {
-              this.logger.error(
-                "Failed to terminate contaminated process",
-                err,
-              );
-            });
-            return;
-          }
-
-          // Update expected num_turns for next message
-          this.expectedNumTurns = receivedNumTurns + 1;
-
-          this.logger.debug("Received result message", {
-            cost: jsonResponse.total_cost_usd,
-            duration: jsonResponse.duration_ms,
-            error: jsonResponse.is_error,
-            hasCurrentMessage: !!this.currentMessage,
-            accumulatedLength: this.textAccumulator.length,
-            numTurns: receivedNumTurns,
-            expectedNextNumTurns: this.expectedNumTurns,
-          });
-
-          if (this.currentMessage) {
-            if (jsonResponse.is_error) {
-              // Mark as error in cache
-              this.cache.errorCurrentMessage("Claude returned error");
-              this.currentCacheMessageId = null;
-
-              // Emit message-complete for AsyncQueue coordination (error case)
-              this.emit("message-complete", {
-                teamName: this.teamName,
-                success: false,
-                error: "Claude returned error",
-                duration: Date.now() - this.startTime,
-              });
-
-              this.currentMessage.reject(new Error("Claude returned error"));
-            } else {
-              // SUCCESS - resolve with all accumulated text
-              this.logger.debug("Resolving message with complete response", {
-                responseLength: this.textAccumulator.length,
-                responsePreview: this.textAccumulator.substring(0, 200),
-              });
-
-              // Complete message in cache
-              this.cache.completeCurrentMessage(this.textAccumulator);
-
-              // Capture messageId before nulling it
-              const completedMessageId = this.currentCacheMessageId;
-              this.currentCacheMessageId = null;
-
-              // Log resolution details for debugging empty responses
-              this.logger.info("Resolving message", {
-                accumulatorLength: this.textAccumulator.length,
-                isEmpty: this.textAccumulator.length === 0,
-                preview: this.textAccumulator.substring(0, 200),
-                teamName: this.teamName,
-              });
-
-              if (this.textAccumulator.length === 0) {
-                this.logger.error(
-                  "CRITICAL: About to resolve with EMPTY textAccumulator",
-                  {
-                    teamName: this.teamName,
-                    hasCurrentMessage: !!this.currentMessage,
-                    currentMessageText: this.currentMessage?.message,
-                    resultData: {
-                      cost: jsonResponse.total_cost_usd,
-                      duration: jsonResponse.duration_ms,
-                      numTurns: jsonResponse.num_turns,
-                    },
-                  },
-                );
-              }
-
-              this.currentMessage.resolve(this.textAccumulator);
-
-              this.logger.debug("Message resolved successfully", {
-                responseLength: this.textAccumulator.length,
-                teamName: this.teamName,
-              });
-
-              this.emit("message-response", {
-                teamName: this.teamName,
-                response: this.textAccumulator,
-              });
-
-              // Emit message-complete for AsyncQueue coordination
-              this.emit("message-complete", {
-                teamName: this.teamName,
-                success: true,
-                duration: Date.now() - this.startTime,
-              });
-
-              // Emit message-metrics with all captured stats for dashboard/reporting
-              this.emit("message-metrics", {
-                teamName: this.teamName,
-                messageId: completedMessageId,
-                sessionId: this.sessionId,
-                metrics: {
-                  cost: jsonResponse.total_cost_usd,
-                  durationMs: jsonResponse.duration_ms,
-                  durationApiMs: jsonResponse.duration_api_ms,
-                  numTurns: jsonResponse.num_turns,
-                  requestLength: this.currentMessage.message.length,
-                  responseLength: this.textAccumulator.length,
-                  timestamp: Date.now(),
-                },
-              });
-            }
-
-            // Clean up
-            this.currentMessage = null;
-            this.status = "idle";
-            this.textAccumulator = "";
-            this.processNextMessage();
-          }
-        } else if (jsonResponse.type === "error") {
-          // Error from Claude
-          if (this.currentMessage) {
-            const errorMsg = `Claude error: ${jsonResponse.error?.message || JSON.stringify(jsonResponse.error)}`;
-
-            // Mark as error in cache
-            this.cache.errorCurrentMessage(errorMsg);
-            this.currentCacheMessageId = null;
-
-            // Emit message-complete for AsyncQueue coordination (error case)
-            this.emit("message-complete", {
-              teamName: this.teamName,
-              success: false,
-              error: errorMsg,
-              duration: Date.now() - this.startTime,
-            });
-
-            this.currentMessage.reject(
-              new ProcessError(errorMsg, this.teamName),
-            );
-            this.currentMessage = null;
-            this.status = "idle";
-            this.processNextMessage();
-          }
-        }
-        // Ignore other message types
-      } catch (error) {
-        this.logger.debug("Failed to parse JSON response", {
-          line: line.substring(0, 200),
-          fullLineLength: line.length,
-          error: error instanceof Error ? error.message : error,
-          parsingContext: {
-            bufferLength: this.responseBuffer.length,
-            hasCurrentMessage: !!this.currentMessage,
-            status: this.status,
-          },
-        });
-        // Continue processing other lines
-      }
-    }
-  }
-
-  /**
-   * Handle process errors
-   */
-  private handleProcessError(error: Error): void {
-    this.logger.error("Process error", error);
-
-    // Reject current and queued messages
-    if (this.currentMessage) {
-      // Mark as error in cache
-      this.cache.errorCurrentMessage(error.message);
-      this.currentCacheMessageId = null;
-
-      this.currentMessage.reject(
-        new ProcessError(error.message, this.teamName),
-      );
-      this.currentMessage = null;
-    }
-
-    while (this.messageQueue.length > 0) {
-      const msg = this.messageQueue.shift()!;
-      msg.reject(new ProcessError("Process crashed", this.teamName));
-    }
-
-    this.emit("error", { teamName: this.teamName, error });
-  }
-
-  /**
-   * Handle process exit
-   */
-  private handleProcessExit(code: number | null, signal: string | null): void {
-    this.status = "stopped";
-    this.process = null;
-    this.clearIdleTimer();
-
-    // Reject any pending messages
-    if (this.currentMessage) {
-      // Mark as error in cache
-      this.cache.errorCurrentMessage("Process exited");
-      this.currentCacheMessageId = null;
-
-      this.currentMessage.reject(
-        new ProcessError("Process exited", this.teamName),
-      );
-      this.currentMessage = null;
-    }
-
-    while (this.messageQueue.length > 0) {
-      const msg = this.messageQueue.shift()!;
-      msg.reject(new ProcessError("Process exited", this.teamName));
-    }
-
-    this.emit("exited", { teamName: this.teamName, code, signal });
-  }
-
-  /**
-   * Wait for process to be ready by waiting for init message
-   */
-  private async waitForReady(timeout = 20000): Promise<void> {
-    // Create promise that will be resolved when init message is received
-    this.initPromise = new Promise<void>((resolve, reject) => {
-      this.initResolve = resolve;
-      this.initReject = reject;
-    });
-
-    // Set up timeout
-    const timeoutPromise = new Promise<void>((_, reject) => {
-      setTimeout(() => {
-        if (this.initReject) {
-          this.initReject(
-            new TimeoutError("Waiting for init message", timeout),
-          );
-          this.initResolve = null;
-          this.initReject = null;
-          this.initPromise = null;
-        }
-        reject(new TimeoutError("Process failed to initialize", timeout));
-      }, timeout);
-    });
-
-    // Handle process errors during initialization
-    const errorHandler = (error: Error) => {
-      if (this.initReject) {
-        this.initReject(error);
-        this.initResolve = null;
-        this.initReject = null;
-        this.initPromise = null;
-      }
-    };
-    this.process?.once("error", errorHandler);
-
-    try {
-      // Wait for either init message or timeout
-      await Promise.race([this.initPromise, timeoutPromise]);
-
-      // Clean up error handler
-      this.process?.removeListener("error", errorHandler);
-    } catch (error) {
-      // Clean up on error
-      this.process?.removeListener("error", errorHandler);
-      throw error;
-    }
-  }
-
-  /**
-   * Reset idle timeout timer
-   */
-  private resetIdleTimer(): void {
-    this.clearIdleTimer();
-
-    this.idleTimer = setTimeout(() => {
-      this.logger.info("Process idle timeout reached, terminating");
-      this.terminate();
-    }, this.idleTimeout);
-  }
-
-  /**
-   * Clear idle timeout timer
-   */
-  private clearIdleTimer(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer);
-      this.idleTimer = null;
-    }
   }
 }

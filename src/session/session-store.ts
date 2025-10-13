@@ -59,6 +59,9 @@ export class SessionStore {
         last_used_at INTEGER NOT NULL,
         message_count INTEGER DEFAULT 0,
         status TEXT DEFAULT 'active',
+        process_state TEXT DEFAULT 'stopped',
+        current_cache_session_id TEXT,
+        last_response_at INTEGER,
         UNIQUE(from_team, to_team)
       );
 
@@ -72,7 +75,44 @@ export class SessionStore {
         ON team_sessions(status);
     `);
 
+    // Migration: Add new columns if they don't exist (for existing databases)
+    this.migrateSchema();
+
     logger.debug("Schema initialized");
+  }
+
+  /**
+   * Migrate schema for existing databases
+   */
+  private migrateSchema(): void {
+    try {
+      // Check if process_state column exists
+      const columns = this.db
+        .prepare("PRAGMA table_info(team_sessions)")
+        .all() as any[];
+
+      const hasProcessState = columns.some(col => col.name === "process_state");
+      const hasCurrentCacheSessionId = columns.some(col => col.name === "current_cache_session_id");
+      const hasLastResponseAt = columns.some(col => col.name === "last_response_at");
+
+      if (!hasProcessState) {
+        logger.info("Migrating: Adding process_state column");
+        this.db.exec("ALTER TABLE team_sessions ADD COLUMN process_state TEXT DEFAULT 'stopped'");
+      }
+
+      if (!hasCurrentCacheSessionId) {
+        logger.info("Migrating: Adding current_cache_session_id column");
+        this.db.exec("ALTER TABLE team_sessions ADD COLUMN current_cache_session_id TEXT");
+      }
+
+      if (!hasLastResponseAt) {
+        logger.info("Migrating: Adding last_response_at column");
+        this.db.exec("ALTER TABLE team_sessions ADD COLUMN last_response_at INTEGER");
+      }
+    } catch (error) {
+      logger.error("Schema migration failed", error);
+      throw error;
+    }
   }
 
   /**
@@ -88,6 +128,10 @@ export class SessionStore {
       lastUsedAt: new Date(row.last_used_at),
       messageCount: row.message_count,
       status: row.status,
+      // NEW: Process state fields
+      processState: row.process_state,
+      currentCacheSessionId: row.current_cache_session_id,
+      lastResponseAt: row.last_response_at,
     };
   }
 
@@ -103,8 +147,9 @@ export class SessionStore {
 
     const stmt = this.db.prepare(`
       INSERT INTO team_sessions (
-        from_team, to_team, session_id, created_at, last_used_at, message_count, status
-      ) VALUES (?, ?, ?, ?, ?, 0, 'active')
+        from_team, to_team, session_id, created_at, last_used_at, message_count, status,
+        process_state, current_cache_session_id, last_response_at
+      ) VALUES (?, ?, ?, ?, ?, 0, 'active', 'stopped', NULL, NULL)
     `);
 
     const result = stmt.run(fromTeam, toTeam, sessionId, now, now);
@@ -125,6 +170,9 @@ export class SessionStore {
       last_used_at: now,
       message_count: 0,
       status: "active",
+      process_state: "stopped",
+      current_cache_session_id: null,
+      last_response_at: null,
     });
   }
 
@@ -382,6 +430,57 @@ export class SessionStore {
     });
 
     logger.info("Batch updated session statuses", { count: updates.length });
+  }
+
+  /**
+   * Update process state
+   */
+  updateProcessState(sessionId: string, processState: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET process_state = ?
+      WHERE session_id = ?
+    `);
+
+    stmt.run(processState, sessionId);
+
+    logger.debug("Updated process state", { sessionId, processState });
+  }
+
+  /**
+   * Set current cache session ID
+   */
+  setCurrentCacheSessionId(
+    sessionId: string,
+    cacheSessionId: string | null,
+  ): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET current_cache_session_id = ?
+      WHERE session_id = ?
+    `);
+
+    stmt.run(cacheSessionId, sessionId);
+
+    logger.debug("Updated current cache session ID", {
+      sessionId,
+      cacheSessionId,
+    });
+  }
+
+  /**
+   * Update last response timestamp
+   */
+  updateLastResponse(sessionId: string, timestamp: number): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET last_response_at = ?
+      WHERE session_id = ?
+    `);
+
+    stmt.run(timestamp, sessionId);
+
+    logger.debug("Updated last response timestamp", { sessionId, timestamp });
   }
 
   /**

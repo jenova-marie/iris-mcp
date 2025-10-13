@@ -1,113 +1,118 @@
 /**
- * Cache Manager - Manages all cache sessions
+ * Cache Manager - Manages all message caches
+ *
+ * NOTE: "MessageCache" = in-memory message storage (not SessionInfo)
  */
 
-import { CacheSession } from "./cache-session.js";
+import { MessageCache } from "./message-cache.js";
 import { getChildLogger } from "../utils/logger.js";
 
 const logger = getChildLogger("cache:manager");
 
 /**
- * Manages all cache sessions (one per fromTeam→toTeam pair)
+ * Manages all message caches (one per sessionId)
  * Top-level cache coordinator
+ *
+ * Each MessageCache links to a SessionInfo via sessionId
  */
 export class CacheManager {
-  private sessions = new Map<string, CacheSession>();
+  private caches = new Map<string, MessageCache>();
 
   /**
-   * Create new cache session (called by Iris)
+   * Get or create message cache for a session (called by Iris)
+   * NOTE: Renamed from createSession to be explicit about what it does
    */
-  createSession(
+  getOrCreateCache(
     sessionId: string,
     fromTeam: string,
     toTeam: string,
-  ): CacheSession {
-    if (this.sessions.has(sessionId)) {
-      logger.warn("CacheSession already exists, returning existing", {
+  ): MessageCache {
+    if (this.caches.has(sessionId)) {
+      logger.debug({
         sessionId,
-      });
-      return this.sessions.get(sessionId)!;
+      }, "MessageCache already exists, returning existing");
+      return this.caches.get(sessionId)!;
     }
 
-    const session = new CacheSession(sessionId, fromTeam, toTeam);
-    this.sessions.set(sessionId, session);
+    const cache = new MessageCache(sessionId, fromTeam, toTeam);
+    this.caches.set(sessionId, cache);
 
-    logger.info("CacheSession created in manager", {
+    logger.info({
       sessionId,
-      fromTeam: fromTeam,
+      fromTeam,
       toTeam,
-      totalSessions: this.sessions.size,
-    });
+      totalCaches: this.caches.size,
+    }, "MessageCache created in manager");
 
-    return session;
+    return cache;
   }
 
   /**
-   * Get cache session by ID
+   * Get message cache by session ID
    */
-  getSession(sessionId: string): CacheSession | null {
-    return this.sessions.get(sessionId) ?? null;
+  getCache(sessionId: string): MessageCache | null {
+    return this.caches.get(sessionId) ?? null;
   }
 
   /**
-   * Get all sessions
+   * Get all message caches
    */
-  getAllSessions(): CacheSession[] {
-    return Array.from(this.sessions.values());
+  getAllCaches(): MessageCache[] {
+    return Array.from(this.caches.values());
   }
 
   /**
-   * Delete cache session (available but not currently used)
+   * Delete message cache (available but not currently used)
    */
-  deleteSession(sessionId: string): void {
-    const session = this.sessions.get(sessionId);
-    if (session) {
-      session.destroy();
-      this.sessions.delete(sessionId);
+  deleteCache(sessionId: string): void {
+    const cache = this.caches.get(sessionId);
+    if (cache) {
+      cache.destroy();
+      this.caches.delete(sessionId);
 
-      logger.info("CacheSession deleted", {
+      logger.info({
         sessionId,
-        remainingSessions: this.sessions.size,
-      });
+        remainingCaches: this.caches.size,
+      }, "MessageCache deleted");
     } else {
-      logger.warn("Attempted to delete non-existent CacheSession", {
+      logger.warn({
         sessionId,
-      });
+      }, "Attempted to delete non-existent MessageCache");
     }
   }
 
   /**
-   * Get aggregate stats across all sessions
+   * Get aggregate stats across all caches
    */
   getStats() {
-    const allSessions = this.getAllSessions();
+    const allCaches = this.getAllCaches();
 
     return {
-      totalSessions: this.sessions.size,
-      totalEntries: allSessions.reduce((sum, s) => {
-        return sum + s.getAllEntries().length;
+      totalCaches: this.caches.size,
+      totalEntries: allCaches.reduce((sum, c) => {
+        return sum + c.getAllEntries().length;
       }, 0),
-      sessionStats: allSessions.map((s) => ({
-        sessionId: s.sessionId,
-        fromTeam: s.fromTeam,
-        toTeam: s.toTeam,
-        ...s.getStats(),
+      cacheStats: allCaches.map((c) => ({
+        sessionId: c.sessionId,
+        fromTeam: c.fromTeam,
+        toTeam: c.toTeam,
+        ...c.getStats(),
       })),
     };
   }
 
   /**
-   * Cleanup all sessions
+   * Cleanup all message caches
    */
   destroyAll(): void {
-    logger.info("Destroying all cache sessions", {
-      totalSessions: this.sessions.size,
-    });
+    logger.info({
+      totalCaches: this.caches.size,
+    }, "Destroying all message caches");
 
-    for (const session of this.sessions.values()) {
-      session.destroy();
+    for (const cache of this.caches.values()) {
+      cache.destroy();
     }
 
-    this.sessions.clear();
+    this.caches.clear();
   }
 }

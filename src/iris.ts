@@ -119,18 +119,15 @@ export class IrisOrchestrator {
       };
     }
 
-    // Step 3: Get or create CacheSession for this session
-    let cacheSession = this.cacheManager.getSession(session.sessionId);
-    if (!cacheSession) {
-      cacheSession = this.cacheManager.createSession(
-        session.sessionId,
-        fromTeam,
-        toTeam,
-      );
-      logger.debug("Created new CacheSession", {
-        sessionId: session.sessionId,
-      });
-    }
+    // Step 3: Get or create MessageCache for this session
+    const messageCache = this.cacheManager.getOrCreateCache(
+      session.sessionId,
+      fromTeam,
+      toTeam,
+    );
+    logger.debug({
+      sessionId: session.sessionId,
+    }, "Got or created MessageCache");
 
     // Step 4: Get or create process
     const process = await this.processPool.getOrCreateProcess(
@@ -151,7 +148,7 @@ export class IrisOrchestrator {
       this.sessionManager.updateProcessState(session.sessionId, "spawning");
 
       // Create spawn CacheEntry
-      const spawnEntry = cacheSession.createEntry(CacheEntryType.SPAWN, "ping");
+      const spawnEntry = messageCache.createEntry(CacheEntryType.SPAWN, "ping");
 
       try {
         // Spawn process
@@ -196,7 +193,7 @@ export class IrisOrchestrator {
     }
 
     // Step 6: Create CacheEntry for this tell
-    const tellEntry = cacheSession.createEntry(CacheEntryType.TELL, message);
+    const tellEntry = messageCache.createEntry(CacheEntryType.TELL, message);
 
     logger.debug("Created tell CacheEntry", {
       sessionId: session.sessionId,
@@ -343,8 +340,8 @@ export class IrisOrchestrator {
     const session = this.sessionManager.getSessionById(sessionId);
     if (!session) return;
 
-    // Get CacheSession (preserve it!)
-    const cacheSession = this.cacheManager.getSession(sessionId);
+    // Get MessageCache (preserve it!)
+    const messageCache = this.cacheManager.getCache(sessionId);
 
     // Terminate old process
     const oldProcess = this.processPool.getProcessBySessionId(sessionId);
@@ -356,11 +353,11 @@ export class IrisOrchestrator {
     this.sessionManager.updateProcessState(sessionId, "stopped");
     this.sessionManager.setCurrentCacheSessionId(sessionId, null);
 
-    // Note: CacheSession preserved in CacheManager
-    logger.info("Process terminated, cache preserved", {
+    // Note: MessageCache preserved in CacheManager
+    logger.info({
       sessionId,
-      cacheEntryCount: cacheSession?.getAllEntries().length,
-    });
+      cacheEntryCount: messageCache?.getAllEntries().length,
+    }, "Process terminated, cache preserved");
 
     // Cleanup subscription
     const subscription = this.responseSubscriptions.get(sessionId);

@@ -1,5 +1,8 @@
 /**
- * Cache Session - Manages cache entries for a team-to-team session
+ * Message Cache - Manages cache entries for a conversation session
+ *
+ * NOTE: This is the IN-MEMORY message storage for a conversation.
+ * It links to SessionInfo (persistent metadata) via sessionId.
  */
 
 import { Subject, Observable } from "rxjs";
@@ -7,14 +10,16 @@ import { CacheEntry, CacheEntryType, CacheEntryStatus } from "./types.js";
 import { CacheEntryImpl } from "./cache-entry.js";
 import { getChildLogger } from "../utils/logger.js";
 
-const logger = getChildLogger("cache:session");
+const logger = getChildLogger("cache:message-cache");
 
 /**
- * Cache session for a team pair (fromTeam→toTeam)
+ * In-memory message cache for a conversation (fromTeam→toTeam)
  * Contains multiple cache entries (spawn + tells)
- * Survives process recreation
+ * Survives process recreation but NOT Iris restarts
+ *
+ * Links to SessionInfo via sessionId (the foreign key)
  */
-export class CacheSession {
+export class MessageCache {
   private entries: CacheEntry[] = [];
   private entriesSubject = new Subject<CacheEntry>();
 
@@ -27,11 +32,11 @@ export class CacheSession {
   ) {
     this.entries$ = this.entriesSubject.asObservable();
 
-    logger.info("CacheSession created", {
+    logger.info({
       sessionId,
-      fromTeam: fromTeam,
+      fromTeam,
       toTeam,
-    });
+    }, "MessageCache created");
   }
 
   /**
@@ -42,12 +47,12 @@ export class CacheSession {
     this.entries.push(entry);
     this.entriesSubject.next(entry);
 
-    logger.debug("CacheEntry created in session", {
+    logger.debug({
       sessionId: this.sessionId,
       cacheEntryType,
       tellStringLength: tellString.length,
       totalEntries: this.entries.length,
-    });
+    }, "CacheEntry created in message cache");
 
     return entry;
   }
@@ -109,10 +114,10 @@ export class CacheSession {
    * Cleanup (called by Iris on session end)
    */
   destroy(): void {
-    logger.info("CacheSession destroyed", {
+    logger.info({
       sessionId: this.sessionId,
       stats: this.getStats(),
-    });
+    }, "MessageCache destroyed");
 
     this.entriesSubject.complete();
 

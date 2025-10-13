@@ -3,7 +3,7 @@
  *
  * Hierarchy:
  *   CacheManager
- *   └── CacheSession (one per fromTeam→toTeam session)
+ *   └── MessageCache (one per sessionId - links to SessionInfo)
  *       └── CacheEntry (one per spawn/tell)
  *           └── CacheMessage[] (individual protocol messages)
  */

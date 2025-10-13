@@ -1,5 +1,6 @@
 /**
  * WebSocket hook for real-time updates
+ * Session-based architecture (fromTeam->toTeam)
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -8,17 +9,24 @@ import { io, Socket } from 'socket.io-client';
 const WS_URL = import.meta.env.VITE_WS_URL || 'http://localhost:3100';
 
 export interface ProcessStatus {
-  teamName: string;
+  poolKey: string; // "fromTeam->toTeam"
+  fromTeam: string;
+  toTeam: string;
+  sessionId: string;
   status: string;
   pid?: number;
-  uptime?: number;
-  lastActivity?: number;
+  messagesProcessed: number;
+  lastUsed: number;
+  uptime: number;
+  queueLength: number;
+  messageCount: number;
 }
 
 export interface CacheStreamData {
-  teamName: string;
-  type: 'stdout' | 'stderr';
-  line: string;
+  sessionId: string;
+  type: "user" | "assistant" | "tool_use" | "tool_result" | "stdout" | "stderr" | "event";
+  content: any;
+  timestamp: number;
 }
 
 export interface WebSocketState {
@@ -81,10 +89,10 @@ export function useWebSocket(onProcessStatus?: (data: ProcessStatus) => void, on
     };
   }, [onProcessStatus, onCacheStream]);
 
-  const streamCache = (teamName: string) => {
+  const streamCache = (sessionId: string) => {
     if (socketRef.current && connected) {
-      console.log('[WebSocket] Requesting cache stream for', teamName);
-      socketRef.current.emit('stream-cache', teamName);
+      console.log('[WebSocket] Requesting cache stream for', sessionId);
+      socketRef.current.emit('stream-cache', sessionId);
     }
   };
 

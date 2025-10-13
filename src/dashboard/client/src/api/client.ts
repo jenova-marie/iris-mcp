@@ -1,5 +1,6 @@
 /**
  * API client for Iris MCP Dashboard
+ * Session-based API (fromTeam->toTeam)
  */
 
 import axios from 'axios';
@@ -39,10 +40,12 @@ export const api = {
   getConfig: () => apiClient.get('/config'),
   saveConfig: (config: any) => apiClient.put('/config', config),
 
-  // Processes
-  getProcesses: () => apiClient.get('/processes'),
-  getProcessMetrics: (teamName: string) => apiClient.get(`/processes/${teamName}`),
-  getProcessCache: (teamName: string) => apiClient.get(`/processes/${teamName}/cache`),
+  // Sessions (fromTeam->toTeam pairs)
+  getSessions: () => apiClient.get('/processes'),
+  getSessionMetrics: (fromTeam: string, toTeam: string) =>
+    apiClient.get(`/processes/${fromTeam}/${toTeam}`),
+  getSessionCache: (sessionId: string) =>
+    apiClient.get(`/processes/cache/${sessionId}`),
 
   // Health
   getHealth: () => apiClient.get('/health'),

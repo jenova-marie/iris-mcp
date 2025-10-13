@@ -1,6 +1,6 @@
 /**
  * Process Monitor Page
- * Displays all team processes with status and cache viewing
+ * Displays all sessions (fromTeam->toTeam pairs) with status and cache viewing
  */
 
 import { useState, useCallback } from 'react';
@@ -9,14 +9,25 @@ import { Activity, Loader2, Eye, X } from 'lucide-react';
 import { api } from '../api/client';
 import { useWebSocket, type ProcessStatus, type CacheStreamData } from '../hooks/useWebSocket';
 
-interface ProcessInfo {
-  teamName: string;
+interface SessionProcessInfo {
+  poolKey: string; // "fromTeam->toTeam"
+  fromTeam: string;
+  toTeam: string;
+  sessionId: string;
+
+  // Session data (from SessionManager - persistent)
+  messageCount: number;
+  createdAt: number;
+  lastUsedAt: number;
+  sessionStatus: string;
+
+  // Process data (from ProcessPool - runtime)
+  processState: string;
   pid?: number;
-  status: string;
   messagesProcessed: number;
   uptime: number;
-  lastActivity: number;
   queueLength: number;
+  lastResponseAt: number | null;
 }
 
 function getStatusColor(status: string): string {
@@ -55,41 +66,44 @@ function formatUptime(ms: number): string {
 
 export function ProcessMonitor() {
   const queryClient = useQueryClient();
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const [cacheData, setCacheData] = useState<{ [key: string]: string[] }>({});
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const [cacheData, setCacheData] = useState<{ [sessionId: string]: string[] }>({});
 
   // Handle WebSocket updates
   const handleProcessStatus = useCallback((_data: ProcessStatus) => {
-    // Invalidate processes query to trigger re-fetch
-    queryClient.invalidateQueries({ queryKey: ['processes'] });
+    // Invalidate sessions query to trigger re-fetch
+    queryClient.invalidateQueries({ queryKey: ['sessions'] });
   }, [queryClient]);
 
   const handleCacheStream = useCallback((data: CacheStreamData) => {
     setCacheData((prev) => ({
       ...prev,
-      [data.teamName]: [...(prev[data.teamName] || []), `[${data.type}] ${data.line}`],
+      [data.sessionId]: [
+        ...(prev[data.sessionId] || []),
+        `[${data.type}] ${JSON.stringify(data.content)}`,
+      ],
     }));
   }, []);
 
   const { connected, streamCache } = useWebSocket(handleProcessStatus, handleCacheStream);
 
-  // Fetch processes
+  // Fetch sessions
   const { data, isLoading } = useQuery({
-    queryKey: ['processes'],
+    queryKey: ['sessions'],
     queryFn: async () => {
-      const response = await api.getProcesses();
+      const response = await api.getSessions();
       return response.data;
     },
     refetchInterval: 5000, // Refresh every 5 seconds
   });
 
-  const processes: ProcessInfo[] = data?.processes || [];
+  const sessions: SessionProcessInfo[] = data?.sessions || [];
   const poolStatus = data?.poolStatus || {};
 
-  const handleViewCache = (teamName: string) => {
-    setSelectedTeam(teamName);
-    setCacheData((prev) => ({ ...prev, [teamName]: [] }));
-    streamCache(teamName);
+  const handleViewCache = (sessionId: string) => {
+    setSelectedSession(sessionId);
+    setCacheData((prev) => ({ ...prev, [sessionId]: [] }));
+    streamCache(sessionId);
   };
 
   if (isLoading) {
@@ -106,9 +120,9 @@ export function ProcessMonitor() {
       <div className="border-b border-gray-700 bg-bg-card p-6">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold">Process Monitor</h1>
+            <h1 className="text-3xl font-bold">Session Monitor</h1>
             <p className="text-text-secondary mt-2">
-              Real-time status of all team processes
+              Real-time status of all team sessions (fromTeam→toTeam)
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -129,46 +143,53 @@ export function ProcessMonitor() {
         </div>
       </div>
 
-      {/* Process Grid */}
+      {/* Session Grid */}
       <div className="flex-1 p-6 overflow-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {processes.map((process) => (
-            <div key={process.teamName} className="card card-hover">
+          {sessions.map((session) => (
+            <div key={session.poolKey} className="card card-hover">
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h3 className="text-lg font-bold">{process.teamName}</h3>
-                  {process.pid && (
-                    <p className="text-sm text-text-secondary">PID: {process.pid}</p>
+                  <h3 className="text-lg font-bold">{session.poolKey}</h3>
+                  <p className="text-xs text-text-secondary font-mono mt-1">
+                    {session.sessionId.slice(0, 8)}...
+                  </p>
+                  {session.pid && (
+                    <p className="text-sm text-text-secondary">PID: {session.pid}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${getStatusColor(process.status)}`} />
-                  <span className="text-sm font-medium">{getStatusLabel(process.status)}</span>
+                  <div className={`w-2 h-2 rounded-full ${getStatusColor(session.processState)}`} />
+                  <span className="text-sm font-medium">{getStatusLabel(session.processState)}</span>
                 </div>
               </div>
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-text-secondary">Messages:</span>
-                  <span className="font-medium">{process.messagesProcessed}</span>
+                  <span className="text-text-secondary">Messages (total):</span>
+                  <span className="font-medium">{session.messageCount}</span>
                 </div>
-                {process.uptime > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-text-secondary">Messages (process):</span>
+                  <span className="font-medium">{session.messagesProcessed}</span>
+                </div>
+                {session.uptime > 0 && (
                   <div className="flex justify-between">
                     <span className="text-text-secondary">Uptime:</span>
-                    <span className="font-medium">{formatUptime(process.uptime)}</span>
+                    <span className="font-medium">{formatUptime(session.uptime)}</span>
                   </div>
                 )}
-                {process.queueLength > 0 && (
+                {session.queueLength > 0 && (
                   <div className="flex justify-between">
                     <span className="text-text-secondary">Queue:</span>
-                    <span className="font-medium">{process.queueLength}</span>
+                    <span className="font-medium">{session.queueLength}</span>
                   </div>
                 )}
               </div>
 
-              {process.status !== 'stopped' && (
+              {session.processState !== 'stopped' && (
                 <button
-                  onClick={() => handleViewCache(process.teamName)}
+                  onClick={() => handleViewCache(session.sessionId)}
                   className="btn-secondary w-full mt-4 flex items-center justify-center gap-2"
                 >
                   <Eye size={16} />
@@ -179,25 +200,25 @@ export function ProcessMonitor() {
           ))}
         </div>
 
-        {processes.length === 0 && (
+        {sessions.length === 0 && (
           <div className="card text-center py-12">
             <Activity className="mx-auto mb-4 text-text-secondary" size={48} />
-            <h3 className="text-xl font-bold mb-2">No Processes Running</h3>
+            <h3 className="text-xl font-bold mb-2">No Active Sessions</h3>
             <p className="text-text-secondary">
-              Processes will appear here when teams are active
+              Sessions will appear here when teams communicate
             </p>
           </div>
         )}
       </div>
 
       {/* Cache Viewer Modal */}
-      {selectedTeam && (
+      {selectedSession && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-bg-card rounded-lg border border-gray-700 w-full max-w-4xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
-              <h2 className="text-xl font-bold">Process Cache: {selectedTeam}</h2>
+              <h2 className="text-xl font-bold">Session Cache</h2>
               <button
-                onClick={() => setSelectedTeam(null)}
+                onClick={() => setSelectedSession(null)}
                 className="text-text-secondary hover:text-text-primary"
               >
                 <X size={24} />
@@ -206,8 +227,8 @@ export function ProcessMonitor() {
 
             <div className="flex-1 overflow-auto p-4">
               <div className="font-mono text-sm bg-bg-dark rounded-lg p-4 space-y-1">
-                {cacheData[selectedTeam]?.length > 0 ? (
-                  cacheData[selectedTeam].map((line, i) => (
+                {cacheData[selectedSession]?.length > 0 ? (
+                  cacheData[selectedSession].map((line, i) => (
                     <div key={i} className="text-text-secondary">
                       {line}
                     </div>

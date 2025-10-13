@@ -31,7 +31,6 @@ vi.mock("../../src/actions/tell.js", () => ({
     response: "Mock response",
     duration: 100,
     timestamp: Date.now(),
-    async: false,
   }),
 }));
 vi.mock("../../src/actions/isAwake.js", () => ({
@@ -234,7 +233,6 @@ describe("MCP Server", () => {
         fromTeam: "team-beta",
         toTeam: "team-alpha",
         message: "Test message",
-        waitForResponse: true,
       };
 
       // Ensure mock returns value for this test
@@ -245,7 +243,6 @@ describe("MCP Server", () => {
         response: "Mock response",
         duration: 100,
         timestamp: Date.now(),
-        async: false,
       });
 
       // Simulate calling the action
@@ -256,7 +253,6 @@ describe("MCP Server", () => {
         from: "team-beta",
         to: "team-alpha",
         response: "Mock response",
-        async: false,
       });
     });
 

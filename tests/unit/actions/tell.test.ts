@@ -33,7 +33,7 @@ describe("tell", () => {
     vi.clearAllMocks();
   });
 
-  describe("synchronous mode (waitForResponse=true)", () => {
+  describe("synchronous mode", () => {
     it("should send message and wait for response", async () => {
       vi.mocked(mockIris.sendMessage).mockResolvedValue("Response from team");
 
@@ -42,9 +42,8 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Hello team",
-          waitForResponse: true,
         },
-        mockIris
+        mockIris,
       );
 
       expect(result).toMatchObject({
@@ -54,14 +53,13 @@ describe("tell", () => {
         response: "Response from team",
         duration: expect.any(Number),
         timestamp: expect.any(Number),
-        async: false,
       });
 
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
         "team-beta",
         "team-alpha",
         "Hello team",
-        { timeout: 30000 }
+        { timeout: 30000 },
       );
     });
 
@@ -73,22 +71,21 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Hello",
-          waitForResponse: true,
           timeout: 60000,
         },
-        mockIris
+        mockIris,
       );
 
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
         "team-beta",
         "team-alpha",
         "Hello",
-        { timeout: 60000 }
+        { timeout: 60000 },
       );
     });
   });
 
-  describe("asynchronous mode (waitForResponse=false)", () => {
+  describe("asynchronous mode", () => {
     it("should send message without waiting (timeout=-1)", async () => {
       vi.mocked(mockIris.sendMessage).mockResolvedValue({
         status: "async",
@@ -100,9 +97,8 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Async message",
-          waitForResponse: false,
         },
-        mockIris
+        mockIris,
       );
 
       // Should use timeout=-1 for async mode
@@ -110,7 +106,7 @@ describe("tell", () => {
         "team-beta",
         "team-alpha",
         "Async message",
-        { timeout: -1 }
+        { timeout: -1 },
       );
 
       expect(result).toMatchObject({
@@ -118,7 +114,6 @@ describe("tell", () => {
         to: "team-alpha",
         message: "Async message",
         timestamp: expect.any(Number),
-        async: true,
       });
       expect(result.response).toBeUndefined();
       expect(result.duration).toBeUndefined();
@@ -135,10 +130,9 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Async",
-          waitForResponse: false,
           timeout: 60000, // Should be ignored, use -1 instead
         },
-        mockIris
+        mockIris,
       );
 
       // Should still use -1 for async mode
@@ -146,7 +140,7 @@ describe("tell", () => {
         "team-beta",
         "team-alpha",
         "Async",
-        { timeout: -1 }
+        { timeout: -1 },
       );
     });
   });
@@ -163,10 +157,9 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Test message",
-          waitForResponse: true,
           timeout: 45000,
         },
-        mockIris
+        mockIris,
       );
 
       expect(vi.mocked(validateTeamName)).toHaveBeenCalledWith("team-alpha");
@@ -175,8 +168,10 @@ describe("tell", () => {
       expect(vi.mocked(validateTimeout)).toHaveBeenCalledWith(45000);
     });
 
-    it("should not validate timeout when waitForResponse=false", async () => {
-      const { validateTimeout } = await import("../../../src/utils/validation.js");
+    it("should not validate timeout ???", async () => {
+      const { validateTimeout } = await import(
+        "../../../src/utils/validation.js"
+      );
 
       vi.mocked(mockIris.sendMessage).mockResolvedValue({
         status: "async",
@@ -188,10 +183,9 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Async message",
-          waitForResponse: false,
           timeout: 45000,
         },
-        mockIris
+        mockIris,
       );
 
       expect(vi.mocked(validateTimeout)).not.toHaveBeenCalled();
@@ -201,7 +195,7 @@ describe("tell", () => {
   describe("error handling", () => {
     it("should propagate sendMessage errors", async () => {
       vi.mocked(mockIris.sendMessage).mockRejectedValue(
-        new Error("Send failed")
+        new Error("Send failed"),
       );
 
       await expect(
@@ -211,14 +205,14 @@ describe("tell", () => {
             toTeam: "team-alpha",
             message: "Message",
           },
-          mockIris
-        )
+          mockIris,
+        ),
       ).rejects.toThrow("Send failed");
     });
 
     it("should handle timeout errors", async () => {
       vi.mocked(mockIris.sendMessage).mockRejectedValue(
-        new Error("Operation timed out")
+        new Error("Operation timed out"),
       );
 
       await expect(
@@ -229,8 +223,8 @@ describe("tell", () => {
             message: "Message",
             timeout: 1000,
           },
-          mockIris
-        )
+          mockIris,
+        ),
       ).rejects.toThrow("Operation timed out");
     });
   });
@@ -238,7 +232,8 @@ describe("tell", () => {
   describe("duration tracking", () => {
     it("should track duration for synchronous requests", async () => {
       vi.mocked(mockIris.sendMessage).mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve("Response"), 15))
+        () =>
+          new Promise((resolve) => setTimeout(() => resolve("Response"), 15)),
       );
 
       const result = await tell(
@@ -246,9 +241,8 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
-          waitForResponse: true,
         },
-        mockIris
+        mockIris,
       );
 
       expect(result.duration).toBeGreaterThanOrEqual(10);
@@ -265,9 +259,8 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
-          waitForResponse: false,
         },
-        mockIris
+        mockIris,
       );
 
       expect(result.duration).toBeUndefined();
@@ -275,7 +268,7 @@ describe("tell", () => {
   });
 
   describe("default values", () => {
-    it("should use default waitForResponse=true", async () => {
+    it("should use default", async () => {
       vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
 
       const result = await tell(
@@ -284,10 +277,9 @@ describe("tell", () => {
           toTeam: "team-alpha",
           message: "Message",
         },
-        mockIris
+        mockIris,
       );
 
-      expect(result.async).toBe(false);
       expect(result.response).toBe("Response");
     });
 
@@ -300,14 +292,14 @@ describe("tell", () => {
           toTeam: "team-alpha",
           message: "Message",
         },
-        mockIris
+        mockIris,
       );
 
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
         "team-beta",
         "team-alpha",
         "Message",
-        { timeout: 30000 }
+        { timeout: 30000 },
       );
     });
   });
@@ -322,11 +314,10 @@ describe("tell", () => {
           toTeam: "team-alpha",
           message: "Message",
         },
-        mockIris
+        mockIris,
       );
 
       expect(result.response).toBe("");
-      expect(result.async).toBe(false);
     });
 
     it("should handle object responses with status field", async () => {
@@ -341,11 +332,10 @@ describe("tell", () => {
           toTeam: "team-alpha",
           message: "Message",
         },
-        mockIris
+        mockIris,
       );
 
       expect(result.response).toBe("Team is processing another request");
-      expect(result.async).toBe(false);
     });
   });
 });

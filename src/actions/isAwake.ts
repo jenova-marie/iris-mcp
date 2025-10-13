@@ -6,12 +6,16 @@
 import type { IrisOrchestrator } from "../iris.js";
 import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
 import type { TeamsConfigManager } from "../config/teams-config.js";
+import type { SessionManager } from "../session/session-manager.js";
 import { validateTeamName } from "../utils/validation.js";
 import { Logger } from "../utils/logger.js";
 
 const logger = new Logger("mcp:isAwake");
 
 export interface IsAwakeInput {
+  /** Calling team (required to identify sessions) */
+  fromTeam: string;
+
   /** Optional: Get status for a specific team only */
   team?: string;
 
@@ -72,18 +76,23 @@ export async function isAwake(
   iris: IrisOrchestrator,
   processPool: ClaudeProcessPool,
   configManager: TeamsConfigManager,
+  sessionManager: SessionManager,
 ): Promise<IsAwakeOutput> {
   const {
+    fromTeam,
     team,
     includeNotifications = true,
   } = input;
+
+  // Validate fromTeam (required)
+  validateTeamName(fromTeam);
 
   // Validate team name if provided
   if (team) {
     validateTeamName(team);
   }
 
-  logger.info("Getting status", { team, includeNotifications });
+  logger.info("Getting status", { fromTeam, team, includeNotifications });
 
   try {
     const config = configManager.getConfig();
@@ -101,14 +110,16 @@ export async function isAwake(
 
     // Check each team
     for (const [teamName, teamConfig] of Object.entries(teamsToCheck)) {
-      // Check if team has an active process
-      const process = processPool.getProcess(teamName);
-      const sessionKey = `external->${teamName}`;
-      const poolProcess = poolStatus.processes[sessionKey];
+      // Check if a session exists for this team pair in SessionManager
+      const session = sessionManager.getSession(fromTeam, teamName);
+
+      // Build poolKey for this session (fromTeam->toTeam)
+      const poolKey = `${fromTeam}->${teamName}`;
+      const poolProcess = poolStatus.processes[poolKey];
 
       const teamStatus: TeamStatus = {
         name: teamName,
-        status: process ? "awake" : "asleep",
+        status: poolProcess ? "awake" : "asleep",
         config: {
           path: teamConfig.path,
           description: teamConfig.description,
@@ -117,10 +128,10 @@ export async function isAwake(
       };
 
       // Add active process details if available
-      if (process && poolProcess) {
+      if (session && poolProcess) {
         teamStatus.pid = poolProcess.pid;
-        teamStatus.sessionId = poolProcess.sessionId;
-        teamStatus.messageCount = poolProcess.messageCount;
+        teamStatus.sessionId = session.sessionId;
+        teamStatus.messageCount = session.messageCount;
         teamStatus.lastActivity = poolProcess.lastActivity;
       }
 

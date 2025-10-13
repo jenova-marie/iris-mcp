@@ -404,7 +404,7 @@ export class SessionStore {
   }
 
   /**
-   * Set current cache session ID
+   * Set current message cache ID (the sessionId)
    */
   setCurrentCacheSessionId(
     sessionId: string,

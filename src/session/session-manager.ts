@@ -459,7 +459,8 @@ export class SessionManager {
   }
 
   /**
-   * Set current cache session ID (called by Iris)
+   * Set current message cache ID (called by Iris)
+   * NOTE: cacheSessionId is actually the sessionId that identifies the MessageCache
    */
   setCurrentCacheSessionId(
     sessionId: string,

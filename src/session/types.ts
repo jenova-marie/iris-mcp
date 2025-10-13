@@ -58,7 +58,7 @@ export interface SessionInfo {
   /** Current process state */
   processState: ProcessState;
 
-  /** ID of current CacheSession being processed */
+  /** ID of current MessageCache (sessionId) being processed */
   currentCacheSessionId: string | null;
 
   /** Timestamp of last response from Claude */

@@ -8,7 +8,7 @@ An Anthropic Claude Code conversation context stored as a `.jsonl` file. Session
 **Key Points:**
 - Sessions persist across multiple interactions and server restarts
 - Format: `fromTeam->toTeam` (e.g., `iris->alpha`, `alpha->beta`)
-- **ALL sessions require both fromTeam and toTeam** (no null or "external" sessions)
+- **ALL sessions require both fromTeam and toTeam** (no null or "team-beta" sessions)
 - SessionManager tracks session metadata in SQLite database (`data/sessions.db`)
 - Session files stored at `~/.claude/projects/{escaped-path}/{sessionId}.jsonl`
 - Each team pair has exactly ONE persistent session

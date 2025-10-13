@@ -438,7 +438,7 @@ Iris uses a clean three-layer architecture with strict separation of concerns:
 **Persistent team-to-team sessions** maintain conversation continuity:
 
 - Each `(fromTeam, toTeam)` pair has exactly one session (e.g., `iris→alpha`, `alpha→beta`)
-- ALL sessions require both fromTeam and toTeam (no "external" or null sessions)
+- ALL sessions require both fromTeam and toTeam (no "team-beta" or null sessions)
 - Sessions stored at `~/.claude/projects/{escaped-path}/{sessionId}.jsonl`
 - Database tracks metadata (message count, last used, status)
 - Sessions resume across process restarts

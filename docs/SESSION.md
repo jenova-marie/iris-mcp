@@ -231,7 +231,7 @@ constructor(dbPath?: string) {
 
 ```typescript
 create(
-  fromTeam: string | null,
+  fromTeam: string,
   toTeam: string,
   sessionId: string
 ): SessionInfo {
@@ -268,7 +268,7 @@ create(
 
 ```typescript
 getByTeamPair(
-  fromTeam: string | null,
+  fromTeam: string,
   toTeam: string
 ): SessionInfo | null {
   const stmt = this.db.prepare(`
@@ -324,7 +324,7 @@ updateLastResponse(sessionId: string, timestamp: number): void {
 class SessionManager {
   private cache = new Map<string, SessionInfo>();
 
-  private getCacheKey(fromTeam: string | null, toTeam: string): string {
+  private getCacheKey(fromTeam: string, toTeam: string): string {
     return `${fromTeam ?? 'null'}->${toTeam}`;
   }
 }
@@ -336,7 +336,7 @@ class SessionManager {
 
 ```typescript
 async getOrCreateSession(
-  fromTeam: string | null,
+  fromTeam: string,
   toTeam: string
 ): Promise<SessionInfo> {
   // Check cache first
@@ -391,8 +391,7 @@ async initialize(): Promise<void> {
   const teamNames = this.configManager.getTeamNames();
 
   for (const teamName of teamNames) {
-    // Create session for external → team
-    await this.getOrCreateSession(null, teamName);
+    await this.getOrCreateSession(fromTeam, teamName);
   }
 
   logger.info("SessionManager initialized", {
@@ -659,12 +658,12 @@ class SessionManager {
 
   // Get or create session
   async getOrCreateSession(
-    fromTeam: string | null,
+    fromTeam: string,
     toTeam: string
   ): Promise<SessionInfo>;
 
   // Get existing session
-  getSession(fromTeam: string | null, toTeam: string): SessionInfo | null;
+  getSession(fromTeam: string, toTeam: string): SessionInfo | null;
 
   // Get by session ID
   getSessionById(sessionId: string): SessionInfo | null;
@@ -699,8 +698,8 @@ class SessionStore {
   constructor(dbPath?: string);
 
   // CRUD operations
-  create(fromTeam: string | null, toTeam: string, sessionId: string): SessionInfo;
-  getByTeamPair(fromTeam: string | null, toTeam: string): SessionInfo | null;
+  create(fromTeam: string, toTeam: string, sessionId: string): SessionInfo;
+  getByTeamPair(fromTeam: string, toTeam: string): SessionInfo | null;
   getBySessionId(sessionId: string): SessionInfo | null;
   list(filters?: SessionFilters): SessionInfo[];
   delete(sessionId: string): void;
@@ -732,7 +731,7 @@ class SessionStore {
 ```typescript
 interface SessionInfo {
   id: number;
-  fromTeam: string | null;
+  fromTeam: string;
   toTeam: string;
   sessionId: string;
   createdAt: Date;

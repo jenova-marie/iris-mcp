@@ -118,7 +118,7 @@ frontend → backend   (Frontend team to backend team)
 async getOrCreateProcess(
   teamName: string,
   sessionId: string,
-  fromTeam: string | null = null
+  fromTeam: string = null
 ): Promise<ClaudeProcess>
 ```
 
@@ -635,7 +635,7 @@ class ClaudeProcessPool extends EventEmitter {
   async getOrCreateProcess(
     teamName: string,
     sessionId: string,
-    fromTeam: string | null
+    fromTeam: string
   ): Promise<ClaudeProcess>;
 
   // Get process by session ID

@@ -112,8 +112,8 @@ export interface ISessionInitializer {
 
 // src/session/interfaces/session-repository.interface.ts
 export interface ISessionRepository {
-  create(fromTeam: string | null, toTeam: string, sessionId: string): SessionInfo;
-  getByTeamPair(fromTeam: string | null, toTeam: string): SessionInfo | null;
+  create(fromTeam: string, toTeam: string, sessionId: string): SessionInfo;
+  getByTeamPair(fromTeam: string, toTeam: string): SessionInfo | null;
   getBySessionId(sessionId: string): SessionInfo | null;
   list(filters?: SessionFilters): SessionInfo[];
   updateLastUsed(sessionId: string): void;
@@ -200,7 +200,7 @@ export class SessionStoreAdapter implements ISessionRepository {
     this.store = new SessionStore(dbPath);
   }
 
-  create(fromTeam: string | null, toTeam: string, sessionId: string): SessionInfo {
+  create(fromTeam: string, toTeam: string, sessionId: string): SessionInfo {
     return this.store.create(fromTeam, toTeam, sessionId);
   }
 
@@ -480,7 +480,7 @@ export class ClaudeProcessPool extends EventEmitter {
   async getOrCreateProcess(
     teamName: string,
     sessionId: string,
-    fromTeam: string | null = null
+    fromTeam: string = null
   ): Promise<ClaudeProcess> {
     // ... check existing process logic
 
@@ -625,7 +625,7 @@ export class SessionStore implements ISessionRepository {
     this.initializeSchema();
   }
 
-  create(fromTeam: string | null, toTeam: string, sessionId: string): SessionInfo {
+  create(fromTeam: string, toTeam: string, sessionId: string): SessionInfo {
     const now = Date.now();
     const stmt = this.db.prepare(`
       INSERT INTO team_sessions (from_team, to_team, session_id, created_at, last_used_at)

@@ -55,7 +55,7 @@ export interface ProcessMetrics {
   uptime: number;
   idleTimeRemaining: number;
   queueLength: number;
-  sessionId?: string;
+  sessionId: string;
   messageCount: number;
   lastActivity: number;
 }

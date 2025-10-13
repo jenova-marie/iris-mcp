@@ -37,11 +37,11 @@ export class ClaudeProcessPool extends EventEmitter {
 
   /**
    * Generate pool key for team pair
-   * Format: "fromTeam->toTeam" or "external->toTeam"
+   * Format: "fromTeam->toTeam"
    * This maintains conversation isolation between different team pairs
    */
-  private getPoolKey(fromTeam: string | null, toTeam: string): string {
-    return `${fromTeam ?? 'external'}->${toTeam}`;
+  private getPoolKey(fromTeam: string, toTeam: string): string {
+    return `${fromTeam}->${toTeam}`;
   }
 
   /**
@@ -58,12 +58,12 @@ export class ClaudeProcessPool extends EventEmitter {
    *
    * @param teamName - The team to get/create process for
    * @param sessionId - The session ID to use for this process
-   * @param fromTeam - The requesting team (null for external requests)
+   * @param fromTeam - The requesting team
    */
   async getOrCreateProcess(
     teamName: string,
     sessionId: string,
-    fromTeam: string | null = null,
+    fromTeam: string,
   ): Promise<ClaudeProcess> {
     // Check if team exists in configuration
     const teamConfig = this.configManager.getTeamConfig(teamName);
@@ -102,11 +102,7 @@ export class ClaudeProcessPool extends EventEmitter {
       sessionId,
     });
 
-    const process = new ClaudeProcess(
-      teamName,
-      teamConfig,
-      sessionId,
-    );
+    const process = new ClaudeProcess(teamName, teamConfig, sessionId);
 
     // Set up event forwarding
     process.on("spawned", (data) => this.emit("process-spawned", data));
@@ -160,7 +156,8 @@ export class ClaudeProcessPool extends EventEmitter {
       await process.terminate().catch((termError) => {
         this.logger.warn("Failed to terminate zombie process", {
           poolKey,
-          error: termError instanceof Error ? termError.message : String(termError),
+          error:
+            termError instanceof Error ? termError.message : String(termError),
         });
       });
 
@@ -168,7 +165,6 @@ export class ClaudeProcessPool extends EventEmitter {
       throw error;
     }
   }
-
 
   /**
    * Terminate a specific process
@@ -187,7 +183,7 @@ export class ClaudeProcessPool extends EventEmitter {
    * Terminate all processes
    */
   async terminateAll(): Promise<void> {
-    this.logger.info('Terminating all processes');
+    this.logger.info("Terminating all processes");
 
     // Copy the processes array to avoid modifying while iterating
     const processesToTerminate = Array.from(this.processes.values());
@@ -284,7 +280,10 @@ export class ClaudeProcessPool extends EventEmitter {
    * Send a command to a process (for compaction, etc.)
    * Creates a temporary cache entry to send the command using the new architecture
    */
-  async sendCommandToSession(sessionId: string, command: string): Promise<string | null> {
+  async sendCommandToSession(
+    sessionId: string,
+    command: string,
+  ): Promise<string | null> {
     const process = this.getProcessBySessionId(sessionId);
     if (!process) {
       this.logger.warn("No process found for session", { sessionId });
@@ -313,7 +312,9 @@ export class ClaudeProcessPool extends EventEmitter {
 
             // Extract response from assistant messages
             const messages = commandEntry.getMessages();
-            const assistantMessages = messages.filter((m) => m.type === "assistant");
+            const assistantMessages = messages.filter(
+              (m) => m.type === "assistant",
+            );
             const response = assistantMessages
               .map((m) => m.data.message?.content?.[0]?.text || "")
               .join("\n");
@@ -348,7 +349,7 @@ export class ClaudeProcessPool extends EventEmitter {
       const teamName = this.accessOrder[i];
       const process = this.processes.get(teamName);
 
-      if (process && process.getBasicMetrics().status === 'idle') {
+      if (process && process.getBasicMetrics().status === "idle") {
         victimIndex = i;
         break;
       }
@@ -359,10 +360,19 @@ export class ClaudeProcessPool extends EventEmitter {
       victimIndex = 0;
     }
 
-    const victimTeam = this.accessOrder[victimIndex];
-    this.logger.info('Evicting LRU process', { teamName: victimTeam });
+    const victimPoolKey = this.accessOrder[victimIndex];
+    const victimProcess = this.processes.get(victimPoolKey);
 
-    await this.terminateProcess(victimTeam);
+    if (!victimProcess) {
+      // Pool key exists in accessOrder but process is gone - clean up and retry
+      this.removeFromAccessOrder(victimPoolKey);
+      return this.evictLRU();
+    }
+
+    this.logger.info("Evicting LRU process", { poolKey: victimPoolKey });
+
+    // Directly terminate the process - event handlers will clean up the maps
+    await victimProcess.terminate();
   }
 
   /**
@@ -405,13 +415,13 @@ export class ClaudeProcessPool extends EventEmitter {
       const metrics = process.getBasicMetrics();
 
       // Remove stopped processes
-      if (metrics.status === 'stopped') {
+      if (metrics.status === "stopped") {
         processesToRemove.push(teamName);
         continue;
       }
 
       // Log metrics
-      this.logger.debug('Process health check', {
+      this.logger.debug("Process health check", {
         teamName,
         status: metrics.status,
         messagesProcessed: metrics.messagesProcessed,
@@ -422,12 +432,12 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Clean up stopped processes
     for (const teamName of processesToRemove) {
-      this.logger.info('Removing stopped process from pool', { teamName });
+      this.logger.info("Removing stopped process from pool", { teamName });
       this.processes.delete(teamName);
       this.removeFromAccessOrder(teamName);
     }
 
     // Emit health check event
-    this.emit('health-check', this.getStatus());
+    this.emit("health-check", this.getStatus());
   }
 }

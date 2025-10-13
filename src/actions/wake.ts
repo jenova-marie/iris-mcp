@@ -31,7 +31,7 @@ export interface WakeOutput {
   status: "awake" | "waking";
 
   /** Process ID if already awake */
-  pid?: number;
+  pid?: number | null;
 
   /** Session ID used */
   sessionId?: string;

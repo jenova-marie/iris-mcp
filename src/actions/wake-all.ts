@@ -26,7 +26,7 @@ export interface TeamWakeResult {
   status: "awake" | "waking" | "failed";
 
   /** Process ID if successful */
-  pid?: number;
+  pid?: number | null;
 
   /** Error message if failed */
   error?: string;

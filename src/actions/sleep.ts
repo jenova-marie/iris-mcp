@@ -32,7 +32,7 @@ export interface SleepOutput {
   status: "asleep" | "already_asleep" | "sleeping";
 
   /** Process ID that was terminated (if applicable) */
-  pid?: number;
+  pid?: number | null;
 
   /** Session ID that was terminated (if applicable) */
   sessionId?: string;

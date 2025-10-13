@@ -45,7 +45,7 @@ Iris exposes **10 MCP tools** that enable Claude instances to coordinate across 
 
 | Tool | Purpose | Blocking? | Parameters |
 |------|---------|-----------|------------|
-| `team_tell` | Send message to team | Optional | toTeam, message, fromTeam, timeout?, waitForResponse? |
+| `team_tell` | Send message to team | Optional | toTeam, message, fromTeam, timeout? |
 | `team_isAwake` | Check if team is active | Yes | team?, includeNotifications? |
 | `team_wake` | Wake up team process | Yes | team, fromTeam, clearCache? |
 | `team_sleep` | Put team to sleep | Yes | team, fromTeam, force? |
@@ -70,7 +70,6 @@ team_tell(input: {
   toTeam: string;
   message: string;
   fromTeam: string;
-  waitForResponse?: boolean;  // default: true
   timeout?: number;            // default: 30000ms
 }): Promise<{
   from?: string;
@@ -79,7 +78,6 @@ team_tell(input: {
   response?: string;
   duration?: number;
   timestamp: number;
-  async: boolean;
 }>
 ```
 
@@ -90,33 +88,15 @@ team_tell(input: {
 | `toTeam` | string | Yes | Target team name |
 | `message` | string | Yes | Message content (max 100KB) |
 | `fromTeam` | string | Yes | Calling team name |
-| `waitForResponse` | boolean | No | Wait for response (default: true) |
 | `timeout` | number | No | Timeout in ms (default: 30000) |
 
 **Modes:**
 
-**Synchronous (waitForResponse=true):**
-```typescript
-const result = await team_tell({
-  toTeam: "backend",
-  message: "What's the API status?",
-  waitForResponse: true,
-  timeout: 30000
-});
+
 
 // result.response = "All APIs operational"
 // result.duration = 2500
-```
 
-**Asynchronous (waitForResponse=false):**
-```typescript
-const result = await team_tell({
-  toTeam: "backend",
-  message: "Generate full audit report",
-  waitForResponse: false  // Fire and forget
-});
-
-// result.async = true
 // Process continues in background
 ```
 
@@ -125,10 +105,6 @@ const result = await team_tell({
 team_tell()
   │
   ├─► Validate inputs (team name, message length)
-  │
-  ├─► Convert waitForResponse to timeout
-  │   • waitForResponse=true → timeout=N
-  │   • waitForResponse=false → timeout=-1 (async)
   │
   ├─► Call iris.sendMessage(fromTeam, toTeam, message, { timeout })
   │
@@ -774,10 +750,8 @@ if (frontendTests.response.includes("PASS") &&
 const task = await team_tell({
   toTeam: "data-pipeline",
   message: "Generate annual report for 2024",
-  waitForResponse: false  // Don't wait
+  timeout: -1
 });
-
-console.log(task.async); // true
 
 // Later, check cache for results
 const cache = await team_cache_read({ sessionId: task.sessionId });

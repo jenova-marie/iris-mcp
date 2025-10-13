@@ -423,7 +423,7 @@ program
       body: JSON.stringify({
         toTeam: team,
         message,
-        timeout: options.async ? -1 : parseInt(options.timeout),
+        timeout: parseInt(options.timeout),
       }),
     });
 

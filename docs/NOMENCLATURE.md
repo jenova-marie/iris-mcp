@@ -82,7 +82,7 @@ CacheManager
 - **`team_tell`** - Send message to a team and optionally wait for response
   - Modes: `sync` (wait), `async` (background), `persistent` (queue for later)
   - Required: `fromTeam`, `toTeam`, `message`
-  - Optional: `waitForResponse`, `timeout`
+  - Optional: `timeout`
 
 ### Process Management
 - **`team_wake`** - Wake up a team's process (spawn if needed)

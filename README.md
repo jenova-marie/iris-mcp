@@ -222,21 +222,7 @@ Claude will automatically use Iris MCP to coordinate!
   fromTeam: "frontend",      // required: calling team name
   toTeam: "backend",
   message: "Breaking change: User model now requires email field",
-  waitForResponse: true,     // optional, default true
   timeout: 30000            // optional
-}
-```
-
-**Response (if waitForResponse = true):**
-```json
-{
-  "from": "frontend",
-  "to": "backend",
-  "message": "Breaking change: User model now requires email field",
-  "response": "Acknowledged. Updating user schema and creating migration.",
-  "duration": 3200,
-  "timestamp": 1704067200000,
-  "async": false
 }
 ```
 

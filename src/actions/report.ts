@@ -5,10 +5,10 @@
 
 import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
 import { validateTeamName } from "../utils/validation.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import { ConfigurationError } from "../utils/errors.js";
 
-const logger = new Logger("mcp:report");
+const logger = getChildLogger("action:report");
 
 export interface ReportInput {
   /** Team whose output cache to view */
@@ -48,7 +48,7 @@ export async function report(
   validateTeamName(team);
   validateTeamName(fromTeam);
 
-  logger.info("Reporting at team output cache", { team, fromTeam });
+  logger.info({ team, fromTeam }, "Reporting at team output cache");
 
   try {
     // Check if team exists in configuration
@@ -58,7 +58,7 @@ export async function report(
     }
 
     // No caching in bare-bones mode - all responses are streamed directly
-    logger.info("Report requested but caching disabled", { team, fromTeam });
+    logger.info({ team, fromTeam }, "Report requested but caching disabled");
 
     return {
       team,
@@ -69,7 +69,10 @@ export async function report(
       timestamp: Date.now(),
     };
   } catch (error) {
-    logger.error("Failed to report at team output", { team, error });
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error)),
+      team
+    }, "Failed to report at team output");
     throw error;
   }
 }

@@ -7,10 +7,10 @@ import type { IrisOrchestrator } from "../iris.js";
 import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
 import type { SessionManager } from "../session/session-manager.js";
 import { validateTeamName } from "../utils/validation.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import { ConfigurationError } from "../utils/errors.js";
 
-const logger = new Logger("mcp:wake");
+const logger = getChildLogger("action:wake");
 
 export interface WakeInput {
   /** Team to wake up */
@@ -18,9 +18,6 @@ export interface WakeInput {
 
   /** Team requesting the wake */
   fromTeam: string;
-
-  /** Clear the output cache (default: true) */
-  clearCache?: boolean;
 }
 
 export interface WakeOutput {
@@ -52,13 +49,13 @@ export async function wake(
   processPool: ClaudeProcessPool,
   sessionManager: SessionManager,
 ): Promise<WakeOutput> {
-  const { team, fromTeam, clearCache = true } = input;
+  const { team, fromTeam } = input;
 
   // Validate team names
   validateTeamName(team);
   validateTeamName(fromTeam);
 
-  logger.info("Checking team status for wake", { team, fromTeam });
+  logger.info({ team, fromTeam }, "Checking team status for wake");
 
   const startTime = Date.now();
 
@@ -77,14 +74,11 @@ export async function wake(
       const metrics = existingProcess.getBasicMetrics();
       const duration = Date.now() - startTime;
 
-      logger.info("Team already awake", {
+      logger.info({
         team,
         pid: metrics.pid,
-        status: metrics.status,
-        clearCache
-      });
-
-      // No cache to clear in bare-bones mode
+        status: metrics.status
+      }, "Team already awake");
 
       return {
         team,
@@ -97,7 +91,7 @@ export async function wake(
     }
 
     // Team is asleep, need to wake it up
-    logger.info("Waking up team", { team, fromTeam });
+    logger.info({ team, fromTeam }, "Waking up team");
 
     try {
       // Get or create session for fromTeam -> team
@@ -107,17 +101,14 @@ export async function wake(
       const process = await processPool.getOrCreateProcess(team, session.sessionId, fromTeam);
       const metrics = process.getBasicMetrics();
 
-      // No cache to clear in bare-bones mode
-
       const duration = Date.now() - startTime;
 
-      logger.info("Team woken up successfully", {
+      logger.info({
         team,
         pid: metrics.pid,
         sessionId: session.sessionId,
-        duration,
-        clearCache
-      });
+        duration
+      }, "Team woken up successfully");
 
       return {
         team,
@@ -129,7 +120,10 @@ export async function wake(
         timestamp: Date.now(),
       };
     } catch (error) {
-      logger.error("Failed to wake team", { team, error });
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error)),
+        team
+      }, "Failed to wake team");
 
       // Return waking status with error message
       const duration = Date.now() - startTime;
@@ -142,7 +136,10 @@ export async function wake(
       };
     }
   } catch (error) {
-    logger.error("Wake operation failed", { team, error });
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error)),
+      team
+    }, "Wake operation failed");
     throw error;
   }
 }

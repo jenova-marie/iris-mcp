@@ -5,9 +5,9 @@
 
 import { resolve } from "path";
 import type { TeamsConfigManager } from "../config/teams-config.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("mcp:getTeamName");
+const logger = getChildLogger("action:get-team-name");
 
 export interface GetTeamNameInput {
   /** Current working directory (pwd) */
@@ -37,12 +37,12 @@ export async function getTeamName(
 ): Promise<GetTeamNameOutput> {
   const { pwd } = input;
 
-  logger.info("Looking up team name by path", { pwd });
+  logger.info({ pwd }, "Looking up team name by path");
 
   try {
     // Resolve pwd to absolute path
     const resolvedPath = resolve(pwd);
-    logger.debug("Resolved path", { resolvedPath });
+    logger.debug({ resolvedPath }, "Resolved path");
 
     const config = configManager.getConfig();
     const teamsChecked: { name: string; path: string }[] = [];
@@ -54,7 +54,7 @@ export async function getTeamName(
 
       // Check if paths match
       if (resolvedPath === teamPath) {
-        logger.info("Team found by path", { teamName, path: resolvedPath });
+        logger.info({ teamName, path: resolvedPath }, "Team found by path");
 
         return {
           teamName,
@@ -65,10 +65,10 @@ export async function getTeamName(
     }
 
     // No match found
-    logger.warn("No team found for path", {
+    logger.warn({
       resolvedPath,
       teamsChecked: teamsChecked.length,
-    });
+    }, "No team found for path");
 
     return {
       teamName: null,
@@ -77,7 +77,9 @@ export async function getTeamName(
       teamsChecked,
     };
   } catch (error) {
-    logger.error("Failed to get team name", error);
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error))
+    }, "Failed to get team name");
     throw error;
   }
 }

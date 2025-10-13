@@ -4,9 +4,9 @@
  */
 
 import type { TeamsConfigManager } from "../config/teams-config.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("mcp:teams");
+const logger = getChildLogger("action:teams");
 
 export interface TeamsInput {
   // No input needed
@@ -72,13 +72,15 @@ export async function teams(
       timestamp: Date.now(),
     };
 
-    logger.info("Teams list retrieved", {
+    logger.info({
       totalTeams: output.totalTeams,
-    });
+    }, "Teams list retrieved");
 
     return output;
   } catch (error) {
-    logger.error("Failed to get teams list", error);
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error))
+    }, "Failed to get teams list");
     throw error;
   }
 }

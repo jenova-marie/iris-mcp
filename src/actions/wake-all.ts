@@ -6,9 +6,9 @@
 import type { IrisOrchestrator } from "../iris.js";
 import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
 import type { SessionManager } from "../session/session-manager.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("mcp:wake-all");
+const logger = getChildLogger("action:wake-all");
 
 export interface WakeAllInput {
   /** Team requesting the wake-all */
@@ -62,7 +62,7 @@ export async function wakeAll(
 ): Promise<WakeAllOutput> {
   const { fromTeam, parallel = false } = input;
 
-  logger.info("🚨 Sounding the air-raid siren - waking all teams!", { fromTeam, parallel });
+  logger.info({ fromTeam, parallel }, "🚨 Sounding the air-raid siren - waking all teams!");
 
   if (parallel) {
     logger.warn("⚠️  Parallel mode is UNSTABLE - spawning multiple Claude instances simultaneously causes timeouts. Consider using sequential mode (parallel=false).");
@@ -107,7 +107,10 @@ export async function wakeAll(
         };
       } catch (error) {
         failed++;
-        logger.error("Failed to wake team", { team: teamName, error });
+        logger.error({
+          err: error instanceof Error ? error : new Error(String(error)),
+          team: teamName
+        }, "Failed to wake team");
         return {
           team: teamName,
           status: "failed" as const,
@@ -150,7 +153,10 @@ export async function wakeAll(
         });
       } catch (error) {
         failed++;
-        logger.error("Failed to wake team", { team: teamName, error });
+        logger.error({
+          err: error instanceof Error ? error : new Error(String(error)),
+          team: teamName
+        }, "Failed to wake team");
         results.push({
           team: teamName,
           status: "failed",
@@ -162,13 +168,13 @@ export async function wakeAll(
 
   const duration = Date.now() - startTime;
 
-  logger.info("Wake-all operation complete", {
+  logger.info({
     total: teams.length,
     alreadyAwake,
     woken,
     failed,
     duration
-  });
+  }, "Wake-all operation complete");
 
   return {
     message: "🚨 Sounding the air-raid siren! All teams are being awakened!",

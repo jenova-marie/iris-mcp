@@ -13,9 +13,9 @@ import {
   validateMessage,
   validateTimeout,
 } from "../utils/validation.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("mcp:tell");
+const logger = getChildLogger("action:tell");
 
 export interface TellInput {
   /** Team to send message to */
@@ -38,9 +38,6 @@ export interface TellInput {
 
   /** TTL in days for persistent notifications (default: 30). Only used when persist=true */
   ttlDays?: number;
-
-  /** Clear the output cache before sending (default: true) */
-  clearCache?: boolean;
 }
 
 export interface TellOutput {
@@ -87,7 +84,6 @@ export async function tell(
     timeout = 30000,
     persist = false,
     ttlDays = 30,
-    clearCache = true,
   } = input;
 
   // Validate inputs
@@ -106,14 +102,14 @@ export async function tell(
 
   const startTime = Date.now();
 
-  logger.info("Sending message to team", {
+  logger.info({
     from: fromTeam,
     to: toTeam,
     async: !waitForResponse,
     timeout: actualTimeout,
     messageLength: message.length,
     messagePreview: message.substring(0, 50),
-  });
+  }, "Sending message to team");
 
   try {
     const result = await iris.sendMessage(fromTeam, toTeam, message, {
@@ -128,10 +124,10 @@ export async function tell(
 
       // Async mode response
       if (resultObj.status === "async") {
-        logger.info("Message sent in async mode", {
+        logger.info({
           toTeam,
           sessionId: resultObj.sessionId,
-        });
+        }, "Message sent in async mode");
 
         return {
           from: fromTeam,
@@ -143,11 +139,11 @@ export async function tell(
       }
 
       // Busy or other status
-      logger.warn("Received non-string response", {
+      logger.warn({
         toTeam,
         status: resultObj.status,
         result: JSON.stringify(result),
-      });
+      }, "Received non-string response");
 
       return {
         from: fromTeam,
@@ -163,22 +159,22 @@ export async function tell(
     // Handle string response (successful completion)
     const response = result as string;
 
-    logger.info("Received response from team", {
+    logger.info({
       toTeam,
       duration,
       responseLength: response?.length || 0,
       responsePreview: response?.substring(0, 100),
       isEmpty: !response || response.length === 0,
-    });
+    }, "Received response from team");
 
     if (!response || response.length === 0) {
-      logger.warn("EMPTY RESPONSE DETECTED", {
+      logger.warn({
         toTeam,
         fromTeam,
         message,
         duration,
         responseValue: JSON.stringify(response),
-      });
+      }, "EMPTY RESPONSE DETECTED");
     }
 
     return {
@@ -191,12 +187,11 @@ export async function tell(
       async: false,
     };
   } catch (error) {
-    logger.error("Failed to send message to team", {
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined,
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error)),
       toTeam,
       fromTeam,
-    });
+    }, "Failed to send message to team");
     throw error;
   }
 }

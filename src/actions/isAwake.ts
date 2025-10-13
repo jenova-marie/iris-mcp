@@ -8,9 +8,9 @@ import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
 import type { TeamsConfigManager } from "../config/teams-config.js";
 import type { SessionManager } from "../session/session-manager.js";
 import { validateTeamName } from "../utils/validation.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("mcp:isAwake");
+const logger = getChildLogger("action:is-awake");
 
 export interface IsAwakeInput {
   /** Calling team (required to identify sessions) */
@@ -92,7 +92,7 @@ export async function isAwake(
     validateTeamName(team);
   }
 
-  logger.info("Getting status", { fromTeam, team, includeNotifications });
+  logger.info({ fromTeam, team, includeNotifications }, "Getting status");
 
   try {
     const config = configManager.getConfig();
@@ -165,14 +165,16 @@ export async function isAwake(
       };
     }
 
-    logger.info("Status retrieved", {
+    logger.info({
       teamCount: teams.length,
       activeCount: teams.filter(t => t.status === "awake").length
-    });
+    }, "Status retrieved");
 
     return output;
   } catch (error) {
-    logger.error("Failed to get status", error);
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error))
+    }, "Failed to get status");
     throw error;
   }
 }

@@ -12,9 +12,9 @@
 
 import type { IrisOrchestrator } from "../iris.js";
 import { validateTeamName, validateTimeout } from "../utils/validation.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 
-const logger = new Logger("mcp:command");
+const logger = getChildLogger("action:command");
 
 // Only compact is supported in headless mode
 const SUPPORTED_COMMANDS = ["compact"] as const;
@@ -96,11 +96,11 @@ export async function command(
 
   // Check if command is supported
   if (!SUPPORTED_COMMANDS.includes(commandName as SupportedCommand)) {
-    logger.warn("Unsupported command requested", {
+    logger.warn({
       team,
       command: commandName,
       supportedCommands: SUPPORTED_COMMANDS,
-    });
+    }, "Unsupported command requested");
 
     return {
       team,
@@ -120,13 +120,13 @@ export async function command(
   // waitForResponse=true → use provided timeout
   const actualTimeout = waitForResponse ? timeout : -1;
 
-  logger.info("Sending command to team", {
+  logger.info({
     team,
     command: fullCommand,
     fromTeam,
     async: !waitForResponse,
     timeout: actualTimeout,
-  });
+  }, "Sending command to team");
 
   const startTime = Date.now();
 
@@ -149,11 +149,11 @@ export async function command(
 
       // Async mode response
       if (resultObj.status === "async") {
-        logger.info("Command sent in async mode", {
+        logger.info({
           team,
           command: fullCommand,
           sessionId: resultObj.sessionId,
-        });
+        }, "Command sent in async mode");
 
         return {
           team,
@@ -165,11 +165,11 @@ export async function command(
       }
 
       // Busy or other status
-      logger.warn("Received non-string response for command", {
+      logger.warn({
         team,
         command: fullCommand,
         status: resultObj.status,
-      });
+      }, "Received non-string response for command");
 
       return {
         team,
@@ -185,12 +185,12 @@ export async function command(
     // Handle string response (successful completion)
     const response = result as string;
 
-    logger.info("Command completed", {
+    logger.info({
       team,
       command: fullCommand,
       duration,
       responseLength: response?.length || 0,
-    });
+    }, "Command completed");
 
     return {
       team,
@@ -204,12 +204,12 @@ export async function command(
   } catch (error) {
     const duration = Date.now() - startTime;
 
-    logger.error("Failed to send command", {
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error)),
       team,
       command: fullCommand,
-      error,
       duration,
-    });
+    }, "Failed to send command");
 
     // Return failure result instead of throwing
     return {

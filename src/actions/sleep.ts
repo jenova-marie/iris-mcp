@@ -5,10 +5,10 @@
 
 import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
 import { validateTeamName } from "../utils/validation.js";
-import { Logger } from "../utils/logger.js";
+import { getChildLogger } from "../utils/logger.js";
 import { ConfigurationError } from "../utils/errors.js";
 
-const logger = new Logger("mcp:sleep");
+const logger = getChildLogger("action:sleep");
 
 export interface SleepInput {
   /** Team to put to sleep */
@@ -19,9 +19,6 @@ export interface SleepInput {
 
   /** Force termination even if process is busy */
   force?: boolean;
-
-  /** Clear the output cache before sleeping (default: true) */
-  clearCache?: boolean;
 }
 
 export interface SleepOutput {
@@ -54,13 +51,13 @@ export async function sleep(
   input: SleepInput,
   processPool: ClaudeProcessPool,
 ): Promise<SleepOutput> {
-  const { team, fromTeam, force = false, clearCache = true } = input;
+  const { team, fromTeam, force = false } = input;
 
   // Validate team names
   validateTeamName(team);
   validateTeamName(fromTeam);
 
-  logger.info("Putting team to sleep", { team, fromTeam, force });
+  logger.info({ team, fromTeam, force }, "Putting team to sleep");
 
   const startTime = Date.now();
 
@@ -78,7 +75,7 @@ export async function sleep(
       // Team is already asleep
       const duration = Date.now() - startTime;
 
-      logger.info("Team already asleep", { team });
+      logger.info({ team }, "Team already asleep");
 
       return {
         team,
@@ -95,28 +92,25 @@ export async function sleep(
     const sessionId = metrics.sessionId;
     const pendingMessages = metrics.messageCount;
 
-    logger.info("Terminating team process", {
+    logger.info({
       team,
       pid,
       sessionId,
       pendingMessages,
-      force,
-      clearCache
-    });
+      force
+    }, "Terminating team process");
 
     try {
-      // No cache to clear in bare-bones mode
-
       // Terminate the process
       await processPool.terminateProcess(team);
 
       const duration = Date.now() - startTime;
 
-      logger.info("Team put to sleep successfully", {
+      logger.info({
         team,
         pid,
         duration
-      });
+      }, "Team put to sleep successfully");
 
       const output: SleepOutput = {
         team,
@@ -136,7 +130,10 @@ export async function sleep(
 
       return output;
     } catch (error) {
-      logger.error("Failed to terminate team process", { team, error });
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error)),
+        team
+      }, "Failed to terminate team process");
 
       const duration = Date.now() - startTime;
       return {
@@ -150,7 +147,10 @@ export async function sleep(
       };
     }
   } catch (error) {
-    logger.error("Sleep operation failed", { team, error });
+    logger.error({
+      err: error instanceof Error ? error : new Error(String(error)),
+      team
+    }, "Sleep operation failed");
     throw error;
   }
 }

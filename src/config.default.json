@@ -1,9 +1,10 @@
 {
   "settings": {
+    "sessionInitTimeout": 30000,
+    "responseTimeout": 120000,
     "idleTimeout": 30000000,
     "maxProcesses": 10,
     "healthCheckInterval": 30000,
-    "sessionInitTimeout": 30000,
     "httpPort": 1615,
     "defaultTransport": "http"
   },

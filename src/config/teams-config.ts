@@ -28,10 +28,11 @@ const TeamConfigSchema = z.object({
 
 const TeamsConfigSchema = z.object({
   settings: z.object({
+    sessionInitTimeout: z.number().positive(),
+    responseTimeout: z.number().positive(),
     idleTimeout: z.number().positive(),
     maxProcesses: z.number().int().min(1).max(50),
     healthCheckInterval: z.number().positive(),
-    sessionInitTimeout: z.number().positive(),
     httpPort: z.number().int().min(1).max(65535).optional().default(1615),
     defaultTransport: z.enum(["stdio", "http"]).optional().default("stdio"),
   }),

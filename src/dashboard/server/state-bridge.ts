@@ -4,21 +4,20 @@
  * Forwards events from process pool for real-time updates
  */
 
-import { EventEmitter } from 'events';
-import type { ClaudeProcessPool } from '../../process-pool/pool-manager.js';
-import type { NotificationQueue } from '../../notifications/queue.js';
-import type { TeamsConfigManager } from '../../config/teams-config.js';
-import type { TeamsConfig, ProcessMetrics } from '../../process-pool/types.js';
-import { Logger } from '../../utils/logger.js';
+import { EventEmitter } from "events";
+import type { ClaudeProcessPool } from "../../process-pool/pool-manager.js";
+import type { TeamsConfigManager } from "../../config/teams-config.js";
+import type { TeamsConfig, ProcessMetrics } from "../../process-pool/types.js";
+import { Logger } from "../../utils/logger.js";
 
-const logger = new Logger('dashboard-bridge');
+const logger = new Logger("dashboard-bridge");
 
 export interface ProcessInfo extends ProcessMetrics {
   teamName: string;
 }
 
 export interface CacheStreamData {
-  type: 'stdout' | 'stderr';
+  type: "stdout" | "stderr";
   line: string;
 }
 
@@ -29,7 +28,6 @@ export interface CacheStreamData {
 export class DashboardStateBridge extends EventEmitter {
   constructor(
     private pool: ClaudeProcessPool,
-    private queue: NotificationQueue,
     private configManager: TeamsConfigManager,
   ) {
     super();
@@ -41,29 +39,29 @@ export class DashboardStateBridge extends EventEmitter {
    */
   private setupEventForwarding(): void {
     // Forward process lifecycle events
-    this.pool.on('process-spawned', (teamName: string, pid: number) => {
-      logger.debug('Forwarding process-spawned event', { teamName, pid });
-      this.emit('ws:process-status', {
+    this.pool.on("process-spawned", (teamName: string, pid: number) => {
+      logger.debug("Forwarding process-spawned event", { teamName, pid });
+      this.emit("ws:process-status", {
         teamName,
-        status: 'spawning',
+        status: "spawning",
         pid,
       });
     });
 
-    this.pool.on('process-terminated', (teamName: string) => {
-      logger.debug('Forwarding process-terminated event', { teamName });
-      this.emit('ws:process-status', {
+    this.pool.on("process-terminated", (teamName: string) => {
+      logger.debug("Forwarding process-terminated event", { teamName });
+      this.emit("ws:process-status", {
         teamName,
-        status: 'stopped',
+        status: "stopped",
       });
     });
 
-    this.pool.on('process-status', (teamName: string, status: string) => {
-      logger.debug('Forwarding process-status event', { teamName, status });
+    this.pool.on("process-status", (teamName: string, status: string) => {
+      logger.debug("Forwarding process-status event", { teamName, status });
       const process = this.pool.getProcess(teamName);
-      const metrics = process ? process.getMetrics() : null;
+      const metrics = process ? process.getBasicMetrics() : null;
 
-      this.emit('ws:process-status', {
+      this.emit("ws:process-status", {
         teamName,
         status,
         ...metrics,
@@ -71,17 +69,17 @@ export class DashboardStateBridge extends EventEmitter {
     });
 
     // Forward message events
-    this.pool.on('message-sent', (data: any) => {
-      logger.debug('Forwarding message-sent event', data);
-      this.emit('ws:message-sent', data);
+    this.pool.on("message-sent", (data: any) => {
+      logger.debug("Forwarding message-sent event", data);
+      this.emit("ws:message-sent", data);
     });
 
-    this.pool.on('message-response', (data: any) => {
-      logger.debug('Forwarding message-response event', data);
-      this.emit('ws:message-response', data);
+    this.pool.on("message-response", (data: any) => {
+      logger.debug("Forwarding message-response event", data);
+      this.emit("ws:message-response", data);
     });
 
-    logger.info('Event forwarding initialized');
+    logger.info("Event forwarding initialized");
   }
 
   /**
@@ -109,7 +107,7 @@ export class DashboardStateBridge extends EventEmitter {
       const process = this.pool.getProcess(teamName);
 
       if (process) {
-        const metrics = process.getMetrics();
+        const metrics = process.getBasicMetrics();
         processes.push({
           teamName,
           ...metrics,
@@ -119,7 +117,7 @@ export class DashboardStateBridge extends EventEmitter {
         processes.push({
           teamName,
           pid: undefined,
-          status: 'stopped',
+          status: "stopped",
           messagesProcessed: 0,
           lastUsed: 0,
           uptime: 0,
@@ -144,7 +142,7 @@ export class DashboardStateBridge extends EventEmitter {
       return {
         teamName,
         pid: undefined,
-        status: 'stopped',
+        status: "stopped",
         messagesProcessed: 0,
         lastUsed: 0,
         uptime: 0,
@@ -155,7 +153,7 @@ export class DashboardStateBridge extends EventEmitter {
       };
     }
 
-    const metrics = process.getMetrics();
+    const metrics = process.getBasicMetrics();
     return {
       teamName,
       ...metrics,
@@ -177,8 +175,8 @@ export class DashboardStateBridge extends EventEmitter {
     // This will need to be added to ClaudeProcess later
     // For now, return empty buffers
     return {
-      stdout: '',
-      stderr: '',
+      stdout: "",
+      stderr: "",
     };
   }
 
@@ -195,28 +193,8 @@ export class DashboardStateBridge extends EventEmitter {
 
     // This will be implemented when we add cache streaming to ClaudeProcess
     // For now, just return true if process exists
-    logger.info('Cache streaming requested for team', { teamName });
+    logger.info("Cache streaming requested for team", { teamName });
     return true;
-  }
-
-  /**
-   * Get pending notifications from the queue
-   */
-  getPendingNotifications(teamName?: string): any[] {
-    if (teamName) {
-      return this.queue.getPending(teamName);
-    }
-
-    // Get all pending notifications across all teams
-    const allNotifications: any[] = [];
-    const teamNames = this.configManager.getTeamNames();
-
-    for (const team of teamNames) {
-      const pending = this.queue.getPending(team);
-      allNotifications.push(...pending);
-    }
-
-    return allNotifications;
   }
 
   /**
@@ -229,7 +207,7 @@ export class DashboardStateBridge extends EventEmitter {
     configuredTeams: number;
   } {
     const processes = this.getActiveProcesses();
-    const activeCount = processes.filter(p => p.status !== 'stopped').length;
+    const activeCount = processes.filter((p) => p.status !== "stopped").length;
     const config = this.getConfig();
 
     return {

@@ -5,7 +5,6 @@
  */
 
 import type { ClaudeProcessPool } from "./process-pool/pool-manager.js";
-import type { NotificationQueue } from "./notifications/queue.js";
 import type { TeamsConfigManager } from "./config/teams-config.js";
 import type { DashboardConfig } from "./process-pool/types.js";
 import { DashboardStateBridge } from "./dashboard/server/state-bridge.js";
@@ -19,13 +18,11 @@ export class IrisWebServer {
 
   constructor(
     private processPool: ClaudeProcessPool,
-    private notificationQueue: NotificationQueue,
     private configManager: TeamsConfigManager,
   ) {
     // Create the bridge between MCP components and dashboard
     this.bridge = new DashboardStateBridge(
       this.processPool,
-      this.notificationQueue,
       this.configManager,
     );
 

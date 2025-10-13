@@ -34,11 +34,7 @@ const logger = getChildLogger("iris:mcp");
 const TOOLS: Tool[] = [
   {
     name: "team_tell",
-    description:
-      "Tell a message to a specific team. Supports three modes: " +
-      "1) Synchronous (waitForResponse=true): Tell team and wait for response. " +
-      "2) Asynchronous (waitForResponse=false): Tell team without waiting. " +
-      "3) Persistent notification (persist=true): Fire-and-forget to persistent queue.",
+    description: "Tell a message to a specific team",
     inputSchema: {
       type: "object",
       properties: {
@@ -55,15 +51,10 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "Name of the team sending the message",
         },
-        waitForResponse: {
-          type: "boolean",
-          description:
-            "Wait for response (default: true). Ignored if persist=true.",
-        },
         timeout: {
           type: "number",
           description:
-            "Optional timeout in milliseconds (default: 30000). Only used when waitForResponse=true.",
+            "Optional timeout in milliseconds (default: 30000). 0 wait indefinately -1 async return immediately",
         },
         persist: {
           type: "boolean",
@@ -430,10 +421,13 @@ export class IrisMcpServer {
 
         return result;
       } catch (error) {
-        logger.error({
-          err: error instanceof Error ? error : new Error(String(error)),
-          tool: name
-        }, `Tool ${name} failed`);
+        logger.error(
+          {
+            err: error instanceof Error ? error : new Error(String(error)),
+            tool: name,
+          },
+          `Tool ${name} failed`,
+        );
 
         // Log pool state AFTER failed tool execution (when DEBUG env is set)
         if (process.env.DEBUG) {
@@ -471,9 +465,15 @@ export class IrisMcpServer {
     });
 
     this.processPool.on("process-error", (data) => {
-      logger.error({
-        err: data.error instanceof Error ? data.error : new Error(String(data.error))
-      }, "Process error");
+      logger.error(
+        {
+          err:
+            data.error instanceof Error
+              ? data.error
+              : new Error(String(data.error)),
+        },
+        "Process error",
+      );
     });
   }
 
@@ -496,11 +496,14 @@ export class IrisMcpServer {
 
       // Handle MCP requests with proper SDK transport (POST for JSON-RPC, GET for SSE)
       app.all("/mcp", async (req, res) => {
-        logger.debug({
-          method: req.method,
-          body: req.body,
-          headers: req.headers,
-        }, "Received HTTP request");
+        logger.debug(
+          {
+            method: req.method,
+            body: req.body,
+            headers: req.headers,
+          },
+          "Received HTTP request",
+        );
 
         try {
           // Create a new transport for each request (stateless mode)
@@ -524,9 +527,12 @@ export class IrisMcpServer {
           // Handle the request (works for both POST and GET)
           await httpTransport.handleRequest(req, res, req.body);
         } catch (error) {
-          logger.error({
-            err: error instanceof Error ? error : new Error(String(error))
-          }, "Error handling MCP request");
+          logger.error(
+            {
+              err: error instanceof Error ? error : new Error(String(error)),
+            },
+            "Error handling MCP request",
+          );
           if (!res.headersSent) {
             res.status(500).json({
               jsonrpc: "2.0",
@@ -557,9 +563,12 @@ export class IrisMcpServer {
           logger.info(`Health check: http://localhost:${port}/health`);
         })
         .on("error", (error) => {
-          logger.error({
-            err: error instanceof Error ? error : new Error(String(error))
-          }, "HTTP server error");
+          logger.error(
+            {
+              err: error instanceof Error ? error : new Error(String(error)),
+            },
+            "HTTP server error",
+          );
           process.exit(1);
         });
     } else {
@@ -584,9 +593,12 @@ export class IrisMcpServer {
       logger.info("Shutdown complete");
       process.exit(0);
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, "Error during shutdown");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Error during shutdown",
+      );
       process.exit(1);
     }
   }

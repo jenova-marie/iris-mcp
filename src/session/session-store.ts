@@ -139,7 +139,7 @@ export class SessionStore {
    * Create a new session record
    */
   create(
-    fromTeam: string | null,
+    fromTeam: string,
     toTeam: string,
     sessionId: string,
   ): SessionInfo {
@@ -180,12 +180,12 @@ export class SessionStore {
    * Get session by team pair
    */
   getByTeamPair(
-    fromTeam: string | null,
+    fromTeam: string,
     toTeam: string,
   ): SessionInfo | null {
     const stmt = this.db.prepare(`
       SELECT * FROM team_sessions
-      WHERE from_team IS ? AND to_team = ?
+      WHERE from_team = ? AND to_team = ?
     `);
 
     const row = stmt.get(fromTeam, toTeam) as SessionRow | undefined;
@@ -223,7 +223,7 @@ export class SessionStore {
     const params: any[] = [];
 
     if (filters?.fromTeam !== undefined) {
-      query += " AND from_team IS ?";
+      query += " AND from_team = ?";
       params.push(filters.fromTeam);
     }
 
@@ -337,10 +337,10 @@ export class SessionStore {
   /**
    * Delete sessions by team pair
    */
-  deleteByTeamPair(fromTeam: string | null, toTeam: string): void {
+  deleteByTeamPair(fromTeam: string, toTeam: string): void {
     const stmt = this.db.prepare(`
       DELETE FROM team_sessions
-      WHERE from_team IS ? AND to_team = ?
+      WHERE from_team = ? AND to_team = ?
     `);
 
     stmt.run(fromTeam, toTeam);
@@ -392,7 +392,7 @@ export class SessionStore {
    */
   createBatch(
     sessions: Array<{
-      fromTeam: string | null;
+      fromTeam: string;
       toTeam: string;
       sessionId: string;
     }>,

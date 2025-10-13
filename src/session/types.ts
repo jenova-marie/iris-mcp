@@ -34,8 +34,8 @@ export interface SessionInfo {
   /** Database row ID */
   id: number;
 
-  /** Source team (null for external/user-initiated requests) */
-  fromTeam: string | null;
+  /** Source team (required in new architecture) */
+  fromTeam: string;
 
   /** Destination team */
   toTeam: string;
@@ -71,7 +71,7 @@ export interface SessionInfo {
  */
 export interface SessionRow {
   id: number;
-  from_team: string | null;
+  from_team: string;
   to_team: string;
   session_id: string;
   created_at: number; // Unix timestamp (ms)
@@ -89,7 +89,7 @@ export interface SessionRow {
  */
 export interface SessionFilters {
   /** Filter by source team */
-  fromTeam?: string | null;
+  fromTeam?: string;
 
   /** Filter by destination team */
   toTeam?: string;
@@ -169,7 +169,7 @@ export interface SessionMetrics {
  */
 export interface SessionPoolStrategy {
   /** Generate a pool key for session lookup */
-  getPoolKey(fromTeam: string | null, toTeam: string): string;
+  getPoolKey(fromTeam: string, toTeam: string): string;
 
   /** Determine if a session can be reused */
   canReuseSession(session: SessionInfo): boolean;

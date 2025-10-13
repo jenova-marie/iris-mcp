@@ -54,7 +54,10 @@ export class SessionManager {
    * - Validates team project paths
    * - Discovers existing sessions
    * - Syncs database with filesystem
-   * - Pre-initializes sessions for all teams (CRITICAL)
+   *
+   * NOTE: No longer pre-initializes sessions. In the new architecture, ALL sessions
+   * require both fromTeam and toTeam. Sessions are created on-demand when the first
+   * message arrives with a valid fromTeam.
    */
   async initialize(): Promise<void> {
     if (this.initialized) {
@@ -80,98 +83,8 @@ export class SessionManager {
       }
     }
 
-    // PRE-INITIALIZE ALL TEAM SESSIONS
-    logger.info("Pre-initializing team sessions");
-
-    for (const [teamName, teamConfig] of Object.entries(
-      this.teamsConfig.teams,
-    )) {
-      try {
-        logger.info("Processing team for session initialization", {
-          teamName,
-        });
-        const projectPath = this.getProjectPath(teamConfig);
-
-        // Check if session exists for (null, teamName) - external→team sessions
-        const existing = this.store.getByTeamPair(null, teamName);
-
-        if (existing) {
-          // Verify session file exists
-          const sessionFilePath = getSessionFilePath(
-            projectPath,
-            existing.sessionId,
-          );
-          const { existsSync } = await import("fs");
-
-          if (existsSync(sessionFilePath)) {
-            logger.info("Session file already exists and valid, skipping", {
-              teamName,
-              sessionId: existing.sessionId,
-              filePath: sessionFilePath,
-            });
-            continue;
-          }
-
-          // Session in DB but file missing - MUST create NEW session with NEW UUID
-          // Cannot reuse old UUID with --session-id (UUID is "burned")
-          logger.warn("Session file missing, creating new session", {
-            teamName,
-            oldSessionId: existing.sessionId,
-          });
-
-          // Generate fresh UUID
-          const newSessionId = generateSecureUUID();
-
-          // Create new session file with new UUID using ClaudeProcess static method
-          await ClaudeProcess.initializeSessionFile(
-            teamConfig,
-            newSessionId,
-            this.teamsConfig.settings.sessionInitTimeout,
-          );
-
-          // Delete old database entry
-          this.store.delete(existing.sessionId);
-
-          // Store new session in database
-          this.store.create(null, teamName, newSessionId);
-
-          logger.info("New session created to replace missing file", {
-            teamName,
-            oldSessionId: existing.sessionId,
-            newSessionId,
-          });
-        } else {
-          // No session in database - create new one
-          logger.info("No session in database, creating initial session", {
-            teamName,
-          });
-
-          const sessionId = generateSecureUUID();
-          // Create session file using ClaudeProcess static method
-          await ClaudeProcess.initializeSessionFile(
-            teamConfig,
-            sessionId,
-            this.teamsConfig.settings.sessionInitTimeout,
-          );
-
-          // Store in database
-          this.store.create(null, teamName, sessionId);
-
-          logger.info("Initial session created", { teamName, sessionId });
-        }
-      } catch (error) {
-        logger.error("Failed to initialize session for team", {
-          teamName,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw new ConfigurationError(
-          `Failed to initialize team '${teamName}': ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-
     this.initialized = true;
-    logger.info("Session manager initialized with all team sessions ready");
+    logger.info("Session manager initialized - sessions will be created on-demand");
   }
 
   /**
@@ -190,12 +103,13 @@ export class SessionManager {
   ): Promise<SessionInfo> {
     this.ensureInitialized();
 
-    // Validate teams exist
+    // Validate toTeam exists
     if (!this.teamsConfig.teams[toTeam]) {
       throw new ConfigurationError(`Unknown team: ${toTeam}`);
     }
 
-    if (!this.teamsConfig.teams[fromTeam]) {
+    // Validate fromTeam exists (unless it's the special "external" keyword)
+    if (fromTeam !== "external" && !this.teamsConfig.teams[fromTeam]) {
       throw new ConfigurationError(`Unknown team: ${fromTeam}`);
     }
 
@@ -373,7 +287,7 @@ export class SessionManager {
 
     // Invalidate cache for this session
     const session = this.store.getBySessionId(sessionId);
-    if (session && session.fromTeam) {
+    if (session) {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
   }
@@ -387,7 +301,7 @@ export class SessionManager {
 
     // Invalidate cache for this session
     const session = this.store.getBySessionId(sessionId);
-    if (session && session.fromTeam) {
+    if (session) {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
   }
@@ -454,9 +368,7 @@ export class SessionManager {
 
     // Mark as compacting
     this.store.updateStatus(sessionId, "compacting");
-    if (session.fromTeam) {
-      this.invalidateCache(session.fromTeam, session.toTeam);
-    }
+    this.invalidateCache(session.fromTeam, session.toTeam);
 
     try {
       // Reset message count and update status
@@ -472,9 +384,7 @@ export class SessionManager {
 
       // Mark as error state
       this.store.updateStatus(sessionId, "error");
-      if (session.fromTeam) {
-        this.invalidateCache(session.fromTeam, session.toTeam);
-      }
+      this.invalidateCache(session.fromTeam, session.toTeam);
 
       throw new ProcessError(
         `Failed to compact session: ${error instanceof Error ? error.message : String(error)}`,
@@ -543,7 +453,7 @@ export class SessionManager {
 
     // Invalidate cache
     const session = this.store.getBySessionId(sessionId);
-    if (session && session.fromTeam) {
+    if (session) {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
   }
@@ -560,7 +470,7 @@ export class SessionManager {
 
     // Invalidate cache
     const session = this.store.getBySessionId(sessionId);
-    if (session && session.fromTeam) {
+    if (session) {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
   }
@@ -574,7 +484,7 @@ export class SessionManager {
 
     // Invalidate cache
     const session = this.store.getBySessionId(sessionId);
-    if (session && session.fromTeam) {
+    if (session) {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
   }

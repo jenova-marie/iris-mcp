@@ -12,7 +12,10 @@ import { SessionStore } from "../../../src/session/session-store.js";
 
 describe("SessionStore Integration", () => {
   let store: SessionStore;
-  const testDbPath = resolve(process.cwd(), "tests/data/test-integration-session-store.db");
+  const testDbPath = resolve(
+    process.cwd(),
+    "tests/data/test-integration-session-store.db",
+  );
 
   beforeEach(() => {
     store = new SessionStore(testDbPath);
@@ -381,20 +384,20 @@ describe("SessionStore Integration", () => {
       expect(active?.status).toBe("active");
     });
 
-    it("should query all external team sessions", () => {
-      // Create sessions for multiple teams from external (null fromTeam)
-      store.create(null, "team-alpha", "session-alpha");
-      store.create(null, "team-beta", "session-beta");
-      store.create(null, "team-gamma", "session-gamma");
+    it("should query all team sessions", () => {
+      // Create sessions for multiple teams
+      store.create("team-beta", "team-alpha", "session-alpha");
+      store.create("team-beta", "team-beta", "session-beta");
+      store.create("team-beta", "team-gamma", "session-gamma");
 
       // Create some team-to-team sessions
       store.create("team-alpha", "team-beta", "session-a-to-b");
 
-      // Query all external sessions
-      const externalSessions = store.list({ fromTeam: null });
+      // Query all sessions
+      const sessions = store.list({ fromTeam: "team-beta" });
 
-      expect(externalSessions).toHaveLength(3);
-      expect(externalSessions.map((s) => s.toTeam)).toEqual(
+      expect(sessions).toHaveLength(3);
+      expect(sessions.map((s) => s.toTeam)).toEqual(
         expect.arrayContaining(["team-alpha", "team-beta", "team-gamma"]),
       );
     });

@@ -61,11 +61,11 @@ describe("SessionStore", () => {
       expect(session.lastUsedAt).toBeInstanceOf(Date);
     });
 
-    it("should create session with null fromTeam", () => {
-      const sessionId = "uuid-null-from";
-      const session = store.create(null, "backend", sessionId);
+    it("should create session with team-beta fromTeam", () => {
+      const sessionId = "uuid-team-beta-from";
+      const session = store.create("team-beta", "backend", sessionId);
 
-      expect(session.fromTeam).toBe(null);
+      expect(session.fromTeam).toBe("team-beta");
       expect(session.toTeam).toBe("backend");
       expect(session.sessionId).toBe(sessionId);
     });
@@ -108,13 +108,13 @@ describe("SessionStore", () => {
       expect(retrieved?.toTeam).toBe("backend");
     });
 
-    it("should handle null fromTeam", () => {
-      store.create(null, "backend", "uuid-null");
+    it("should handle team-beta fromTeam", () => {
+      store.create("team-beta", "backend", "uuid-team-beta");
 
-      const retrieved = store.getByTeamPair(null, "backend");
+      const retrieved = store.getByTeamPair("team-beta", "backend");
 
       expect(retrieved).toBeDefined();
-      expect(retrieved?.fromTeam).toBe(null);
+      expect(retrieved?.fromTeam).toBe("team-beta");
       expect(retrieved?.toTeam).toBe("backend");
     });
 
@@ -160,7 +160,7 @@ describe("SessionStore", () => {
       // Create test data
       store.create("frontend", "backend", "session-1");
       store.create("mobile", "backend", "session-2");
-      store.create(null, "backend", "session-3");
+      store.create("team-beta", "backend", "session-3");
       store.create("frontend", "database", "session-4");
     });
 
@@ -177,11 +177,11 @@ describe("SessionStore", () => {
       expect(sessions.every((s) => s.fromTeam === "frontend")).toBe(true);
     });
 
-    it("should filter by null fromTeam", () => {
-      const sessions = store.list({ fromTeam: null });
+    it("should filter by team-beta fromTeam", () => {
+      const sessions = store.list({ fromTeam: "team-beta" });
 
       expect(sessions).toHaveLength(1);
-      expect(sessions[0].fromTeam).toBe(null);
+      expect(sessions[0].fromTeam).toBe("team-beta");
       expect(sessions[0].toTeam).toBe("backend");
     });
 
@@ -309,12 +309,12 @@ describe("SessionStore", () => {
       expect(session).toBe(null);
     });
 
-    it("should handle null fromTeam", () => {
-      store.create(null, "team-beta", "session-null-delete");
+    it("should handle team-beta fromTeam", () => {
+      store.create("team-beta", "team-beta", "session-team-beta-delete");
 
-      store.deleteByTeamPair(null, "team-beta");
+      store.deleteByTeamPair("team-beta", "team-beta");
 
-      const session = store.getByTeamPair(null, "team-beta");
+      const session = store.getByTeamPair("team-beta", "team-beta");
       expect(session).toBe(null);
     });
   });

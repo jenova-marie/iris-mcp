@@ -26,11 +26,6 @@ describe("tell", () => {
     // Setup mock Iris orchestrator
     mockIris = {
       sendMessage: vi.fn(),
-      clearOutputCache: vi.fn(),
-      isAwake: vi.fn().mockReturnValue(true),
-      getAsyncQueue: vi.fn().mockReturnValue({
-        enqueue: vi.fn().mockReturnValue("task-id-123"),
-      }),
     } as unknown as IrisOrchestrator;
   });
 
@@ -44,6 +39,7 @@ describe("tell", () => {
 
       const result = await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Hello team",
           waitForResponse: true,
@@ -52,6 +48,7 @@ describe("tell", () => {
       );
 
       expect(result).toMatchObject({
+        from: "team-beta",
         to: "team-alpha",
         message: "Hello team",
         response: "Response from team",
@@ -60,13 +57,11 @@ describe("tell", () => {
         async: false,
       });
 
-      // Cache clearing disabled in bare-bones mode
-      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
+        "team-beta",
         "team-alpha",
         "Hello team",
-        { timeout: 30000, waitForResponse: true }
+        { timeout: 30000 }
       );
     });
 
@@ -75,6 +70,7 @@ describe("tell", () => {
 
       await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Hello",
           waitForResponse: true,
@@ -84,40 +80,24 @@ describe("tell", () => {
       );
 
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
-        "team-alpha",
-        "Hello",
-        { timeout: 60000, waitForResponse: true }
-      );
-    });
-
-    it("should include fromTeam when provided", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
-
-      const result = await tell(
-        {
-          fromTeam: "team-beta",
-          toTeam: "team-alpha",
-          message: "Inter-team message",
-          waitForResponse: true,
-        },
-        mockIris
-      );
-
-      expect(result.from).toBe("team-beta");
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
         "team-beta",
         "team-alpha",
-        "Inter-team message",
-        { timeout: 30000, waitForResponse: true }
+        "Hello",
+        { timeout: 60000 }
       );
     });
   });
 
   describe("asynchronous mode (waitForResponse=false)", () => {
-    it("should send message without waiting", async () => {
+    it("should send message without waiting (timeout=-1)", async () => {
+      vi.mocked(mockIris.sendMessage).mockResolvedValue({
+        status: "async",
+        sessionId: "session-123",
+      });
+
       const result = await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Async message",
           waitForResponse: false,
@@ -125,98 +105,49 @@ describe("tell", () => {
         mockIris
       );
 
-      // In async mode, message is enqueued to AsyncQueue, not sent via sendMessage
-      expect(mockIris.isAwake).toHaveBeenCalledWith(null, "team-alpha");
-      // Cache clearing disabled in bare-bones mode
-      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
-
-      const mockQueue = vi.mocked(mockIris.getAsyncQueue());
-      expect(mockQueue.enqueue).toHaveBeenCalledWith({
-        type: "tell",
-        fromTeam: null,
-        toTeam: "team-alpha",
-        content: "Async message",
-        timeout: 30000,
-      });
+      // Should use timeout=-1 for async mode
+      expect(mockIris.sendMessage).toHaveBeenCalledWith(
+        "team-beta",
+        "team-alpha",
+        "Async message",
+        { timeout: -1 }
+      );
 
       expect(result).toMatchObject({
+        from: "team-beta",
         to: "team-alpha",
         message: "Async message",
         timestamp: expect.any(Number),
         async: true,
-        taskId: "task-id-123",
       });
       expect(result.response).toBeUndefined();
       expect(result.duration).toBeUndefined();
     });
 
-    it("should ignore timeout in async mode", async () => {
+    it("should ignore custom timeout in async mode", async () => {
+      vi.mocked(mockIris.sendMessage).mockResolvedValue({
+        status: "async",
+        sessionId: "session-123",
+      });
+
       await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Async",
           waitForResponse: false,
-          timeout: 60000, // Should still be passed through to AsyncQueue
+          timeout: 60000, // Should be ignored, use -1 instead
         },
         mockIris
       );
 
-      const mockQueue = vi.mocked(mockIris.getAsyncQueue());
-      expect(mockQueue.enqueue).toHaveBeenCalledWith({
-        type: "tell",
-        fromTeam: null,
-        toTeam: "team-alpha",
-        content: "Async",
-        timeout: 60000,
-      });
-    });
-  });
-
-  describe("cache clearing", () => {
-    it("should not clear cache in bare-bones mode (disabled)", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
-
-      await tell(
-        {
-          toTeam: "team-alpha",
-          message: "Message",
-        },
-        mockIris
+      // Should still use -1 for async mode
+      expect(mockIris.sendMessage).toHaveBeenCalledWith(
+        "team-beta",
+        "team-alpha",
+        "Async",
+        { timeout: -1 }
       );
-
-      // Cache clearing is disabled in bare-bones mode
-      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
-    });
-
-    it("should not clear cache even when clearCache=true (disabled)", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
-
-      await tell(
-        {
-          toTeam: "team-alpha",
-          message: "Message",
-          clearCache: true,
-        },
-        mockIris
-      );
-
-      // Cache clearing is disabled in bare-bones mode regardless of parameter
-      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
-    });
-
-    it("should not clear cache when clearCache=false", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
-
-      await tell(
-        {
-          toTeam: "team-alpha",
-          message: "Message",
-          clearCache: false,
-        },
-        mockIris
-      );
-
-      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
     });
   });
 
@@ -247,10 +178,14 @@ describe("tell", () => {
     it("should not validate timeout when waitForResponse=false", async () => {
       const { validateTimeout } = await import("../../../src/utils/validation.js");
 
-      vi.mocked(mockIris.sendMessage).mockResolvedValue(undefined);
+      vi.mocked(mockIris.sendMessage).mockResolvedValue({
+        status: "async",
+        sessionId: "session-123",
+      });
 
       await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Async message",
           waitForResponse: false,
@@ -272,31 +207,13 @@ describe("tell", () => {
       await expect(
         tell(
           {
+            fromTeam: "team-beta",
             toTeam: "team-alpha",
             message: "Message",
           },
           mockIris
         )
       ).rejects.toThrow("Send failed");
-    });
-
-    it("should not call clearOutputCache in bare-bones mode (no errors to propagate)", async () => {
-      vi.mocked(mockIris.clearOutputCache).mockRejectedValue(
-        new Error("Cache clear failed")
-      );
-      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
-
-      // Should not throw because clearOutputCache is never called
-      const result = await tell(
-        {
-          toTeam: "team-alpha",
-          message: "Message",
-        },
-        mockIris
-      );
-
-      expect(result.response).toBe("Response");
-      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
     });
 
     it("should handle timeout errors", async () => {
@@ -307,6 +224,7 @@ describe("tell", () => {
       await expect(
         tell(
           {
+            fromTeam: "team-beta",
             toTeam: "team-alpha",
             message: "Message",
             timeout: 1000,
@@ -325,6 +243,7 @@ describe("tell", () => {
 
       const result = await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
           waitForResponse: true,
@@ -336,10 +255,14 @@ describe("tell", () => {
     });
 
     it("should not track duration for async requests", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue(undefined);
+      vi.mocked(mockIris.sendMessage).mockResolvedValue({
+        status: "async",
+        sessionId: "session-123",
+      });
 
       const result = await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
           waitForResponse: false,
@@ -357,6 +280,7 @@ describe("tell", () => {
 
       const result = await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
         },
@@ -372,6 +296,7 @@ describe("tell", () => {
 
       await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
         },
@@ -379,48 +304,48 @@ describe("tell", () => {
       );
 
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        null,
+        "team-beta",
         "team-alpha",
         "Message",
-        { timeout: 30000, waitForResponse: true }
+        { timeout: 30000 }
       );
-    });
-
-    it("should not clear cache even with default clearCache=true (disabled in bare-bones)", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
-
-      await tell(
-        {
-          toTeam: "team-alpha",
-          message: "Message",
-        },
-        mockIris
-      );
-
-      // Cache clearing disabled in bare-bones mode
-      expect(mockIris.clearOutputCache).not.toHaveBeenCalled();
     });
   });
 
-  describe("persist mode (commented out)", () => {
-    it("should not support persist mode currently", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
+  describe("response handling", () => {
+    it("should handle empty string responses", async () => {
+      vi.mocked(mockIris.sendMessage).mockResolvedValue("");
 
-      // persist parameter is ignored since notification queue is disabled
       const result = await tell(
         {
+          fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
-          persist: true,
-          ttlDays: 7,
         },
         mockIris
       );
 
-      // Should fall back to regular synchronous mode
-      expect(result.notificationId).toBeUndefined();
-      expect(result.expiresAt).toBeUndefined();
-      expect(mockIris.sendMessage).toHaveBeenCalled();
+      expect(result.response).toBe("");
+      expect(result.async).toBe(false);
+    });
+
+    it("should handle object responses with status field", async () => {
+      vi.mocked(mockIris.sendMessage).mockResolvedValue({
+        status: "busy",
+        message: "Team is processing another request",
+      });
+
+      const result = await tell(
+        {
+          fromTeam: "team-beta",
+          toTeam: "team-alpha",
+          message: "Message",
+        },
+        mockIris
+      );
+
+      expect(result.response).toBe("Team is processing another request");
+      expect(result.async).toBe(false);
     });
   });
 });

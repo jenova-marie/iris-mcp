@@ -244,10 +244,10 @@ describe("ClaudeProcessPool Integration", () => {
       // Should have at least these 2 teams (may have more from previous tests)
       expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
       expect(status.maxProcesses).toBe(10); // From config.json config
-      expect(status.processes).toHaveProperty("external->team-alpha");
-      expect(status.processes).toHaveProperty("external->team-beta");
-      expect(status.processes["external->team-alpha"].status).toBe("idle");
-      expect(status.processes["external->team-beta"].status).toBe("idle");
+      expect(status.processes).toHaveProperty("team-beta->team-alpha");
+      expect(status.processes).toHaveProperty("team-beta->team-beta");
+      expect(status.processes["team-beta->team-alpha"].status).toBe("idle");
+      expect(status.processes["team-beta->team-beta"].status).toBe("idle");
     });
 
     it("should get individual process from pool", async () => {
@@ -318,8 +318,8 @@ describe("ClaudeProcessPool Integration", () => {
         // Both processes should exist in pool (may have others from previous tests)
         const status = pool.getStatus();
         expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
-        expect(status.processes).toHaveProperty("external->team-alpha");
-        expect(status.processes).toHaveProperty("external->team-beta");
+        expect(status.processes).toHaveProperty("team-beta->team-alpha");
+        expect(status.processes).toHaveProperty("team-beta->team-beta");
       },
       sessionInitTimeout,
     );
@@ -481,7 +481,7 @@ describe("ClaudeProcessPool Integration", () => {
       // Process should be removed from pool (back to initial count or less)
       const status = pool.getStatus();
       expect(status.totalProcesses).toBeLessThanOrEqual(initialCount);
-      expect(status.processes).not.toHaveProperty("external->team-alpha");
+      expect(status.processes).not.toHaveProperty("team-beta->team-alpha");
     });
 
     it(

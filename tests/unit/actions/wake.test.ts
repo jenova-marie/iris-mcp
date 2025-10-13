@@ -28,19 +28,15 @@ describe("wake", () => {
   let mockProcess: ClaudeProcess;
 
   beforeEach(() => {
-    // Setup mock process
+    // Setup mock process with new API
     mockProcess = {
-      getMetrics: vi.fn().mockReturnValue({
+      getBasicMetrics: vi.fn().mockReturnValue({
+        teamName: "team-alpha",
         pid: 12345,
-        sessionId: "session-123",
-        status: "idle",
-        messagesProcessed: 0,
-        lastUsed: Date.now(),
         uptime: 1000,
-        idleTimeRemaining: 299000,
-        queueLength: 0,
-        messageCount: 0,
-        lastActivity: Date.now(),
+        isReady: true,
+        isSpawning: false,
+        isBusy: false,
       }),
     } as unknown as ClaudeProcess;
 
@@ -63,16 +59,15 @@ describe("wake", () => {
       }),
       getProcess: vi.fn(),
       getOrCreateProcess: vi.fn(),
-      clearOutputCache: vi.fn(),
     } as unknown as ClaudeProcessPool;
 
     // Setup mock session manager
     mockSessionManager = {
       getOrCreateSession: vi.fn().mockResolvedValue({
         sessionId: "new-session-456",
-        fromTeam: null,
+        fromTeam: "team-beta",
         toTeam: "team-alpha",
-        createdAt: Date.now(),
+        createdAt: new Date(),
       }),
     } as unknown as SessionManager;
   });
@@ -86,51 +81,34 @@ describe("wake", () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
 
       const result = await wake(
-        { team: "team-alpha" },
+        { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
       expect(result).toMatchObject({
         team: "team-alpha",
         status: "awake",
         pid: 12345,
-        sessionId: "session-123",
         duration: expect.any(Number),
         timestamp: expect.any(Number),
       });
 
-      // clearOutputCache not called in bare-bones mode
-      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
       expect(mockSessionManager.getOrCreateSession).not.toHaveBeenCalled();
       expect(mockProcessPool.getOrCreateProcess).not.toHaveBeenCalled();
     });
 
-    it("should skip cache clearing when clearCache=false", async () => {
-      vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
-
-      await wake(
-        { team: "team-alpha", clearCache: false },
-        mockIris,
-        mockProcessPool,
-        mockSessionManager
-      );
-
-      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
-    });
-
-    it("should include fromTeam in logging", async () => {
+    it("should include fromTeam in logging context", async () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
 
       await wake(
         { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
-      // fromTeam is used for logging context
       expect(mockProcessPool.getProcess).toHaveBeenCalledWith("team-alpha");
     });
   });
@@ -142,62 +120,57 @@ describe("wake", () => {
 
     it("should wake up asleep team", async () => {
       const newProcess = {
-        getMetrics: vi.fn().mockReturnValue({
+        getBasicMetrics: vi.fn().mockReturnValue({
+          teamName: "team-alpha",
           pid: 67890,
-          sessionId: "new-session-456",
-          status: "spawning",
-          messagesProcessed: 0,
-          lastUsed: Date.now(),
           uptime: 0,
-          idleTimeRemaining: 300000,
-          queueLength: 0,
-          messageCount: 0,
-          lastActivity: Date.now(),
+          isReady: false,
+          isSpawning: true,
+          isBusy: false,
         }),
       } as unknown as ClaudeProcess;
 
-      vi.mocked(mockProcessPool.getOrCreateProcess).mockResolvedValue(newProcess);
+      vi.mocked(mockProcessPool.getOrCreateProcess).mockResolvedValue(
+        newProcess,
+      );
 
       const result = await wake(
-        { team: "team-alpha" },
+        { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
       expect(result).toMatchObject({
         team: "team-alpha",
         status: "waking",
         pid: 67890,
-        sessionId: "new-session-456",
         message: "Team team-alpha is waking up and will be ready shortly",
         duration: expect.any(Number),
         timestamp: expect.any(Number),
       });
 
       expect(mockSessionManager.getOrCreateSession).toHaveBeenCalledWith(
-        null,
-        "team-alpha"
+        "team-beta",
+        "team-alpha",
       );
       expect(mockProcessPool.getOrCreateProcess).toHaveBeenCalledWith(
         "team-alpha",
         "new-session-456",
-        null
+        "team-beta",
       );
-      // clearOutputCache not called in bare-bones mode
-      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
 
     it("should handle session creation failure", async () => {
       vi.mocked(mockSessionManager.getOrCreateSession).mockRejectedValue(
-        new Error("Session creation failed")
+        new Error("Session creation failed"),
       );
 
       const result = await wake(
-        { team: "team-alpha" },
+        { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
       expect(result).toMatchObject({
@@ -211,14 +184,14 @@ describe("wake", () => {
 
     it("should handle process creation failure", async () => {
       vi.mocked(mockProcessPool.getOrCreateProcess).mockRejectedValue(
-        new Error("Process spawn failed")
+        new Error("Process spawn failed"),
       );
 
       const result = await wake(
-        { team: "team-alpha" },
+        { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
       expect(result).toMatchObject({
@@ -232,70 +205,19 @@ describe("wake", () => {
 
     it("should handle non-Error failures", async () => {
       vi.mocked(mockProcessPool.getOrCreateProcess).mockRejectedValue(
-        "String error"
+        "String error",
       );
 
       const result = await wake(
-        { team: "team-alpha" },
+        { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
-      expect(result.message).toBe("Failed to wake team team-alpha: String error");
-    });
-  });
-
-  describe("cache clearing (disabled in bare-bones mode)", () => {
-    it("should not clear cache for newly woken team (caching disabled)", async () => {
-      vi.mocked(mockProcessPool.getProcess).mockReturnValue(undefined);
-      vi.mocked(mockProcessPool.getOrCreateProcess).mockResolvedValue(mockProcess);
-
-      await wake(
-        { team: "team-alpha" },
-        mockIris,
-        mockProcessPool,
-        mockSessionManager
+      expect(result.message).toBe(
+        "Failed to wake team team-alpha: String error",
       );
-
-      // clearOutputCache not called in bare-bones mode
-      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
-    });
-
-    it("should only create process (no cache clearing)", async () => {
-      vi.mocked(mockProcessPool.getProcess).mockReturnValue(undefined);
-
-      const callOrder: string[] = [];
-
-      vi.mocked(mockProcessPool.getOrCreateProcess).mockImplementation(async () => {
-        callOrder.push("createProcess");
-        return mockProcess;
-      });
-
-      await wake(
-        { team: "team-alpha" },
-        mockIris,
-        mockProcessPool,
-        mockSessionManager
-      );
-
-      // Only createProcess called, no clearCache in bare-bones mode
-      expect(callOrder).toEqual(["createProcess"]);
-      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
-    });
-
-    it("should not clear cache regardless of clearCache parameter", async () => {
-      vi.mocked(mockProcessPool.getProcess).mockReturnValue(undefined);
-      vi.mocked(mockProcessPool.getOrCreateProcess).mockResolvedValue(mockProcess);
-
-      await wake(
-        { team: "team-alpha", clearCache: false },
-        mockIris,
-        mockProcessPool,
-        mockSessionManager
-      );
-
-      expect(mockProcessPool.clearOutputCache).not.toHaveBeenCalled();
     });
   });
 
@@ -303,20 +225,20 @@ describe("wake", () => {
     it("should throw ConfigurationError for unknown team", async () => {
       await expect(
         wake(
-          { team: "unknown-team" },
+          { team: "unknown-team", fromTeam: "team-beta" },
           mockIris,
           mockProcessPool,
-          mockSessionManager
-        )
+          mockSessionManager,
+        ),
       ).rejects.toThrow(ConfigurationError);
 
       await expect(
         wake(
-          { team: "unknown-team" },
+          { team: "unknown-team", fromTeam: "team-beta" },
           mockIris,
           mockProcessPool,
-          mockSessionManager
-        )
+          mockSessionManager,
+        ),
       ).rejects.toThrow("Unknown team: unknown-team");
     });
 
@@ -327,18 +249,20 @@ describe("wake", () => {
 
       await expect(
         wake(
-          { team: "team-alpha" },
+          { team: "team-alpha", fromTeam: "team-beta" },
           mockIris,
           mockProcessPool,
-          mockSessionManager
-        )
+          mockSessionManager,
+        ),
       ).rejects.toThrow("Config error");
     });
   });
 
   describe("validation", () => {
     it("should validate team names", async () => {
-      const { validateTeamName } = await import("../../../src/utils/validation.js");
+      const { validateTeamName } = await import(
+        "../../../src/utils/validation.js"
+      );
       const mockValidate = vi.mocked(validateTeamName);
 
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
@@ -347,7 +271,7 @@ describe("wake", () => {
         { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
       expect(mockValidate).toHaveBeenCalledWith("team-alpha");
@@ -360,10 +284,10 @@ describe("wake", () => {
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(mockProcess);
 
       const result = await wake(
-        { team: "team-alpha" },
+        { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
       expect(result.duration).toBeGreaterThanOrEqual(0);
@@ -372,33 +296,28 @@ describe("wake", () => {
 
     it("should return metrics from existing process", async () => {
       const customMetrics = {
+        teamName: "team-alpha",
         pid: 99999,
-        sessionId: "custom-session",
-        status: "processing" as const,
-        messagesProcessed: 10,
-        lastUsed: Date.now(),
         uptime: 60000,
-        idleTimeRemaining: 240000,
-        queueLength: 2,
-        messageCount: 10,
-        lastActivity: Date.now(),
+        isReady: true,
+        isSpawning: false,
+        isBusy: true,
       };
 
       const customProcess = {
-        getMetrics: vi.fn().mockReturnValue(customMetrics),
+        getBasicMetrics: vi.fn().mockReturnValue(customMetrics),
       } as unknown as ClaudeProcess;
 
       vi.mocked(mockProcessPool.getProcess).mockReturnValue(customProcess);
 
       const result = await wake(
-        { team: "team-alpha" },
+        { team: "team-alpha", fromTeam: "team-beta" },
         mockIris,
         mockProcessPool,
-        mockSessionManager
+        mockSessionManager,
       );
 
       expect(result.pid).toBe(99999);
-      expect(result.sessionId).toBe("custom-session");
     });
   });
 });

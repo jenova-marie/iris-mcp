@@ -36,13 +36,14 @@ describe("SessionManager", () => {
       mkdirSync(path, { recursive: true });
     }
 
-    // Create test configuration
+    // Create test configuration with new responseTimeout setting
     testConfig = {
       settings: {
         idleTimeout: 300000,
         maxProcesses: 5,
         healthCheckInterval: 30000,
         sessionInitTimeout: 30000,
+        responseTimeout: 120000, // NEW: Required for new architecture
       },
       teams: {
         "team-alpha": {
@@ -99,7 +100,10 @@ describe("SessionManager", () => {
 
     it("should validate all team project paths", async () => {
       const invalidConfig: TeamsConfig = {
-        settings: testConfig.settings,
+        settings: {
+          ...testConfig.settings,
+          responseTimeout: 120000,
+        },
         teams: {
           "invalid-team": {
             path: "/nonexistent/path/12345",
@@ -127,7 +131,7 @@ describe("SessionManager", () => {
       await manager.initialize();
 
       // Should not throw when calling methods that require initialization
-      expect(() => manager.getSession(null, "team-alpha")).not.toThrow();
+      expect(() => manager.getSession("team-beta", "team-alpha")).not.toThrow();
     });
   });
 
@@ -152,10 +156,13 @@ describe("SessionManager", () => {
       expect(session.messageCount).toBe(0);
     });
 
-    it("should create session with null fromTeam", async () => {
-      const session = await manager.getOrCreateSession(null, "team-beta");
+    it("should create session with fromTeam team-beta", async () => {
+      const session = await manager.getOrCreateSession(
+        "team-beta",
+        "team-beta",
+      );
 
-      expect(session.fromTeam).toBe(null);
+      expect(session.fromTeam).toBe("team-beta");
       expect(session.toTeam).toBe("team-beta");
     });
 
@@ -233,10 +240,10 @@ describe("SessionManager", () => {
       expect(retrieved?.sessionId).toBe(created.sessionId);
     });
 
-    it("should handle null fromTeam", async () => {
-      const session = await manager.createSession(null, "team-beta");
+    it("should handle team-beta fromTeam", async () => {
+      const session = await manager.createSession("team-beta", "team-beta");
 
-      expect(session.fromTeam).toBe(null);
+      expect(session.fromTeam).toBe("team-beta");
       expect(session.toTeam).toBe("team-beta");
     });
   });
@@ -300,25 +307,22 @@ describe("SessionManager", () => {
       await manager.initialize();
     });
 
-    it("should return pre-initialized sessions after init", () => {
+    it("should return empty list after init", () => {
       const sessions = manager.listSessions();
 
-      // Initialize creates one session per team (null -> teamName)
-      expect(sessions).toHaveLength(3);
-      expect(sessions.every((s) => s.fromTeam === null)).toBe(true);
+      // New architecture: sessions are created on-demand, not pre-initialized
+      expect(sessions).toHaveLength(0);
     });
 
     it("should list all sessions", async () => {
       await manager.createSession("team-alpha", "team-beta");
       await manager.createSession("team-beta", "team-alpha");
-      await manager.createSession(null, "team-c");
+      await manager.createSession("team-beta", "team-c");
 
       const sessions = manager.listSessions();
 
-      // 3 from init (null→team-alpha, null→team-beta, null→team-c)
-      // 3 from test (team-alpha→team-beta, team-beta→team-alpha, null→team-c duplicate)
-      // createSession() doesn't check for duplicates
-      expect(sessions).toHaveLength(6);
+      // 3 created sessions (no pre-initialization in new architecture)
+      expect(sessions).toHaveLength(3);
     });
 
     it("should filter by fromTeam", async () => {
@@ -339,8 +343,8 @@ describe("SessionManager", () => {
 
       const sessions = manager.listSessions({ toTeam: "team-beta" });
 
-      // 1 from init (null→team-beta) + 2 created (team-alpha→team-beta, team-c→team-beta)
-      expect(sessions).toHaveLength(3);
+      // 2 created sessions to team-beta (no pre-initialization in new architecture)
+      expect(sessions).toHaveLength(2);
       expect(sessions.every((s) => s.toTeam === "team-beta")).toBe(true);
     });
   });
@@ -424,9 +428,9 @@ describe("SessionManager", () => {
 
       const stats = manager.getStats();
 
-      // 3 from init + 3 created = 6 total
-      expect(stats.total).toBe(6);
-      expect(stats.active).toBe(6);
+      // 3 created sessions (no pre-initialization in new architecture)
+      expect(stats.total).toBe(3);
+      expect(stats.active).toBe(3);
       expect(stats.totalMessages).toBe(10);
     });
   });
@@ -437,7 +441,10 @@ describe("SessionManager", () => {
       mkdirSync(pathValue, { recursive: true });
 
       const configWithPath: TeamsConfig = {
-        settings: testConfig.settings,
+        settings: {
+          ...testConfig.settings,
+          responseTimeout: 120000,
+        },
         teams: {
           "test-team": {
             path: pathValue,

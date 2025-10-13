@@ -283,12 +283,17 @@ export class IrisOrchestrator {
     // Check if process exists for this session
     const process = this.processPool.getProcessBySessionId(session.sessionId);
     if (!process) {
-      logger.debug("Team not awake: no process", { fromTeam, toTeam, sessionId: session.sessionId });
+      logger.debug("Team not awake: no process", {
+        fromTeam,
+        toTeam,
+        sessionId: session.sessionId,
+      });
       return false;
     }
 
     const metrics = process.getMetrics();
-    const isReady = metrics.status !== "spawning" && metrics.status !== "stopped";
+    const isReady =
+      metrics.status !== "spawning" && metrics.status !== "stopped";
 
     logger.debug("Team awake check", {
       fromTeam,

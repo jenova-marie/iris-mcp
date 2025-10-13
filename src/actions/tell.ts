@@ -101,54 +101,12 @@ export async function tell(
     validateTeamName(fromTeam);
   }
 
-  // // Mode 1: Persistent notification (fire-and-forget to queue) - DISABLED
-  // if (persist) {
-  //   if (!notificationQueue) {
-  //     throw new Error(
-  //       "NotificationQueue is required for persistent notifications",
-  //     );
-  //   }
-
-  //   logger.info("Creating persistent notification", {
-  //     from: fromTeam,
-  //     to: toTeam,
-  //     ttlDays,
-  //   });
-
-  //   try {
-  //     const notification = notificationQueue.add(
-  //       toTeam,
-  //       message,
-  //       fromTeam,
-  //       ttlDays,
-  //     );
-
-  //     logger.info("Persistent notification created", {
-  //       id: notification.id,
-  //       toTeam,
-  //     });
-
-  //     return {
-  //       from: fromTeam,
-  //       to: toTeam,
-  //       message,
-  //       timestamp: notification.timestamp,
-  //       async: true,
-  //       notificationId: notification.id,
-  //       expiresAt: notification.expiresAt,
-  //     };
-  //   } catch (error) {
-  //     logger.error("Failed to create persistent notification", error);
-  //     throw error;
-  //   }
-  // }
-
-  // Mode 2 & 3: Live request via IrisOrchestrator
+  // Live request via IrisOrchestrator
   if (waitForResponse) {
     validateTimeout(timeout);
   }
 
-  // Mode 3: Asynchronous request (use AsyncQueue)
+  // Asynchronous request (use AsyncQueue)
   if (!waitForResponse) {
     // Check if team is awake first
     if (!iris.isAwake(fromTeam || null, toTeam)) {

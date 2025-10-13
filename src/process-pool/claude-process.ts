@@ -38,6 +38,9 @@ export class ClaudeProcess extends EventEmitter {
   private initPingCompleted = false;
   private debugLogPath: string | null = null;
 
+  // Track expected num_turns for sequence validation
+  private expectedNumTurns: number | null = null;
+
   // Cache for passive message observation
   private cache: ClaudeCache;
   private currentCacheMessageId: string | null = null;
@@ -727,7 +730,10 @@ export class ClaudeProcess extends EventEmitter {
         const jsonResponse = JSON.parse(line);
 
         // Store protocol message in cache
-        this.cache.addProtocolMessage(line, this.currentCacheMessageId || undefined);
+        this.cache.addProtocolMessage(
+          line,
+          this.currentCacheMessageId || undefined,
+        );
 
         this.logger.debug("Successfully parsed JSON", {
           type: jsonResponse.type,
@@ -737,6 +743,8 @@ export class ClaudeProcess extends EventEmitter {
           eventType: jsonResponse.event?.type,
           messageContent: jsonResponse.message?.content ? "present" : "missing",
           sessionId: jsonResponse.session_id ? "present" : "missing",
+          allKeys: Object.keys(jsonResponse), // Log ALL top-level keys
+          eventKeys: jsonResponse.event ? Object.keys(jsonResponse.event) : [], // Log ALL event keys
         });
 
         // Handle different message types from Claude stream-json output
@@ -861,12 +869,52 @@ export class ClaudeProcess extends EventEmitter {
         } else if (jsonResponse.type === "result") {
           // Final result message with stats - THIS is when we resolve!
           // This comes after all tool executions and message cycles are complete.
+
+          const receivedNumTurns = jsonResponse.num_turns;
+
+          // CRITICAL: Validate num_turns sequence to detect timeout contamination
+          if (
+            this.expectedNumTurns !== null &&
+            receivedNumTurns !== this.expectedNumTurns
+          ) {
+            this.logger.error("⚠️  TIMEOUT CONTAMINATION DETECTED", {
+              expectedNumTurns: this.expectedNumTurns,
+              receivedNumTurns,
+              teamName: this.teamName,
+              hasCurrentMessage: !!this.currentMessage,
+              currentMessagePreview: this.currentMessage?.message.substring(
+                0,
+                100,
+              ),
+              textAccumulatorLength: this.textAccumulator.length,
+              explanation:
+                "Received response from a different (likely timed-out) request. Protocol state is corrupted.",
+            });
+
+            // Terminate process to prevent further contamination
+            this.logger.error(
+              "Terminating process due to protocol contamination",
+            );
+            this.terminate().catch((err) => {
+              this.logger.error(
+                "Failed to terminate contaminated process",
+                err,
+              );
+            });
+            return;
+          }
+
+          // Update expected num_turns for next message
+          this.expectedNumTurns = receivedNumTurns + 1;
+
           this.logger.debug("Received result message", {
             cost: jsonResponse.total_cost_usd,
             duration: jsonResponse.duration_ms,
             error: jsonResponse.is_error,
             hasCurrentMessage: !!this.currentMessage,
             accumulatedLength: this.textAccumulator.length,
+            numTurns: receivedNumTurns,
+            expectedNextNumTurns: this.expectedNumTurns,
           });
 
           if (this.currentMessage) {
@@ -907,16 +955,19 @@ export class ClaudeProcess extends EventEmitter {
               });
 
               if (this.textAccumulator.length === 0) {
-                this.logger.error("CRITICAL: About to resolve with EMPTY textAccumulator", {
-                  teamName: this.teamName,
-                  hasCurrentMessage: !!this.currentMessage,
-                  currentMessageText: this.currentMessage?.message,
-                  resultData: {
-                    cost: jsonResponse.total_cost_usd,
-                    duration: jsonResponse.duration_ms,
-                    numTurns: jsonResponse.num_turns,
+                this.logger.error(
+                  "CRITICAL: About to resolve with EMPTY textAccumulator",
+                  {
+                    teamName: this.teamName,
+                    hasCurrentMessage: !!this.currentMessage,
+                    currentMessageText: this.currentMessage?.message,
+                    resultData: {
+                      cost: jsonResponse.total_cost_usd,
+                      duration: jsonResponse.duration_ms,
+                      numTurns: jsonResponse.num_turns,
+                    },
                   },
-                });
+                );
               }
 
               this.currentMessage.resolve(this.textAccumulator);

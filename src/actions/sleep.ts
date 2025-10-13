@@ -14,8 +14,8 @@ export interface SleepInput {
   /** Team to put to sleep */
   team: string;
 
-  /** Optional: Team requesting the sleep */
-  fromTeam?: string;
+  /** Team requesting the sleep */
+  fromTeam: string;
 
   /** Force termination even if process is busy */
   force?: boolean;
@@ -56,11 +56,9 @@ export async function sleep(
 ): Promise<SleepOutput> {
   const { team, fromTeam, force = false, clearCache = true } = input;
 
-  // Validate team name
+  // Validate team names
   validateTeamName(team);
-  if (fromTeam) {
-    validateTeamName(fromTeam);
-  }
+  validateTeamName(fromTeam);
 
   logger.info("Putting team to sleep", { team, fromTeam, force });
 
@@ -92,7 +90,7 @@ export async function sleep(
     }
 
     // Get process metrics before termination
-    const metrics = existingProcess.getMetrics();
+    const metrics = existingProcess.getBasicMetrics();
     const pid = metrics.pid;
     const sessionId = metrics.sessionId;
     const pendingMessages = metrics.messageCount;

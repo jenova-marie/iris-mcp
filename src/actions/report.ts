@@ -14,8 +14,8 @@ export interface ReportInput {
   /** Team whose output cache to view */
   team: string;
 
-  /** Optional: Team requesting the report */
-  fromTeam?: string;
+  /** Team requesting the report */
+  fromTeam: string;
 }
 
 export interface ReportOutput {
@@ -44,11 +44,9 @@ export async function report(
 ): Promise<ReportOutput> {
   const { team, fromTeam } = input;
 
-  // Validate team name
+  // Validate team names
   validateTeamName(team);
-  if (fromTeam) {
-    validateTeamName(fromTeam);
-  }
+  validateTeamName(fromTeam);
 
   logger.info("Reporting at team output cache", { team, fromTeam });
 

@@ -10,6 +10,5 @@ export * from "./wake.js";
 export * from "./sleep.js";
 export * from "./isAwake.js";
 export * from "./wake-all.js";
-export * from "./cache.js";
 export * from "./getTeamName.js";
 export * from "./teams.js";

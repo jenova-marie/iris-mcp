@@ -1,15 +1,13 @@
 /**
  * Iris MCP Module: tell
- * Core MCP functionality for telling messages to teams
+ * Core MCP functionality for sending messages to teams
  *
  * Modes:
- * 1. Synchronous (waitForResponse=true, persist=false): Tell message and wait for response
- * 2. Asynchronous (waitForResponse=false, persist=false): Tell message without waiting
- * 3. Persistent (persist=true): Fire-and-forget to persistent queue
+ * 1. Synchronous (waitForResponse=true): Send message and wait for response (uses provided timeout)
+ * 2. Asynchronous (waitForResponse=false): Send message without waiting (uses timeout=-1)
  */
 
 import type { IrisOrchestrator } from "../iris.js";
-// import type { NotificationQueue } from "../messages/queue.js";
 import {
   validateTeamName,
   validateMessage,
@@ -26,8 +24,8 @@ export interface TellInput {
   /** Message content */
   message: string;
 
-  /** Team sending the message (optional) */
-  fromTeam?: string;
+  /** Team sending the message */
+  fromTeam: string;
 
   /** Wait for response (default: true). Ignored if persist=true */
   waitForResponse?: boolean;
@@ -80,7 +78,6 @@ export interface TellOutput {
 export async function tell(
   input: TellInput,
   iris: IrisOrchestrator,
-  // notificationQueue?: NotificationQueue,
 ): Promise<TellOutput> {
   const {
     fromTeam,
@@ -95,97 +92,81 @@ export async function tell(
 
   // Validate inputs
   validateTeamName(toTeam);
+  validateTeamName(fromTeam);
   validateMessage(message);
 
-  if (fromTeam) {
-    validateTeamName(fromTeam);
-  }
+  // Determine timeout value based on waitForResponse
+  // waitForResponse=false → timeout=-1 (async mode)
+  // waitForResponse=true → use provided timeout
+  const actualTimeout = waitForResponse ? timeout : -1;
 
-  // Live request via IrisOrchestrator
   if (waitForResponse) {
     validateTimeout(timeout);
   }
 
-  // Asynchronous request (use AsyncQueue)
-  if (!waitForResponse) {
-    // Check if team is awake first
-    if (!iris.isAwake(fromTeam || null, toTeam)) {
-      logger.warn("Team is asleep, cannot enqueue async message", {
-        fromTeam,
-        toTeam,
-      });
+  const startTime = Date.now();
 
-      return {
-        from: fromTeam,
-        to: toTeam,
-        message,
-        response: "Team is asleep. Use 'wake' action first.",
-        timestamp: Date.now(),
-        async: true,
-      };
-    }
-
-    // No cache to clear in bare-bones mode
-
-    // Enqueue to AsyncQueue for processing
-    try {
-      const taskId = iris.getAsyncQueue().enqueue({
-        type: "tell",
-        fromTeam: fromTeam || null,
-        toTeam,
-        content: message,
-        timeout,
-      });
-
-      logger.info("Task enqueued to AsyncQueue", { taskId, toTeam });
-
-      return {
-        from: fromTeam,
-        to: toTeam,
-        message,
-        timestamp: Date.now(),
-        async: true,
-        taskId, // Include taskId for tracking
-      };
-    } catch (error) {
-      logger.error("Failed to enqueue async message", error);
-      throw error;
-    }
-  }
-
-  // Mode 2: Synchronous request (wait for response)
-  logger.info("Sending synchronous request to team", {
+  logger.info("Sending message to team", {
     from: fromTeam,
     to: toTeam,
-    clearCache,
+    async: !waitForResponse,
+    timeout: actualTimeout,
     messageLength: message.length,
     messagePreview: message.substring(0, 50),
   });
 
-  const startTime = Date.now();
-
   try {
-    // No cache to clear in bare-bones mode
-
-    logger.debug("Calling iris.sendMessage", {
-      fromTeam: fromTeam || "null",
-      toTeam,
-      timeout,
-      waitForResponse: true,
-    });
-
-    const response = await iris.sendMessage(fromTeam || null, toTeam, message, {
-      timeout,
-      waitForResponse: true,
+    const result = await iris.sendMessage(fromTeam, toTeam, message, {
+      timeout: actualTimeout,
     });
 
     const duration = Date.now() - startTime;
+
+    // Handle async response (result is an object)
+    if (typeof result === "object" && result !== null) {
+      const resultObj = result as any;
+
+      // Async mode response
+      if (resultObj.status === "async") {
+        logger.info("Message sent in async mode", {
+          toTeam,
+          sessionId: resultObj.sessionId,
+        });
+
+        return {
+          from: fromTeam,
+          to: toTeam,
+          message,
+          timestamp: Date.now(),
+          async: true,
+        };
+      }
+
+      // Busy or other status
+      logger.warn("Received non-string response", {
+        toTeam,
+        status: resultObj.status,
+        result: JSON.stringify(result),
+      });
+
+      return {
+        from: fromTeam,
+        to: toTeam,
+        message,
+        response: resultObj.message || JSON.stringify(result),
+        duration,
+        timestamp: Date.now(),
+        async: false,
+      };
+    }
+
+    // Handle string response (successful completion)
+    const response = result as string;
 
     logger.info("Received response from team", {
       toTeam,
       duration,
       responseLength: response?.length || 0,
-      responseType: typeof response,
       responsePreview: response?.substring(0, 100),
       isEmpty: !response || response.length === 0,
     });
@@ -210,7 +191,7 @@ export async function tell(
       async: false,
     };
   } catch (error) {
-    logger.error("Failed to send request to team", {
+    logger.error("Failed to send message to team", {
       error: error instanceof Error ? error.message : error,
       stack: error instanceof Error ? error.stack : undefined,
       toTeam,

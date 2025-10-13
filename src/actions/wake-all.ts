@@ -11,8 +11,8 @@ import { Logger } from "../utils/logger.js";
 const logger = new Logger("mcp:wake-all");
 
 export interface WakeAllInput {
-  /** Optional: Team requesting the wake-all */
-  fromTeam?: string;
+  /** Team requesting the wake-all */
+  fromTeam: string;
 
   /** Wake teams in parallel (NOT RECOMMENDED - parallel Claude spawning is unstable and causes timeouts) */
   parallel?: boolean;
@@ -85,7 +85,7 @@ export async function wakeAll(
         const existingProcess = processPool.getProcess(teamName);
 
         if (existingProcess) {
-          const metrics = existingProcess.getMetrics();
+          const metrics = existingProcess.getBasicMetrics();
           alreadyAwake++;
           return {
             team: teamName,
@@ -95,9 +95,9 @@ export async function wakeAll(
         }
 
         // Wake up the team
-        const session = await sessionManager.getOrCreateSession(null, teamName);
-        const process = await processPool.getOrCreateProcess(teamName, session.sessionId);
-        const metrics = process.getMetrics();
+        const session = await sessionManager.getOrCreateSession(fromTeam, teamName);
+        const process = await processPool.getOrCreateProcess(teamName, session.sessionId, fromTeam);
+        const metrics = process.getBasicMetrics();
 
         woken++;
         return {
@@ -127,7 +127,7 @@ export async function wakeAll(
         const existingProcess = processPool.getProcess(teamName);
 
         if (existingProcess) {
-          const metrics = existingProcess.getMetrics();
+          const metrics = existingProcess.getBasicMetrics();
           alreadyAwake++;
           results.push({
             team: teamName,
@@ -138,9 +138,9 @@ export async function wakeAll(
         }
 
         // Wake up the team
-        const session = await sessionManager.getOrCreateSession(null, teamName);
-        const process = await processPool.getOrCreateProcess(teamName, session.sessionId);
-        const metrics = process.getMetrics();
+        const session = await sessionManager.getOrCreateSession(fromTeam, teamName);
+        const process = await processPool.getOrCreateProcess(teamName, session.sessionId, fromTeam);
+        const metrics = process.getBasicMetrics();
 
         woken++;
         results.push({

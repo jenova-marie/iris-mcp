@@ -30,8 +30,8 @@ export interface CommandInput {
   /** Optional arguments for the command */
   args?: string;
 
-  /** Team requesting the command (optional) */
-  fromTeam?: string;
+  /** Team requesting the command */
+  fromTeam: string;
 
   /** Wait for response (default: true) */
   waitForResponse?: boolean;
@@ -81,9 +81,7 @@ export async function command(
 
   // Validate inputs
   validateTeamName(team);
-  if (fromTeam) {
-    validateTeamName(fromTeam);
-  }
+  validateTeamName(fromTeam);
   if (waitForResponse) {
     validateTimeout(timeout);
   }
@@ -117,91 +115,75 @@ export async function command(
   // Build the full command string
   const fullCommand = args ? `/${commandName} ${args}` : `/${commandName}`;
 
-  // Async mode: Use AsyncQueue
-  if (!waitForResponse) {
-    // Check if team is awake first
-    if (!iris.isAwake(fromTeam || null, team)) {
-      logger.warn("Team is asleep, cannot enqueue async command", {
-        fromTeam,
-        team,
-        command: fullCommand,
-      });
+  // Determine timeout value based on waitForResponse
+  // waitForResponse=false → timeout=-1 (async mode)
+  // waitForResponse=true → use provided timeout
+  const actualTimeout = waitForResponse ? timeout : -1;
 
-      return {
-        team,
-        command: fullCommand,
-        response: "Team is asleep. Use 'wake' action first.",
-        success: false,
-        timestamp: Date.now(),
-        async: true,
-      };
-    }
-
-    // Enqueue to AsyncQueue for processing
-    try {
-      const taskId = iris.getAsyncQueue().enqueue({
-        type: "command",
-        fromTeam: fromTeam || null,
-        toTeam: team,
-        content: commandName, // Just the command name (without slash)
-        args: args, // Optional arguments
-        timeout,
-      });
-
-      logger.info("Command enqueued to AsyncQueue", {
-        taskId,
-        team,
-        command: fullCommand,
-      });
-
-      return {
-        team,
-        command: fullCommand,
-        success: true,
-        timestamp: Date.now(),
-        async: true,
-        taskId,
-      };
-    } catch (error) {
-      logger.error("Failed to enqueue async command", {
-        team,
-        command: fullCommand,
-        error,
-      });
-
-      return {
-        team,
-        command: fullCommand,
-        response: error instanceof Error ? error.message : String(error),
-        success: false,
-        timestamp: Date.now(),
-        async: true,
-      };
-    }
-  }
-
-  // Sync mode: Send immediately and wait
-  logger.info("Sending command to team (sync)", {
+  logger.info("Sending command to team", {
     team,
     command: fullCommand,
     fromTeam,
+    async: !waitForResponse,
+    timeout: actualTimeout,
   });
 
   const startTime = Date.now();
 
   try {
     // Send the command to Claude
-    const response = await iris.sendMessage(
-      fromTeam || null,
+    const result = await iris.sendMessage(
+      fromTeam,
       team,
       fullCommand,
       {
-        timeout,
-        waitForResponse: true,
+        timeout: actualTimeout,
       }
     );
 
     const duration = Date.now() - startTime;
+
+    // Handle async response (result is an object)
+    if (typeof result === "object" && result !== null) {
+      const resultObj = result as any;
+
+      // Async mode response
+      if (resultObj.status === "async") {
+        logger.info("Command sent in async mode", {
+          team,
+          command: fullCommand,
+          sessionId: resultObj.sessionId,
+        });
+
+        return {
+          team,
+          command: fullCommand,
+          success: true,
+          timestamp: Date.now(),
+          async: true,
+        };
+      }
+
+      // Busy or other status
+      logger.warn("Received non-string response for command", {
+        team,
+        command: fullCommand,
+        status: resultObj.status,
+      });
+
+      return {
+        team,
+        command: fullCommand,
+        response: resultObj.message || JSON.stringify(result),
+        success: false,
+        duration,
+        timestamp: Date.now(),
+        async: false,
+      };
+    }
+
+    // Handle string response (successful completion)
+    const response = result as string;
 
     logger.info("Command completed", {
       team,

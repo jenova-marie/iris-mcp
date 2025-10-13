@@ -16,8 +16,8 @@ export interface WakeInput {
   /** Team to wake up */
   team: string;
 
-  /** Optional: Team requesting the wake */
-  fromTeam?: string;
+  /** Team requesting the wake */
+  fromTeam: string;
 
   /** Clear the output cache (default: true) */
   clearCache?: boolean;
@@ -54,11 +54,9 @@ export async function wake(
 ): Promise<WakeOutput> {
   const { team, fromTeam, clearCache = true } = input;
 
-  // Validate team name
+  // Validate team names
   validateTeamName(team);
-  if (fromTeam) {
-    validateTeamName(fromTeam);
-  }
+  validateTeamName(fromTeam);
 
   logger.info("Checking team status for wake", { team, fromTeam });
 
@@ -76,7 +74,7 @@ export async function wake(
 
     if (existingProcess) {
       // Team is already awake
-      const metrics = existingProcess.getMetrics();
+      const metrics = existingProcess.getBasicMetrics();
       const duration = Date.now() - startTime;
 
       logger.info("Team already awake", {
@@ -102,12 +100,12 @@ export async function wake(
     logger.info("Waking up team", { team, fromTeam });
 
     try {
-      // Get or create session for fromTeam -> team (or external -> team if fromTeam not provided)
-      const session = await sessionManager.getOrCreateSession(fromTeam ?? null, team);
+      // Get or create session for fromTeam -> team
+      const session = await sessionManager.getOrCreateSession(fromTeam, team);
 
       // Create process in pool (this will spawn it with session-specific pool key)
-      const process = await processPool.getOrCreateProcess(team, session.sessionId, fromTeam ?? null);
-      const metrics = process.getMetrics();
+      const process = await processPool.getOrCreateProcess(team, session.sessionId, fromTeam);
+      const metrics = process.getBasicMetrics();
 
       // No cache to clear in bare-bones mode
 

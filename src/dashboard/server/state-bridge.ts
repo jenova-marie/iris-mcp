@@ -1,24 +1,46 @@
 /**
  * Iris MCP - Dashboard State Bridge
  * Provides read-only access to MCP server state for dashboard
- * Forwards events from process pool for real-time updates
+ * Forwards events from process pool and session manager for real-time updates
+ *
+ * ARCHITECTURE: Combines SessionManager (source of truth) with Pool (runtime state)
+ * - SessionManager: Persistent session data (SQLite) - ALL sessions
+ * - ProcessPool: Runtime process status - ACTIVE processes only
+ * - Bridge: Merges both to show complete picture
  */
 
 import { EventEmitter } from "events";
 import type { ClaudeProcessPool } from "../../process-pool/pool-manager.js";
+import type { SessionManager } from "../../session/session-manager.js";
 import type { TeamsConfigManager } from "../../config/teams-config.js";
-import type { TeamsConfig, ProcessMetrics } from "../../process-pool/types.js";
+import type { TeamsConfig } from "../../process-pool/types.js";
 import { Logger } from "../../utils/logger.js";
 
 const logger = new Logger("dashboard-bridge");
 
-export interface ProcessInfo extends ProcessMetrics {
-  teamName: string;
-}
+/**
+ * Session-based process info (fromTeam->toTeam pairs)
+ * Combines persistent session data with runtime process status
+ */
+export interface SessionProcessInfo {
+  poolKey: string; // "fromTeam->toTeam"
+  fromTeam: string;
+  toTeam: string;
+  sessionId: string;
 
-export interface CacheStreamData {
-  type: "stdout" | "stderr";
-  line: string;
+  // Session data (from SessionManager)
+  messageCount: number;        // Total messages in session (persistent)
+  createdAt: number;           // Session creation time
+  lastUsedAt: number;          // Last activity time
+  sessionStatus: string;       // Session status (active/archived)
+
+  // Process data (from ProcessPool - may be null if not running)
+  processState: string;        // Process state (stopped/spawning/idle/processing)
+  pid?: number;                // Process ID (if running)
+  messagesProcessed: number;   // Messages processed by current process
+  uptime: number;              // Process uptime (0 if stopped)
+  queueLength: number;         // Process queue length (0 if stopped)
+  lastResponseAt: number | null; // Last response timestamp
 }
 
 /**
@@ -28,6 +50,7 @@ export interface CacheStreamData {
 export class DashboardStateBridge extends EventEmitter {
   constructor(
     private pool: ClaudeProcessPool,
+    private sessionManager: SessionManager,
     private configManager: TeamsConfigManager,
   ) {
     super();
@@ -35,36 +58,37 @@ export class DashboardStateBridge extends EventEmitter {
   }
 
   /**
-   * Forward events from process pool to dashboard clients
+   * Forward events from process pool and session manager to dashboard clients
    */
   private setupEventForwarding(): void {
     // Forward process lifecycle events
-    this.pool.on("process-spawned", (teamName: string, pid: number) => {
-      logger.debug("Forwarding process-spawned event", { teamName, pid });
+    this.pool.on("process-spawned", (data: { poolKey: string; pid: number }) => {
+      logger.debug("Forwarding process-spawned event", data);
       this.emit("ws:process-status", {
-        teamName,
+        poolKey: data.poolKey,
         status: "spawning",
-        pid,
+        pid: data.pid,
       });
     });
 
-    this.pool.on("process-terminated", (teamName: string) => {
-      logger.debug("Forwarding process-terminated event", { teamName });
+    this.pool.on("process-terminated", (data: { poolKey: string }) => {
+      logger.debug("Forwarding process-terminated event", data);
       this.emit("ws:process-status", {
-        teamName,
+        poolKey: data.poolKey,
         status: "stopped",
       });
     });
 
-    this.pool.on("process-status", (teamName: string, status: string) => {
-      logger.debug("Forwarding process-status event", { teamName, status });
-      const process = this.pool.getProcess(teamName);
-      const metrics = process ? process.getBasicMetrics() : null;
+    this.pool.on("process-status", (data: { poolKey: string; status: string }) => {
+      logger.debug("Forwarding process-status event", data);
+
+      const [fromTeam, toTeam] = data.poolKey.split("->") as [string, string];
 
       this.emit("ws:process-status", {
-        teamName,
-        status,
-        ...metrics,
+        poolKey: data.poolKey,
+        fromTeam,
+        toTeam,
+        status: data.status,
       });
     });
 
@@ -97,121 +121,139 @@ export class DashboardStateBridge extends EventEmitter {
   }
 
   /**
-   * Get active process information for all running processes
+   * Get all sessions (fromTeam->toTeam pairs)
+   * Combines SessionManager (persistent) with ProcessPool (runtime)
+   *
+   * Architecture:
+   * - SessionManager is source of truth (shows ALL sessions)
+   * - ProcessPool provides runtime status (only active processes)
+   * - Result: Complete view of all sessions with their current state
    */
-  getActiveProcesses(): ProcessInfo[] {
-    const teamNames = this.configManager.getTeamNames();
-    const processes: ProcessInfo[] = [];
+  getActiveSessions(): SessionProcessInfo[] {
+    // Get ALL sessions from SessionManager (source of truth)
+    const sessions = this.sessionManager.listSessions();
 
-    for (const teamName of teamNames) {
-      const process = this.pool.getProcess(teamName);
+    // Get runtime process status from pool
+    const poolStatus = this.pool.getStatus();
 
-      if (process) {
-        const metrics = process.getBasicMetrics();
-        processes.push({
-          teamName,
-          ...metrics,
-        });
-      } else {
-        // Process not running, show as stopped
-        processes.push({
-          teamName,
-          pid: undefined,
-          status: "stopped",
-          messagesProcessed: 0,
-          lastUsed: 0,
-          uptime: 0,
-          idleTimeRemaining: 0,
-          queueLength: 0,
-          messageCount: 0,
-          lastActivity: 0,
-        });
+    const sessionProcesses: SessionProcessInfo[] = [];
+
+    for (const session of sessions) {
+      const poolKey = `${session.fromTeam}->${session.toTeam}`;
+
+      // Try to get runtime process info (may not exist if process stopped)
+      const processInfo = poolStatus.processes[poolKey];
+
+      // Skip sessions with null fromTeam (shouldn't exist in new architecture)
+      if (!session.fromTeam) {
+        logger.warn("Skipping session with null fromTeam", { sessionId: session.sessionId, toTeam: session.toTeam });
+        continue;
       }
+
+      sessionProcesses.push({
+        poolKey,
+        fromTeam: session.fromTeam,
+        toTeam: session.toTeam,
+        sessionId: session.sessionId,
+
+        // Session data (from SessionManager - persistent)
+        messageCount: session.messageCount,
+        createdAt: session.createdAt.getTime(),
+        lastUsedAt: session.lastUsedAt.getTime(),
+        sessionStatus: session.status,
+
+        // Process data (from Pool - may be defaults if no process)
+        processState: session.processState || 'stopped',
+        pid: processInfo?.pid,
+        messagesProcessed: processInfo?.messagesProcessed || 0,
+        uptime: processInfo?.uptime || 0,
+        queueLength: processInfo?.queueLength || 0,
+        lastResponseAt: session.lastResponseAt,
+      });
     }
 
-    return processes;
+    return sessionProcesses;
   }
 
   /**
-   * Get metrics for a specific team process
+   * Get metrics for a specific session
+   * Combines SessionManager (persistent) with ProcessPool (runtime)
    */
-  getProcessMetrics(teamName: string): ProcessInfo | null {
-    const process = this.pool.getProcess(teamName);
+  getSessionMetrics(fromTeam: string, toTeam: string): SessionProcessInfo | null {
+    // Get session from SessionManager (source of truth)
+    const session = this.sessionManager.getSession(fromTeam, toTeam);
 
-    if (!process) {
-      return {
-        teamName,
-        pid: undefined,
-        status: "stopped",
-        messagesProcessed: 0,
-        lastUsed: 0,
-        uptime: 0,
-        idleTimeRemaining: 0,
-        queueLength: 0,
-        messageCount: 0,
-        lastActivity: 0,
-      };
-    }
-
-    const metrics = process.getBasicMetrics();
-    return {
-      teamName,
-      ...metrics,
-    };
-  }
-
-  /**
-   * Get cache data for a specific team process
-   * Returns stdout and stderr buffers
-   */
-  getProcessCache(teamName: string): { stdout: string; stderr: string } | null {
-    const process = this.pool.getProcess(teamName);
-
-    if (!process) {
+    if (!session) {
       return null;
     }
 
-    // ClaudeProcess doesn't currently expose cache directly
-    // This will need to be added to ClaudeProcess later
-    // For now, return empty buffers
+    // Skip sessions with null fromTeam (shouldn't exist in new architecture)
+    if (!session.fromTeam) {
+      logger.warn("Cannot get metrics for session with null fromTeam", { sessionId: session.sessionId, toTeam: session.toTeam });
+      return null;
+    }
+
+    const poolKey = `${fromTeam}->${toTeam}`;
+
+    // Try to get runtime process info
+    const poolStatus = this.pool.getStatus();
+    const processInfo = poolStatus.processes[poolKey];
+
     return {
-      stdout: "",
-      stderr: "",
+      poolKey,
+      fromTeam: session.fromTeam,
+      toTeam: session.toTeam,
+      sessionId: session.sessionId,
+
+      // Session data (from SessionManager - persistent)
+      messageCount: session.messageCount,
+      createdAt: session.createdAt.getTime(),
+      lastUsedAt: session.lastUsedAt.getTime(),
+      sessionStatus: session.status,
+
+      // Process data (from Pool - may be defaults if no process)
+      processState: session.processState || 'stopped',
+      pid: processInfo?.pid,
+      messagesProcessed: processInfo?.messagesProcessed || 0,
+      uptime: processInfo?.uptime || 0,
+      queueLength: processInfo?.queueLength || 0,
+      lastResponseAt: session.lastResponseAt,
     };
   }
 
   /**
-   * Stream cache output for a specific team
-   * Emits 'cache-stream' events with new data
+   * Get cache data for a specific session
+   * TODO: Implement when CacheManager is available in dashboard
    */
-  streamProcessCache(teamName: string): boolean {
-    const process = this.pool.getProcess(teamName);
+  getSessionCache(sessionId: string): any[] {
+    logger.warn("getSessionCache not yet implemented", { sessionId });
+    return [];
+  }
 
-    if (!process) {
-      return false;
-    }
-
-    // This will be implemented when we add cache streaming to ClaudeProcess
-    // For now, just return true if process exists
-    logger.info("Cache streaming requested for team", { teamName });
-    return true;
+  /**
+   * Stream cache output for a specific session
+   * TODO: Implement when CacheManager is available in dashboard
+   */
+  streamSessionCache(sessionId: string): boolean {
+    logger.warn("streamSessionCache not yet implemented", { sessionId });
+    return false;
   }
 
   /**
    * Get process pool status summary
    */
   getPoolStatus(): {
-    totalProcesses: number;
+    totalSessions: number;
     activeProcesses: number;
     maxProcesses: number;
     configuredTeams: number;
   } {
-    const processes = this.getActiveProcesses();
-    const activeCount = processes.filter((p) => p.status !== "stopped").length;
+    const sessions = this.getActiveSessions();
+    const activeCount = sessions.filter((s) => s.processState !== "stopped").length;
     const config = this.getConfig();
 
     return {
-      totalProcesses: processes.length,
+      totalSessions: sessions.length,
       activeProcesses: activeCount,
       maxProcesses: config.settings.maxProcesses,
       configuredTeams: this.getTeamNames().length,

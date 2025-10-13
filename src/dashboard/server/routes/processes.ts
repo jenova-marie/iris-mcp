@@ -1,6 +1,6 @@
 /**
  * Iris MCP Dashboard - Processes API Routes
- * GET endpoints for process monitoring
+ * Session-based process monitoring (fromTeam->toTeam)
  */
 
 import { Router } from 'express';
@@ -13,40 +13,40 @@ const router = Router();
 export function createProcessesRouter(bridge: DashboardStateBridge): Router {
   /**
    * GET /api/processes
-   * Returns list of all processes with their status
+   * Returns all active sessions (fromTeam->toTeam pairs)
    */
   router.get('/', (req, res) => {
     try {
-      const processes = bridge.getActiveProcesses();
+      const sessions = bridge.getActiveSessions();
       const poolStatus = bridge.getPoolStatus();
 
       res.json({
         success: true,
-        processes,
+        sessions,
         poolStatus,
       });
     } catch (error: any) {
-      logger.error('Failed to get processes', error);
+      logger.error('Failed to get sessions', error);
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to retrieve processes',
+        error: error.message || 'Failed to retrieve sessions',
       });
     }
   });
 
   /**
-   * GET /api/processes/:team
-   * Returns detailed metrics for a specific team process
+   * GET /api/processes/:fromTeam/:toTeam
+   * Returns detailed metrics for a specific session
    */
-  router.get('/:team', (req, res) => {
+  router.get('/:fromTeam/:toTeam', (req, res) => {
     try {
-      const { team } = req.params;
-      const metrics = bridge.getProcessMetrics(team);
+      const { fromTeam, toTeam } = req.params;
+      const metrics = bridge.getSessionMetrics(fromTeam, toTeam);
 
       if (!metrics) {
         return res.status(404).json({
           success: false,
-          error: `Process not found for team: ${team}`,
+          error: `Session not found: ${fromTeam}->${toTeam}`,
         });
       }
 
@@ -55,40 +55,33 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         metrics,
       });
     } catch (error: any) {
-      logger.error('Failed to get process metrics', error);
+      logger.error('Failed to get session metrics', error);
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to retrieve process metrics',
+        error: error.message || 'Failed to retrieve session metrics',
       });
     }
   });
 
   /**
-   * GET /api/processes/:team/cache
-   * Returns process cache (stdout/stderr buffers)
-   * Note: Cache streaming is handled via WebSocket
+   * GET /api/processes/cache/:sessionId
+   * Returns cache entries for a specific session
    */
-  router.get('/:team/cache', (req, res) => {
+  router.get('/cache/:sessionId', (req, res) => {
     try {
-      const { team } = req.params;
-      const cache = bridge.getProcessCache(team);
-
-      if (!cache) {
-        return res.status(404).json({
-          success: false,
-          error: `Process not found for team: ${team}`,
-        });
-      }
+      const { sessionId } = req.params;
+      const cache = bridge.getSessionCache(sessionId);
 
       res.json({
         success: true,
-        cache,
+        sessionId,
+        entries: cache,
       });
     } catch (error: any) {
-      logger.error('Failed to get process cache', error);
+      logger.error('Failed to get session cache', error);
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to retrieve process cache',
+        error: error.message || 'Failed to retrieve session cache',
       });
     }
   });

@@ -62,7 +62,7 @@ export async function startDashboardServer(
 
     // Send initial state
     socket.emit('init', {
-      processes: bridge.getActiveProcesses(),
+      sessions: bridge.getActiveSessions(),
       poolStatus: bridge.getPoolStatus(),
       config: bridge.getConfig(),
     });
@@ -85,14 +85,14 @@ export async function startDashboardServer(
     bridge.on('ws:config-saved', configSavedHandler);
     bridge.on('ws:cache-stream', cacheStreamHandler);
 
-    // Handle client requests to stream cache for a specific team
-    socket.on('stream-cache', (teamName: string) => {
-      logger.info('Client requested cache stream', { teamName, socketId: socket.id });
-      const started = bridge.streamProcessCache(teamName);
+    // Handle client requests to stream cache for a specific session
+    socket.on('stream-cache', (sessionId: string) => {
+      logger.info('Client requested cache stream', { sessionId, socketId: socket.id });
+      const started = bridge.streamSessionCache(sessionId);
 
       if (!started) {
         socket.emit('error', {
-          message: `Failed to start cache stream for team: ${teamName}`,
+          message: `Failed to start cache stream for session: ${sessionId}`,
         });
       }
     });

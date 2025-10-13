@@ -33,18 +33,20 @@ export class ProcessBusyError extends Error {
  * Basic process metrics - compatible with ProcessMetrics interface
  */
 export interface BasicProcessMetrics {
-  pid: number | undefined;
+  teamName: string;
+  pid: number | null;
   status: 'spawning' | 'idle' | 'processing' | 'stopped';
   messagesProcessed: number;
   lastUsed: number;
   uptime: number;
   idleTimeRemaining: number;
   queueLength: number;
-  sessionId?: string;
+  sessionId: string;
   messageCount: number;
   lastActivity: number;
   // Helper properties derived from status
   isReady: boolean;
+  isSpawning: boolean;
   isBusy: boolean;
 }
 
@@ -72,7 +74,7 @@ export class ClaudeProcess extends EventEmitter {
   constructor(
     public readonly teamName: string,
     private teamConfig: TeamConfig,
-    public readonly sessionId: string | null,
+    public readonly sessionId: string,
   ) {
     super();
     this.logger = new Logger(`process:${teamName}`);
@@ -353,8 +355,8 @@ export class ClaudeProcess extends EventEmitter {
     // Build args
     const args: string[] = [];
 
-    // Resume existing session if sessionId provided (not in test mode)
-    if (this.sessionId && process.env.NODE_ENV !== "test") {
+    // Resume existing session (not in test mode)
+    if (process.env.NODE_ENV !== "test") {
       args.push("--resume", this.sessionId);
     }
 
@@ -610,18 +612,20 @@ export class ClaudeProcess extends EventEmitter {
     }
 
     return {
-      pid: this.childProcess?.pid,
+      teamName: this.teamName,
+      pid: this.childProcess?.pid ?? null,
       status,
       messagesProcessed: this.messagesProcessed,
       lastUsed: this.lastUsed || this.spawnTime,
       uptime: this.childProcess ? Date.now() - this.spawnTime : 0,
       idleTimeRemaining: 0, // Iris manages timeouts, not ClaudeProcess
       queueLength: 0, // No queue in dumb pipe model
-      sessionId: this.sessionId || undefined,
+      sessionId: this.sessionId,
       messageCount: this.messageCount,
       lastActivity: this.lastActivity || this.spawnTime,
       // Helper properties
       isReady: this.isReady,
+      isSpawning: !this.isReady && this.childProcess !== null,
       isBusy: this.currentCacheEntry !== null,
     };
   }

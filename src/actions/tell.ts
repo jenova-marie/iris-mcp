@@ -98,7 +98,7 @@ export async function tell(
 
   try {
     const result = await iris.sendMessage(fromTeam, toTeam, message, {
-      timeout: actualTimeout,
+      timeout,
     });
 
     const duration = Date.now() - startTime;

@@ -117,7 +117,7 @@ export async function command(
   try {
     // Send the command to Claude
     const result = await iris.sendMessage(fromTeam, team, fullCommand, {
-      timeout: actualTimeout,
+      timeout,
     });
 
     const duration = Date.now() - startTime;

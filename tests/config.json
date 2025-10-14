@@ -6,7 +6,8 @@
     "maxProcesses": 10,
     "healthCheckInterval": 30000,
     "httpPort": 1616,
-    "defaultTransport": "stdio"
+    "defaultTransport": "stdio",
+    "wonderLoggerConfig": "./wonder-logger.yaml"
   },
   "teams": {
     "team-iris": {

@@ -271,6 +271,7 @@ describe("Actions Integration Tests (New Architecture)", () => {
           fromTeam: "team-iris",
           toTeam: "team-beta",
           message: "Async test message",
+          timeout: -1, // Async mode: return immediately
         },
         iris,
       );
@@ -312,6 +313,7 @@ describe("Actions Integration Tests (New Architecture)", () => {
           team: "team-beta",
           fromTeam: "team-iris",
           command: "compact",
+          timeout: -1, // Async mode: return immediately
         },
         iris,
       );

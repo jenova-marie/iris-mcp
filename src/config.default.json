@@ -6,7 +6,8 @@
     "maxProcesses": 10,
     "healthCheckInterval": 30000,
     "httpPort": 1615,
-    "defaultTransport": "http"
+    "defaultTransport": "http",
+    "wonderLoggerConfig": "./wonder-logger.yaml"
   },
   "dashboard": {
     "enabled": true,

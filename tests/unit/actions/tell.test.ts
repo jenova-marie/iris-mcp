@@ -97,11 +97,12 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Async message",
+          timeout: -1, // Explicitly request async mode
         },
         mockIris,
       );
 
-      // Should use timeout=-1 for async mode
+      // Should pass timeout=-1 for async mode
       expect(mockIris.sendMessage).toHaveBeenCalledWith(
         "team-beta",
         "team-alpha",
@@ -117,31 +118,6 @@ describe("tell", () => {
       });
       expect(result.response).toBeUndefined();
       expect(result.duration).toBeUndefined();
-    });
-
-    it("should ignore custom timeout in async mode", async () => {
-      vi.mocked(mockIris.sendMessage).mockResolvedValue({
-        status: "async",
-        sessionId: "session-123",
-      });
-
-      await tell(
-        {
-          fromTeam: "team-beta",
-          toTeam: "team-alpha",
-          message: "Async",
-          timeout: 60000, // Should be ignored, use -1 instead
-        },
-        mockIris,
-      );
-
-      // Should still use -1 for async mode
-      expect(mockIris.sendMessage).toHaveBeenCalledWith(
-        "team-beta",
-        "team-alpha",
-        "Async",
-        { timeout: -1 },
-      );
     });
   });
 
@@ -166,29 +142,6 @@ describe("tell", () => {
       expect(vi.mocked(validateTeamName)).toHaveBeenCalledWith("team-beta");
       expect(vi.mocked(validateMessage)).toHaveBeenCalledWith("Test message");
       expect(vi.mocked(validateTimeout)).toHaveBeenCalledWith(45000);
-    });
-
-    it("should not validate timeout ???", async () => {
-      const { validateTimeout } = await import(
-        "../../../src/utils/validation.js"
-      );
-
-      vi.mocked(mockIris.sendMessage).mockResolvedValue({
-        status: "async",
-        sessionId: "session-123",
-      });
-
-      await tell(
-        {
-          fromTeam: "team-beta",
-          toTeam: "team-alpha",
-          message: "Async message",
-          timeout: 45000,
-        },
-        mockIris,
-      );
-
-      expect(vi.mocked(validateTimeout)).not.toHaveBeenCalled();
     });
   });
 
@@ -259,6 +212,7 @@ describe("tell", () => {
           fromTeam: "team-beta",
           toTeam: "team-alpha",
           message: "Message",
+          timeout: -1, // Request async mode
         },
         mockIris,
       );

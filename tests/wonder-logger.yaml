@@ -1,0 +1,64 @@
+# Wonder Logger Configuration for Tests
+# Simplified configuration with OTEL/metrics/tracing disabled
+# Only console and file logging enabled
+
+# =============================================================================
+# Service Metadata
+# =============================================================================
+service:
+  name: ${SERVICE_NAME:-iris-mcp-test}
+  version: ${SERVICE_VERSION:-1.0.0}
+  environment: ${NODE_ENV:-test}
+
+# =============================================================================
+# Logger Configuration
+# =============================================================================
+logger:
+  enabled: true
+
+  # Log level for tests - use 'silent' to suppress all logs, or 'info' for debugging
+  level: ${LOG_LEVEL:-warn}
+
+  # Fields to redact from logs
+  redact:
+    - password
+    - token
+    - apiKey
+    - secret
+
+  # Transports define where logs are sent
+  transports:
+    # Console transport for test output
+    - type: console
+      pretty: false  # JSON format for tests
+      level: ${LOG_LEVEL:-warn}
+
+    # File transport (write to disk)
+    - type: file
+      dir: ./tests/logs
+      fileName: test.log
+      level: ${LOG_LEVEL:-warn}
+      mkdir: true
+      sync: false
+
+  # Plugins - all disabled for tests
+  plugins:
+    traceContext: false
+    morganStream: false
+
+# =============================================================================
+# OpenTelemetry Configuration - DISABLED FOR TESTS
+# =============================================================================
+otel:
+  # Disable all OpenTelemetry functionality in tests
+  enabled: false
+
+  tracing:
+    enabled: false
+
+  metrics:
+    enabled: false
+
+  instrumentation:
+    auto: false
+    http: false

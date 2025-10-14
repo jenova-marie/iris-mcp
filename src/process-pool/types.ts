@@ -11,6 +11,7 @@ export interface ProcessPoolConfig {
   responseTimeout: number;
   httpPort?: number;
   defaultTransport?: "stdio" | "http";
+  wonderLoggerConfig?: string; // Path to wonder-logger.yaml config file
 }
 
 export interface TeamConfig {

@@ -14,10 +14,27 @@ import { IrisMcpServer } from "./mcp_server.js";
 import { IrisWebServer } from "./web_server.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
 import { SessionManager } from "./session/session-manager.js";
-import { getChildLogger } from "./utils/logger.js";
+import { initializeObservability, getChildLogger } from "./utils/logger.js";
 import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { addTeam, install, uninstall } from "./cli/index.js";
 
+// Initialize Wonder Logger with config from teams config
+// This must happen BEFORE any getChildLogger() calls
+let wonderLoggerConfigPath = './wonder-logger.yaml'; // default fallback
+try {
+  const configManager = getConfigManager();
+  const config = configManager.load();
+  wonderLoggerConfigPath = config.settings.wonderLoggerConfig || wonderLoggerConfigPath;
+} catch (error) {
+  // Config load failed - use default path
+  // This can happen on first run before config exists
+  console.warn('Config not found, using default wonder-logger.yaml path');
+}
+
+// Initialize observability (logger + OTEL) with the configured path
+initializeObservability(wonderLoggerConfigPath);
+
+// NOW we can safely create loggers
 const logger = getChildLogger("iris:cli");
 
 // Load package.json to get version

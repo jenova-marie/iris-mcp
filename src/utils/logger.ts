@@ -13,6 +13,7 @@
 import {
   createLoggerFromConfig,
   createTelemetryFromConfig,
+  loadConfig,
   type TelemetrySDK
 } from '@recoverysky/wonder-logger';
 
@@ -52,28 +53,40 @@ export function initializeObservability(configPath?: string): {
   }
 
   try {
+    // Load config first to check if OTEL is enabled
+    const config = loadConfig({
+      configPath: configPath || './wonder-logger.yaml',
+      required: true
+    });
+
     // Initialize logger from config
     globalLogger = createLoggerFromConfig({
       configPath: configPath || './wonder-logger.yaml',
       required: true,
     });
 
-    // Initialize OpenTelemetry from config (if enabled)
-    try {
-      globalTelemetry = createTelemetryFromConfig({
-        configPath: configPath || './wonder-logger.yaml',
-        required: false, // OTEL is optional
-      });
+    // Only initialize OpenTelemetry if enabled in config
+    if (config?.otel?.enabled) {
+      try {
+        globalTelemetry = createTelemetryFromConfig({
+          configPath: configPath || './wonder-logger.yaml',
+          required: false, // OTEL is optional
+        });
 
-      globalLogger.info({
-        message: 'Observability initialized successfully',
-        otelEnabled: true
-      });
-    } catch (otelError) {
-      // OTEL initialization failed, but logger works
-      globalLogger.warn({
-        err: otelError instanceof Error ? otelError : new Error(String(otelError))
-      }, 'OpenTelemetry initialization failed, continuing with logging only');
+        globalLogger.info({
+          message: 'Observability initialized successfully',
+          otelEnabled: true
+        });
+      } catch (otelError) {
+        // OTEL initialization failed, but logger works
+        globalLogger.warn({
+          err: otelError instanceof Error ? otelError : new Error(String(otelError))
+        }, 'OpenTelemetry initialization failed, continuing with logging only');
+        globalTelemetry = null;
+      }
+    } else {
+      // OTEL is disabled in config
+      globalLogger.info('OpenTelemetry disabled in configuration');
       globalTelemetry = null;
     }
 

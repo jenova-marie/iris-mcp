@@ -1,0 +1,50 @@
+{
+  "settings": {
+    "sessionInitTimeout": 30000,
+    "spawnTimeout": 20000,
+    "responseTimeout": 120000,
+    "idleTimeout": 3600000,
+    "maxProcesses": 10,
+    "healthCheckInterval": 30000,
+    "httpPort": 1615,
+    "defaultTransport": "http",
+    "wonderLoggerConfig": "./wonder-logger.yaml"
+  },
+  "dashboard": {
+    "enabled": true,
+    "port": 3100,
+    "host": "localhost"
+  },
+  "database": {
+    "path": "data/team-sessions.db",
+    "inMemory": false
+  },
+  "teams": {
+    "team-frontend": {
+      "path": "/Users/jenova/projects/myapp/frontend",
+      "description": "React frontend application - minimal config with defaults"
+    },
+    "team-backend": {
+      "path": "/Users/jenova/projects/myapp/backend",
+      "description": "Node.js backend API - custom idle timeout",
+      "idleTimeout": 600000
+    },
+    "team-mobile": {
+      "path": "/Users/jenova/projects/myapp/mobile",
+      "description": "React Native mobile app - auto-approve actions",
+      "skipPermissions": true
+    },
+    "team-devops": {
+      "path": "/Users/jenova/projects/myapp/infra",
+      "description": "Infrastructure and deployment - custom color for UI",
+      "color": "#FF5733"
+    },
+    "team-testing": {
+      "path": "/Users/jenova/projects/myapp/e2e-tests",
+      "description": "End-to-end testing suite - all optional fields configured",
+      "idleTimeout": 1800000,
+      "skipPermissions": true,
+      "color": "#4CAF50"
+    }
+  }
+}

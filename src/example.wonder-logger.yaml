@@ -1,0 +1,111 @@
+# Wonder Logger Configuration Example
+#
+# This file demonstrates all available configuration options for Wonder Logger.
+# Save this as 'wonder-logger.yaml' in your project root.
+#
+# Environment variables can be used with the syntax:
+#   ${VAR_NAME}          - Required variable (throws if not set)
+#   ${VAR_NAME:-default} - Optional variable with default value
+
+# =============================================================================
+# Service Metadata
+# =============================================================================
+service:
+  # Service name (required)
+  name: ${SERVICE_NAME:-iris-mcp}
+
+  # Service version
+  version: ${SERVICE_VERSION:-1.0.0}
+
+  # Deployment environment
+  environment: ${NODE_ENV:-development}
+
+# =============================================================================
+# Logger Configuration
+# =============================================================================
+logger:
+  # Enable/disable logger
+  enabled: true
+
+  # Minimum log level: trace, debug, info, warn, error, fatal, silent
+  level: ${LOG_LEVEL:-info}
+
+  # Fields to redact from logs (useful for sensitive data)
+  redact:
+    - password
+    - token
+    - apiKey
+    - secret
+
+  # Transports define where logs are sent
+  transports:
+    # File transport (write to disk)
+    # NOTE: Using file instead of console to ensure MCP protocol compliance
+    # MCP uses stdout for JSON-RPC protocol, so logs MUST NOT go to stdout
+    - type: file
+      dir: ./logs
+      fileName: iris.log
+      level: ${LOG_LEVEL:-info}
+      mkdir: true # Create directory if it doesn't exist
+      sync: false # Use async I/O for better performance
+
+    # OpenTelemetry transport (send to OTEL Collector/Loki)
+    - type: otel
+      endpoint: ${OTEL_LOGS_ENDPOINT:-http://localhost:4318/v1/logs}
+      level: info
+      exportIntervalMillis: 5000
+
+  # Plugins extend logger functionality
+  plugins:
+    # Inject OpenTelemetry trace context (trace_id, span_id) into logs
+    # Disabled for now - requires @opentelemetry/api peer dependency
+    traceContext: false
+
+    # Provide Morgan-compatible stream for HTTP request logging
+    morganStream: false
+
+# =============================================================================
+# OpenTelemetry Configuration
+# =============================================================================
+otel:
+  # Enable/disable OpenTelemetry
+  enabled: true
+
+  # Distributed Tracing Configuration
+  tracing:
+    enabled: true
+
+    # Exporter type: console, otlp, jaeger
+    exporter: ${OTEL_TRACE_EXPORTER:-otlp}
+
+    # OTLP endpoint (used when exporter is 'otlp')
+    endpoint: ${OTEL_TRACES_ENDPOINT:-http://localhost:4318/v1/traces}
+
+    # Sampling rate (0.0 to 1.0, where 1.0 = 100% of traces)
+    sampleRate: 1.0
+
+  # Metrics Configuration
+  metrics:
+    enabled: true
+
+    # Metrics exporters (can have multiple)
+    exporters:
+      # Prometheus pull exporter (scrape endpoint)
+      - type: prometheus
+        port: 9464  # Must be a number, not env var
+
+      # OTLP push exporter (remote write)
+      - type: otlp
+        endpoint: ${OTEL_METRICS_ENDPOINT:-http://localhost:4318/v1/metrics}
+        exportIntervalMillis: 60000 # Export every 60 seconds
+
+    # Global export interval (overridden by individual exporter settings)
+    exportIntervalMillis: 60000
+
+  # Auto-instrumentation Configuration
+  instrumentation:
+    # Enable automatic instrumentation for common libraries
+    auto: true
+
+    # Include HTTP request/response attribute hooks
+    http: true

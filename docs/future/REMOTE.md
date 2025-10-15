@@ -73,7 +73,7 @@ Enable Iris to:
 1. **Spawn Claude Code processes on remote hosts via SSH**
 2. **Maintain stdio streaming across SSH connections**
 3. **Handle connection failures gracefully with auto-reconnect**
-4. **Cache credentials and connections for performance**
+4. **Track connection state (online/offline/error) in session management**
 5. **Provide transparent experience - remote looks like local**
 
 ---
@@ -279,39 +279,51 @@ interface IrisConfig {
 
 **Challenge:** SSH connections can drop, timeout, or become stale.
 
-**Solution:**
+**Solution: SSH Lifecycle = Session Lifecycle**
 
-- **Connection Pooling**: Reuse SSH connections across multiple operations
-- **Keepalive**: Send periodic keepalive packets (`ServerAliveInterval=30`)
-- **Auto-Reconnect**: Detect disconnections and automatically reconnect
-- **Graceful Degradation**: Queue commands during reconnection attempts
+The key architectural insight is that **each SSH connection is tied to a session** (fromTeam→toTeam pair). There is no separate connection pooling layer - the SSH process IS the session process.
 
 **Implementation:**
 
 ```typescript
-class SSHConnectionPool {
-  private connections = new Map<string, SSHConnection>();
+// One SSH connection per session, managed by existing ProcessPool
+const poolKey = `${fromTeam}->${toTeam}`;  // e.g., "iris->alpha"
+const process = await processPool.getOrCreateProcess(teamName, sessionId, fromTeam);
 
-  async getConnection(remote: string, options: RemoteOptions): Promise<SSHConnection> {
-    const existing = this.connections.get(remote);
+// The SSH connection lives as long as the session lives
+// When session is evicted (LRU), SSH connection terminates
+// When session goes idle, SSH connection idles (with keepalive)
+```
 
-    if (existing && existing.isAlive()) {
-      return existing;
-    }
+**Connection Lifecycle:**
 
-    // Create new connection with keepalive
-    const conn = new SSHConnection(remote, {
-      ...options,
-      serverAliveInterval: 30000,
-      serverAliveCountMax: 3,
-    });
+```
+Session Created → SSH spawned with keepalive (ServerAliveInterval=30s)
+Session Active  → SSH connection maintained
+Session Idle    → SSH connection kept alive (existing idle timeout applies)
+Session Evicted → SSH connection terminated (SIGTERM)
+Network Failure → Session goes OFFLINE, auto-reconnect attempts
+```
 
-    await conn.connect();
-    this.connections.set(remote, conn);
+**Benefits:**
 
-    return conn;
-  }
-}
+- ✅ No separate pooling layer needed (~300 LOC saved)
+- ✅ Existing process pool handles SSH connection limits
+- ✅ Existing idle timeout evicts stale SSH connections
+- ✅ Existing LRU eviction manages SSH connection count
+- ✅ Session state tracks connection health (online/offline/error)
+
+**Keepalive Configuration:**
+
+```typescript
+// RemoteSSHTransport automatically includes keepalive
+const sshCmd = [
+  this.config.remote,
+  '-o', 'ServerAliveInterval=30',      // Send keepalive every 30s
+  '-o', 'ServerAliveCountMax=3',       // 3 failed keepalives = disconnect
+  '-T',                                 // No PTY allocation
+  `"cd ${remotePath} && ${claudeCmd}"`
+].join(' ');
 ```
 
 ### 2. Stdio Streaming Over SSH
@@ -465,50 +477,98 @@ class RemoteSSHTransport implements Transport {
 
 **Impact:** 5-25% slower depending on network conditions. Acceptable trade-off for distributed orchestration.
 
-### 6. Error Handling
+### 6. Error Handling & Session State
 
-**SSH-Specific Errors:**
+**Error Classification:**
 
-- **Connection Refused** - Host unreachable or SSH daemon down
-- **Authentication Failed** - Invalid credentials or keys
-- **Host Key Verification Failed** - Known_hosts mismatch
-- **Connection Timeout** - Network issues or firewall
-- **Connection Dropped** - Mid-operation disconnect
+SSH errors fall into two categories that determine recovery strategy:
 
-**Error Recovery Strategy:**
+**1. Transient Failures (Auto-Reconnect)**
+
+Network issues that typically resolve themselves:
+
+- `ETIMEDOUT` - Connection timeout
+- `ECONNREFUSED` - Connection refused (temporarily)
+- `Connection closed` - Mid-session disconnect
+- `Network is unreachable` - Routing issues
+
+**Action:** Session transitions to `OFFLINE` state, attempts auto-reconnect with exponential backoff.
+
+**2. Permanent Failures (User Intervention Required)**
+
+Configuration or authentication errors that won't resolve automatically:
+
+- `Permission denied (publickey)` - SSH auth failed
+- `Authentication failed` - Invalid credentials
+- `Host key verification failed` - Known_hosts mismatch
+- `REMOTE HOST IDENTIFICATION HAS CHANGED` - Security warning
+- `command not found` - Claude not installed remotely
+- `No such file or directory` - Invalid path
+
+**Action:** Session transitions to `ERROR` state, auto-reconnect stops, user must fix configuration.
+
+**Session State Machine:**
+
+```
+                  ┌──────────┐
+                  │  ONLINE  │ ← Default state, SSH connected
+                  └────┬─────┘
+                       │
+     Network failure   │
+           ┌───────────┘
+           │
+           ▼
+     ┌──────────┐
+     │ OFFLINE  │ ← Transient failure, attempting reconnect
+     └────┬─────┘
+          │
+          ├─── Reconnect success ───> ONLINE
+          │
+          └─── Max retries OR permanent failure ───> ERROR
+                                                      │
+                                                      │
+                                               ┌──────────┐
+                                               │  ERROR   │ ← User must intervene
+                                               └──────────┘
+```
+
+**User Experience:**
 
 ```typescript
-class RemoteSSHTransport {
-  private retryConfig = {
-    maxRetries: 3,
-    backoff: [1000, 5000, 10000], // Exponential backoff
-  };
+// Transient failure - automatic recovery
+User: "Tell team-remote to run tests"
+Response: "Team remote is currently OFFLINE (network issue, reconnecting... attempt 2/5)"
+[5 seconds later]
+Response: "Team remote is back ONLINE. Executing your message..."
 
-  async spawnWithRetry(spawnCacheEntry: CacheEntry): Promise<void> {
-    for (let attempt = 0; attempt < this.retryConfig.maxRetries; attempt++) {
-      try {
-        await this.spawn(spawnCacheEntry);
-        return; // Success
-      } catch (error) {
-        if (this.isRetryable(error) && attempt < this.retryConfig.maxRetries - 1) {
-          const delay = this.retryConfig.backoff[attempt];
-          this.logger.warn('SSH connection failed, retrying...', { attempt, delay });
-          await sleep(delay);
-        } else {
-          throw error; // Give up
-        }
-      }
-    }
-  }
+// Permanent failure - requires action
+User: "Tell team-remote to run tests"
+Response: "Team remote is in ERROR state: SSH authentication failed (Permission denied)"
+Suggestion: "Check SSH key at ~/.ssh/company_rsa or run: ssh-add ~/.ssh/company_rsa"
+```
 
-  private isRetryable(error: Error): boolean {
-    // Retry network issues, not authentication failures
-    return (
-      error.message.includes('ETIMEDOUT') ||
-      error.message.includes('ECONNREFUSED') ||
-      error.message.includes('Connection closed')
-    );
-  }
+**MCP Tool Integration:**
+
+```typescript
+// team_isAwake returns connection state
+{
+  "team": "team-remote",
+  "awake": true,
+  "connectionState": "offline",     // NEW: online | offline | error
+  "reconnectAttempts": 2,            // NEW: current attempt number
+  "maxReconnectAttempts": 5,         // NEW: configured maximum
+  "lastOfflineAt": 1697567890123,    // NEW: timestamp
+  "message": "Network issue, attempting reconnect (attempt 2/5)"
+}
+
+// Error state example
+{
+  "team": "team-remote",
+  "awake": true,
+  "connectionState": "error",
+  "errorMessage": "SSH authentication failed: Permission denied (publickey)",
+  "remediation": "Check SSH key: ssh-add ~/.ssh/company_rsa",
+  "lastOfflineAt": 1697567890123
 }
 ```
 
@@ -566,8 +626,7 @@ src/transport/
 ├── transport.interface.ts       # Transport interface
 ├── local-transport.ts           # LocalTransport (existing logic)
 ├── remote-ssh-transport.ts      # RemoteSSHTransport (new)
-├── transport-factory.ts         # Factory to select transport
-└── ssh-connection-pool.ts       # SSH connection management
+└── transport-factory.ts         # Factory to select transport
 ```
 
 **RemoteSSHTransport Implementation:**
@@ -686,9 +745,105 @@ class RemoteSSHTransport implements Transport {
 }
 ```
 
-### Phase 3: Configuration & Validation
+### Phase 3: Reconnect Logic & Session State
 
-**Goal:** Update config schema and validation.
+**Goal:** Handle transient network failures with auto-reconnect and session state tracking.
+
+**Session State Enhancement:**
+
+The SSH connection lifecycle is tied to the session lifecycle. When connections drop, the session transitions to `offline` state and automatically attempts to reconnect.
+
+**Session States:**
+
+```typescript
+type ConnectionState = 'online' | 'offline' | 'error';
+
+// SQLite schema updates
+ALTER TABLE team_sessions ADD COLUMN connection_state TEXT DEFAULT 'online';
+ALTER TABLE team_sessions ADD COLUMN error_message TEXT;
+ALTER TABLE team_sessions ADD COLUMN last_offline_at INTEGER;
+ALTER TABLE team_sessions ADD COLUMN reconnect_attempts INTEGER DEFAULT 0;
+```
+
+**Auto-Reconnect Implementation:**
+
+```typescript
+class RemoteSSHTransport {
+  private reconnectConfig = {
+    maxAttempts: 5,
+    backoffMs: [1000, 2000, 4000, 8000, 16000], // Exponential backoff
+  };
+
+  private handleDisconnect(): void {
+    // SSH connection dropped mid-session
+    this.emit('offline'); // Iris updates session to OFFLINE
+    this.sessionManager.updateConnectionState(this.sessionId, 'offline');
+
+    this.attemptReconnect();
+  }
+
+  private async attemptReconnect(): Promise<void> {
+    for (let attempt = 0; attempt < this.reconnectConfig.maxAttempts; attempt++) {
+      try {
+        await sleep(this.reconnectConfig.backoffMs[attempt]);
+        await this.reconnect();
+
+        // Success!
+        this.emit('online');
+        this.sessionManager.updateConnectionState(this.sessionId, 'online');
+        this.sessionManager.resetReconnectAttempts(this.sessionId);
+        return;
+
+      } catch (error) {
+        this.sessionManager.incrementReconnectAttempts(this.sessionId);
+
+        if (this.isPermanentFailure(error)) {
+          // Give up - permanent failure
+          this.emit('error', error);
+          this.sessionManager.updateConnectionState(
+            this.sessionId,
+            'error',
+            error.message
+          );
+          return;
+        }
+
+        // Continue retrying transient failures
+        this.logger.warn('Reconnect attempt failed, retrying...', {
+          attempt: attempt + 1,
+          maxAttempts: this.reconnectConfig.maxAttempts,
+          error: error.message,
+        });
+      }
+    }
+
+    // Exhausted all retries - mark as error
+    this.emit('error', new Error('Max reconnect attempts exceeded'));
+    this.sessionManager.updateConnectionState(
+      this.sessionId,
+      'error',
+      'Failed to reconnect after maximum attempts'
+    );
+  }
+
+  private isPermanentFailure(error: Error): boolean {
+    // Authentication failures - permanent
+    if (error.message.includes('Permission denied')) return true;
+    if (error.message.includes('Authentication failed')) return true;
+
+    // Host key issues - permanent
+    if (error.message.includes('Host key verification failed')) return true;
+    if (error.message.includes('REMOTE HOST IDENTIFICATION HAS CHANGED')) return true;
+
+    // Command not found - permanent
+    if (error.message.includes('command not found')) return true;
+    if (error.message.includes('No such file or directory')) return true;
+
+    // Network issues - transient (keep retrying)
+    return false;
+  }
+}
+```
 
 **Zod Schema Update:**
 
@@ -716,60 +871,7 @@ const IrisConfigSchema = z.object({
 });
 ```
 
-**Validation:**
-
-```typescript
-// Validate SSH command exists if remote specified
-if (config.remote && !config.remote.includes('ssh') && !config.remote.includes('docker') && !config.remote.includes('kubectl')) {
-  logger.warn('Remote command does not look like SSH/Docker/kubectl', { remote: config.remote });
-}
-```
-
-### Phase 4: SSH Connection Pooling
-
-**Goal:** Reuse SSH connections for performance.
-
-**Implementation:**
-
-```typescript
-class SSHConnectionPool {
-  private connections = new Map<string, SSHConnection>();
-
-  async getConnection(
-    remote: string,
-    options: RemoteOptions
-  ): Promise<SSHConnection> {
-    const cacheKey = `${remote}:${JSON.stringify(options)}`;
-    const existing = this.connections.get(cacheKey);
-
-    if (existing && existing.isAlive()) {
-      return existing;
-    }
-
-    // Create new connection
-    const conn = new SSHConnection(remote, options);
-    await conn.connect();
-
-    this.connections.set(cacheKey, conn);
-
-    // Cleanup on disconnect
-    conn.on('close', () => {
-      this.connections.delete(cacheKey);
-    });
-
-    return conn;
-  }
-
-  closeAll(): void {
-    for (const conn of this.connections.values()) {
-      conn.close();
-    }
-    this.connections.clear();
-  }
-}
-```
-
-### Phase 5: Testing & Validation
+### Phase 4: Testing & Validation
 
 **Test Matrix:**
 
@@ -1090,17 +1192,33 @@ Total:          6200ms  (+24% overhead)
 
 ### Optimization Strategies
 
-1. **Connection Reuse**: Amortize SSH connect cost across multiple operations
-2. **SSH Compression**: `ssh -C` for large payloads
-3. **Multiplexing**: Share single SSH connection for multiple processes
+**Key Insight:** No separate connection pooling needed - SSH lifecycle = session lifecycle.
+
+1. **Session-Based Connection Reuse**
+   - Each session maintains one persistent SSH connection
+   - Existing process pool LRU handles connection limits
+   - Existing idle timeout evicts stale connections
+   - **Savings:** ~300 LOC complexity eliminated
+
+2. **SSH Multiplexing** (Optional - User Configuration)
    ```bash
    # ~/.ssh/config
-   Host *
+   Host remote-team-*
      ControlMaster auto
      ControlPath ~/.ssh/sockets/%r@%h-%p
      ControlPersist 600
    ```
-4. **Async Mode**: Use fire-and-forget for non-critical operations
+   - Enables sharing underlying TCP connection across multiple sessions
+   - Reduces latency for subsequent connections
+   - Configured by user, not Iris
+
+3. **SSH Compression**: `ssh -C` for large payloads
+   - Useful for transferring large code snippets or diffs
+   - Add to `remote` command: `"remote": "ssh -C user@host"`
+
+4. **Async Mode**: Use `timeout=-1` for fire-and-forget operations
+   - Non-critical notifications don't wait for response
+   - Returns immediately after queuing
 
 ---
 
@@ -1198,43 +1316,43 @@ Total:          6200ms  (+24% overhead)
 
 ## Implementation Checklist
 
-### Phase 1: Foundation
+### Phase 1: Transport Abstraction (1 week)
 - [ ] Define Transport interface
 - [ ] Extract LocalTransport from ClaudeProcess
 - [ ] Implement TransportFactory
 - [ ] Update config schema with `remote` field
 - [ ] Unit tests for transport abstraction
 
-### Phase 2: SSH Transport
-- [ ] Implement RemoteSSHTransport
-- [ ] SSH connection management
-- [ ] Stdio tunneling over SSH
-- [ ] Error handling and retries
+### Phase 2: RemoteSSHTransport (2 weeks)
+- [ ] Implement RemoteSSHTransport class
+- [ ] SSH stdio tunneling (stdin/stdout piping)
+- [ ] Keepalive configuration (ServerAliveInterval)
+- [ ] Session file initialization on remote host
 - [ ] Integration tests with localhost SSH
 
-### Phase 3: Connection Pooling
-- [ ] SSH connection pool implementation
-- [ ] Keepalive management
-- [ ] Auto-reconnect logic
-- [ ] Health checks for SSH connections
+### Phase 3: Reconnect Logic & Session State (1 week)
+- [ ] Add connection_state column to team_sessions table
+- [ ] Implement offline/error state transitions
+- [ ] Auto-reconnect with exponential backoff
+- [ ] Permanent vs transient failure detection
+- [ ] Update team_isAwake MCP tool with connection state
+- [ ] User-facing error messages with remediation hints
 
-### Phase 4: Configuration & Validation
-- [ ] Update Zod schema
-- [ ] SSH command validation
-- [ ] Remote options handling
-- [ ] Documentation for remote config
-
-### Phase 5: Testing & Hardening
-- [ ] E2E tests with real SSH hosts
+### Phase 4: Testing & Hardening (1 week)
+- [ ] E2E tests with real SSH hosts (localhost, LAN, WAN)
+- [ ] Network failure simulation tests
 - [ ] Performance benchmarks (local vs remote)
-- [ ] Security audit
+- [ ] Security audit (key management, host verification)
 - [ ] Load testing with 10+ remote teams
+- [ ] Documentation and examples
 
-### Phase 6: Advanced Features
-- [ ] Docker transport (`docker exec`)
-- [ ] Kubernetes transport (`kubectl exec`)
+**Total Timeline:** ~5 weeks (vs original 8 weeks)
+
+### Future: Advanced Features
+- [ ] Docker transport (`docker exec -i`)
+- [ ] Kubernetes transport (`kubectl exec -i`)
 - [ ] WSL transport (Windows Subsystem for Linux)
-- [ ] SSH multiplexing optimization
+- [ ] WebSocket/HTTP transport (cloud-native)
 
 ---
 
@@ -1306,12 +1424,19 @@ Remote team execution transforms Iris MCP from a **local orchestrator** into a *
 - Multi-region deployments
 - Security-isolated networks
 
-**Implementation Complexity:** Medium
+**Implementation Complexity:** Medium-Low
 - Transport abstraction: ~500 LOC
 - SSH transport: ~800 LOC
-- Connection pooling: ~300 LOC
-- Configuration: ~200 LOC
-- **Total:** ~1800 LOC
+- Reconnect logic & session state: ~400 LOC
+- Configuration & validation: ~200 LOC
+- **Total:** ~1900 LOC
+
+**Architectural Simplifications:**
+- ❌ No connection pooling layer (~300 LOC saved)
+- ✅ SSH lifecycle tied to session lifecycle
+- ✅ Existing process pool manages connections
+- ✅ Existing health checks detect failures
+- ✅ Session state provides user visibility
 
 **Benefits:**
 - ✅ Distributed AI orchestration

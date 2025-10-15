@@ -15,6 +15,18 @@ export interface ProcessPoolConfig {
   wonderLoggerConfig?: string; // Path to wonder-logger.yaml config file
 }
 
+export interface RemoteOptions {
+  identity?: string; // Path to SSH private key
+  port?: number; // SSH port
+  strictHostKeyChecking?: boolean; // SSH host key checking
+  connectTimeout?: number; // Connection timeout in ms
+  serverAliveInterval?: number; // Keep-alive interval in seconds
+  serverAliveCountMax?: number; // Max missed keep-alives
+  compression?: boolean; // Enable SSH compression
+  forwardAgent?: boolean; // Forward SSH agent
+  extraSshArgs?: string[]; // Additional SSH arguments
+}
+
 export interface IrisConfig {
   path: string; // Absolute path to team project directory
   description: string;
@@ -22,6 +34,9 @@ export interface IrisConfig {
   sessionInitTimeout?: number;
   skipPermissions?: boolean;
   color?: string;
+  // Phase 2: Remote execution via SSH
+  remote?: string; // SSH connection string (e.g., "user@host")
+  remoteOptions?: RemoteOptions;
 }
 
 export interface DashboardConfig {

@@ -31,6 +31,21 @@ const IrisConfigSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
     .optional(),
+  // Phase 2: Remote execution via SSH
+  remote: z.string().optional(), // SSH connection string (e.g., "user@host")
+  remoteOptions: z
+    .object({
+      identity: z.string().optional(), // Path to SSH private key
+      port: z.number().int().min(1).max(65535).optional(), // SSH port
+      strictHostKeyChecking: z.boolean().optional(), // SSH host key checking
+      connectTimeout: z.number().positive().optional(), // Connection timeout in ms
+      serverAliveInterval: z.number().positive().optional(), // Keep-alive interval in seconds
+      serverAliveCountMax: z.number().int().positive().optional(), // Max missed keep-alives
+      compression: z.boolean().optional(), // Enable SSH compression
+      forwardAgent: z.boolean().optional(), // Forward SSH agent
+      extraSshArgs: z.array(z.string()).optional(), // Additional SSH arguments
+    })
+    .optional(),
 });
 
 const TeamsConfigSchema = z.object({

@@ -12,8 +12,8 @@ importers:
         specifier: ^1.19.1
         version: 1.19.1
       '@recoverysky/wonder-logger':
-        specifier: ^1.0.10
-        version: 1.0.10(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
+        specifier: ^1.0.11
+        version: 1.0.11(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
@@ -869,8 +869,8 @@ packages:
   '@protobufjs/utf8@1.1.0':
     resolution: {integrity: sha512-Vvn3zZrhQZkkBE8LSuW3em98c0FwgO4nxzv6OdSxPKJIEKY2bGbHn+mhGIPerzI4twdxaP8/0+06HBpwf345Lw==}
 
-  '@recoverysky/wonder-logger@1.0.10':
-    resolution: {integrity: sha512-coUMLqp/5UI2LL/miI+LlxJjkxmV583qtEvQxdLxq7lgynopB0pcyck74+nXwLQYborFMgFRAhtNlZwY5evPLw==}
+  '@recoverysky/wonder-logger@1.0.11':
+    resolution: {integrity: sha512-Kp4RJf5WHS5q+qVr3hQ6HieWym4bZyA6dm46OATXiBovZjFwdbZcbAf5tL9KbBr5wgroswr7maw99NTMcIRBdw==}
 
   '@rollup/rollup-android-arm-eabi@4.52.4':
     resolution: {integrity: sha512-BTm2qKNnWIQ5auf4deoetINJm2JzvihvGb9R6K/ETwKLql/Bb3Eg2H1FBp1gUb4YGbydMA3jcmQTR73q7J+GAA==}
@@ -3540,7 +3540,7 @@ snapshots:
 
   '@protobufjs/utf8@1.1.0': {}
 
-  '@recoverysky/wonder-logger@1.0.10(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))':
+  '@recoverysky/wonder-logger@1.0.11(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/auto-instrumentations-node': 0.65.0(@opentelemetry/api@1.9.0)(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))

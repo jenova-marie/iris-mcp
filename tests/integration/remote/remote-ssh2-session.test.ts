@@ -1,17 +1,13 @@
 /**
- * Integration tests for Remote SSH Execution (OpenSSH Client)
+ * Integration tests for Remote SSH Execution
  *
- * These tests verify the SSHTransport implementation which uses
- * the local `ssh` command (OpenSSH) to execute Claude on a remote host.
- *
+ * These tests require a real SSH connection to a remote host.
  * Set IRIS_TEST_REMOTE=1 to enable these tests.
  *
  * Requirements:
- * - OpenSSH client installed locally (ssh command available)
  * - SSH access to the remote host configured in tests/config.json
- * - SSH keys configured (no password prompts - use ssh-agent)
- * - Claude CLI installed on remote host at /opt/containers
- * - Remote host: ssh inanna (configured in ~/.ssh/config)
+ * - Claude CLI installed on remote host
+ * - SSH keys configured (no password prompts)
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -19,7 +15,6 @@ import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import { getChildLogger } from "../../../src/utils/logger.js";
-import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -31,49 +26,12 @@ const REMOTE_TESTS_ENABLED = process.env.IRIS_TEST_REMOTE === "1";
 
 const describeRemote = REMOTE_TESTS_ENABLED ? describe : describe.skip;
 
-/**
- * Check if Claude is installed on remote host at configured path
- * Verifies by running: ssh <host> "<claudePath> --version"
- * Expects output to contain "Claude Code"
- */
-async function checkRemoteClaude(
-  host: string,
-  claudePath: string = "claude",
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    const testCmd = `${claudePath} --version`;
-    const proc = spawn("ssh", ["-T", host, testCmd]);
-
-    let output = "";
-
-    proc.stdout?.on("data", (data) => {
-      output += data.toString();
-    });
-
-    proc.stderr?.on("data", (data) => {
-      output += data.toString();
-    });
-
-    proc.on("exit", (code) => {
-      // Check if exit code is 0 AND output contains "Claude Code"
-      const isValid = code === 0 && output.includes("Claude Code");
-      resolve(isValid);
-    });
-
-    proc.on("error", () => {
-      resolve(false);
-    });
-  });
-}
-
-describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
+describeRemote("Remote SSH Execution (Integration)", () => {
   let configManager: TeamsConfigManager;
   let poolManager: ClaudeProcessPool;
   let sessionManager: SessionManager;
-  let claudeAvailable = false;
 
   const REMOTE_TEAM = "team-inanna";
-  const REMOTE_HOST = "inanna"; // SSH config alias
   const FROM_TEAM = "team-iris";
   const TEST_TIMEOUT = 60000; // 60 seconds for SSH operations
 
@@ -83,27 +41,6 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     configManager = new TeamsConfigManager(configPath);
     configManager.load();
     const teamsConfig = configManager.getConfig();
-
-    // Get claudePath from config
-    const teamConfig = configManager.getIrisConfig(REMOTE_TEAM);
-    const claudePath = teamConfig?.claudePath || "claude";
-
-    // Check if Claude is available on remote host at configured path
-    claudeAvailable = await checkRemoteClaude(REMOTE_HOST, claudePath);
-
-    if (!claudeAvailable) {
-      console.warn(
-        `\n⚠️  Claude CLI not found on remote host '${REMOTE_HOST}'\n` +
-          `   Checked path: ${claudePath}\n` +
-          `   Some tests will be skipped. To run full test suite:\n` +
-          `   1. Install Claude CLI on remote host\n` +
-          `   2. Update claudePath in config if needed\n`,
-      );
-    } else {
-      console.log(
-        `\n✅ Claude CLI found on remote host '${REMOTE_HOST}' at ${claudePath}\n`,
-      );
-    }
 
     // Create session manager with in-memory database
     sessionManager = new SessionManager(teamsConfig, {
@@ -138,58 +75,24 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
       expect(teamConfig?.description).toContain("cloud dev team");
     });
 
-    it("should detect team as remote (not using ssh2)", () => {
+    it("should detect team as remote", () => {
       const teamConfig = configManager.getIrisConfig(REMOTE_TEAM);
       expect(teamConfig?.remote).toBeDefined();
-      expect(teamConfig?.ssh2).toBeUndefined(); // Default to OpenSSH client
     });
-
-    it("should verify SSH connection to remote host", async () => {
-      const canConnect = await new Promise<boolean>((resolve) => {
-        const proc = spawn("ssh", [
-          "-T",
-          "-o",
-          "ConnectTimeout=5",
-          REMOTE_HOST,
-          "echo 'OK'",
-        ]);
-        let output = "";
-
-        proc.stdout?.on("data", (data) => {
-          output += data.toString();
-        });
-
-        proc.on("exit", (code) => {
-          resolve(code === 0 && output.includes("OK"));
-        });
-
-        proc.on("error", () => {
-          resolve(false);
-        });
-      });
-
-      expect(canConnect).toBe(true);
-    }, 10000);
   });
 
-  describe("Remote Process Spawn (OpenSSH)", () => {
+  describe("Remote Process Spawn", () => {
     it(
-      "should spawn Claude process on remote host via OpenSSH",
+      "should spawn Claude process on remote host via SSH",
       async () => {
-        if (!claudeAvailable) {
-          console.log("Skipping: Claude not installed on remote host");
-          return;
-        }
-
         const logger = getChildLogger("test:remote-spawn");
 
-        logger.info("Starting remote spawn test (OpenSSH client)", {
+        logger.info("Starting remote spawn test", {
           remoteTeam: REMOTE_TEAM,
           fromTeam: FROM_TEAM,
-          transport: "SSHTransport",
         });
 
-        // Wake the remote team (spawns SSH connection via OpenSSH client)
+        // Wake the remote team (spawns SSH connection)
         const process = await poolManager.getOrCreateProcess(
           REMOTE_TEAM,
           FROM_TEAM,
@@ -199,12 +102,12 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         expect(process.teamName).toBe(REMOTE_TEAM);
 
         // Check process is ready
-        expect(process.getBasicMetrics().isReady).toBe(true);
-        expect(process.getBasicMetrics().isBusy).toBe(false);
+        expect(process.isReady()).toBe(true);
+        expect(process.isBusy()).toBe(false);
 
-        logger.info("Remote spawn successful via OpenSSH", {
+        logger.info("Remote spawn successful", {
           teamName: process.teamName,
-          isReady: process.getBasicMetrics().isReady,
+          isReady: process.isReady(),
         });
 
         // Get metrics
@@ -220,8 +123,6 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     it(
       "should create session record for remote team",
       async () => {
-        if (!claudeAvailable) return;
-
         const session = sessionManager.getSession(FROM_TEAM, REMOTE_TEAM);
 
         expect(session).toBeDefined();
@@ -229,7 +130,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         expect(session?.toTeam).toBe(REMOTE_TEAM);
         expect(session?.status).toBe("active");
 
-        console.log("Session created for OpenSSH transport:", {
+        console.log("Session created:", {
           fromTeam: session?.fromTeam,
           toTeam: session?.toTeam,
           sessionId: session?.sessionId,
@@ -240,12 +141,10 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     );
   });
 
-  describe("Remote Message Execution (OpenSSH)", () => {
+  describe("Remote Message Execution", () => {
     it(
-      "should execute simple tell command via OpenSSH",
+      "should execute simple tell command via SSH",
       async () => {
-        if (!claudeAvailable) return;
-
         const logger = getChildLogger("test:remote-tell");
 
         const process = await poolManager.getOrCreateProcess(
@@ -253,7 +152,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
           FROM_TEAM,
         );
 
-        expect(process.getBasicMetrics().isReady).toBe(true);
+        expect(process.isReady()).toBe(true);
 
         logger.info("Executing remote tell command", {
           message: "What is 2+2?",
@@ -292,10 +191,8 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     );
 
     it(
-      "should handle multiple sequential tell commands via OpenSSH",
+      "should handle multiple sequential tell commands",
       async () => {
-        if (!claudeAvailable) return;
-
         const logger = getChildLogger("test:remote-sequential");
 
         const process = await poolManager.getOrCreateProcess(
@@ -336,10 +233,8 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     );
   });
 
-  describe("Remote Process State (OpenSSH)", () => {
+  describe("Remote Process State", () => {
     it("should report correct process state", async () => {
-      if (!claudeAvailable) return;
-
       const process = await poolManager.getOrCreateProcess(
         REMOTE_TEAM,
         FROM_TEAM,
@@ -362,8 +257,6 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     });
 
     it("should track session metrics", () => {
-      if (!claudeAvailable) return;
-
       const session = sessionManager.getSession(FROM_TEAM, REMOTE_TEAM);
 
       expect(session).toBeDefined();
@@ -377,12 +270,10 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     });
   });
 
-  describe("Remote Process Cleanup (OpenSSH)", () => {
+  describe("Remote Process Cleanup", () => {
     it(
       "should terminate remote SSH connection gracefully",
       async () => {
-        if (!claudeAvailable) return;
-
         const logger = getChildLogger("test:remote-terminate");
 
         const process = await poolManager.getOrCreateProcess(
@@ -390,7 +281,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
           FROM_TEAM,
         );
 
-        expect(process.getBasicMetrics().isReady).toBe(true);
+        expect(process.isReady()).toBe(true);
 
         logger.info("Terminating remote process", {
           teamName: REMOTE_TEAM,
@@ -402,8 +293,8 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         logger.info("Remote process terminated");
 
         // Check state
-        expect(process.getBasicMetrics().isReady).toBe(false);
-        expect(process.getBasicMetrics().isBusy).toBe(false);
+        expect(process.isReady()).toBe(false);
+        expect(process.isBusy()).toBe(false);
 
         const metrics = process.getBasicMetrics();
         expect(metrics.status).toBe("stopped");
@@ -413,12 +304,10 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     );
   });
 
-  describe("Performance Metrics (OpenSSH)", () => {
+  describe("Performance Metrics", () => {
     it(
-      "should measure remote spawn time via OpenSSH",
+      "should measure remote spawn time",
       async () => {
-        if (!claudeAvailable) return;
-
         const logger = getChildLogger("test:remote-performance");
 
         // Terminate existing process first
@@ -438,7 +327,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         );
         const spawnTime = Date.now() - startTime;
 
-        expect(process.getBasicMetrics().isReady).toBe(true);
+        expect(process.isReady()).toBe(true);
 
         logger.info("Remote spawn performance", {
           spawnTime: `${spawnTime}ms`,
@@ -457,10 +346,8 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     );
 
     it(
-      "should measure remote tell latency via OpenSSH",
+      "should measure remote tell latency",
       async () => {
-        if (!claudeAvailable) return;
-
         const logger = getChildLogger("test:remote-latency");
 
         const process = await poolManager.getOrCreateProcess(
@@ -468,7 +355,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
           FROM_TEAM,
         );
 
-        expect(process.getBasicMetrics().isReady).toBe(true);
+        expect(process.isReady()).toBe(true);
 
         // Warm up (first message is slower)
         await new Promise<void>((resolve, reject) => {
@@ -521,18 +408,15 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 // Instructions for running remote tests
 if (!REMOTE_TESTS_ENABLED) {
   console.log("\n" + "=".repeat(70));
-  console.log("⚠️  Remote SSH Tests Skipped (OpenSSH Client)");
+  console.log("⚠️  Remote SSH Tests Skipped");
   console.log("=".repeat(70));
   console.log("\nTo enable remote SSH integration tests:");
   console.log("  IRIS_TEST_REMOTE=1 pnpm test:integration\n");
   console.log("Requirements:");
-  console.log("  - OpenSSH client installed locally (ssh command)");
-  console.log("  - SSH access to remote host configured in ~/.ssh/config");
-  console.log("  - Claude CLI installed on remote host at /opt/containers");
-  console.log("  - SSH keys configured (no password prompts - use ssh-agent)");
-  console.log("  - Remote host alias: inanna (in ~/.ssh/config)");
+  console.log("  - SSH access to remote host configured in tests/config.json");
+  console.log("  - Claude CLI installed on remote host");
+  console.log("  - SSH keys configured (no password prompts)");
+  console.log("  - Remote host: ssh inanna");
   console.log("  - Remote path: /opt/containers");
-  console.log("\nThis test suite validates SSHTransport (default).");
-  console.log("For ssh2 library tests, set ssh2: true in team config.");
   console.log("=".repeat(70) + "\n");
 }

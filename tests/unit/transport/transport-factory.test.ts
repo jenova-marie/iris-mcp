@@ -5,7 +5,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TransportFactory } from "../../../src/transport/transport-factory.js";
 import { LocalTransport } from "../../../src/transport/local-transport.js";
-import { RemoteSSHTransport } from "../../../src/transport/remote-ssh-transport.js";
+import { SSHTransport } from "../../../src/transport/ssh-transport.js";
+import { SSH2Transport } from "../../../src/transport/ssh2-transport.js";
 import type { IrisConfig } from "../../../src/process-pool/types.js";
 
 // Mock logger
@@ -55,28 +56,33 @@ describe("TransportFactory", () => {
       expect(transport).toBeInstanceOf(LocalTransport);
     });
 
-    it("should create RemoteSSHTransport for remote config (Phase 2)", () => {
+    it("should create SSHTransport for remote config by default (OpenSSH client)", () => {
       const transport = TransportFactory.create(
         "team-remote",
         remoteConfig,
         "session-456",
       );
 
-      expect(transport).toBeInstanceOf(RemoteSSHTransport);
+      expect(transport).toBeInstanceOf(SSHTransport);
     });
 
-    it("should pass correct config to RemoteSSHTransport", () => {
+    it("should create SSH2Transport when ssh2 flag is true", () => {
+      const configWithSsh2: IrisConfig = {
+        ...remoteConfig,
+        ssh2: true,
+      };
+
       const transport = TransportFactory.create(
         "team-remote",
-        remoteConfig,
+        configWithSsh2,
         "session-789",
       );
 
       expect(transport).toBeDefined();
-      expect(transport).toBeInstanceOf(RemoteSSHTransport);
+      expect(transport).toBeInstanceOf(SSH2Transport);
     });
 
-    it("should handle remote config with various remoteOptions", () => {
+    it("should handle remote config with various remoteOptions (default SSHTransport)", () => {
       const configWithOptions: IrisConfig = {
         path: "/path/to/project",
         description: "Remote with options",
@@ -95,7 +101,7 @@ describe("TransportFactory", () => {
         "session-abc",
       );
 
-      expect(transport).toBeInstanceOf(RemoteSSHTransport);
+      expect(transport).toBeInstanceOf(SSHTransport);
     });
 
     it("should handle configs without remote field", () => {

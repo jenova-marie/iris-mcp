@@ -34,6 +34,7 @@
     },
     "team-inanna": {
       "remote": "ssh inanna",
+      "claudePath": "~/.local/bin/claude",
       "path": "/opt/containers",
       "description": "Iris MCP Team Inanna - cloud dev team",
       "skipPermissions": true,

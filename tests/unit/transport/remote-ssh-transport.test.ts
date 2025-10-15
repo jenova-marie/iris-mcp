@@ -1,9 +1,9 @@
 /**
- * Unit tests for RemoteSSHTransport
+ * Unit tests for SSH2Transport
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RemoteSSHTransport } from "../../../src/transport/remote-ssh-transport.js";
+import { SSH2Transport } from "../../../src/transport/ssh2-transport.js";
 import type { IrisConfig } from "../../../src/process-pool/types.js";
 
 // Mock logger
@@ -30,7 +30,7 @@ vi.mock("ssh2", () => ({
   Client: vi.fn(() => mockSSHClient),
 }));
 
-describe("RemoteSSHTransport", () => {
+describe("SSH2Transport", () => {
   const testConfig: IrisConfig = {
     path: "/remote/project",
     description: "Remote test team",
@@ -42,11 +42,11 @@ describe("RemoteSSHTransport", () => {
     },
   };
 
-  let transport: RemoteSSHTransport;
+  let transport: SSH2Transport;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    transport = new RemoteSSHTransport("team-test", testConfig, "session-123");
+    transport = new SSH2Transport("team-test", testConfig, "session-123");
   });
 
   describe("constructor", () => {
@@ -78,7 +78,7 @@ describe("RemoteSSHTransport", () => {
       };
 
       expect(() => {
-        new RemoteSSHTransport("team-no-remote", configWithoutRemote, "s1");
+        new SSH2Transport("team-no-remote", configWithoutRemote, "s1");
       }).toThrow(/Remote host not specified/);
     });
   });
@@ -153,8 +153,8 @@ describe("RemoteSSHTransport", () => {
 
   describe("configuration handling", () => {
     it("should accept different team names", () => {
-      const transport1 = new RemoteSSHTransport("team-a", testConfig, "s1");
-      const transport2 = new RemoteSSHTransport("team-b", testConfig, "s2");
+      const transport1 = new SSH2Transport("team-a", testConfig, "s1");
+      const transport2 = new SSH2Transport("team-b", testConfig, "s2");
 
       expect(transport1.isReady()).toBe(false);
       expect(transport2.isReady()).toBe(false);
@@ -177,7 +177,7 @@ describe("RemoteSSHTransport", () => {
         },
       };
 
-      const transport = new RemoteSSHTransport(
+      const transport = new SSH2Transport(
         "team-opts",
         configWithOptions,
         "session",
@@ -186,9 +186,9 @@ describe("RemoteSSHTransport", () => {
     });
 
     it("should handle different session IDs", () => {
-      const t1 = new RemoteSSHTransport("team", testConfig, "session-1");
-      const t2 = new RemoteSSHTransport("team", testConfig, "session-2");
-      const t3 = new RemoteSSHTransport("team", testConfig, null as any);
+      const t1 = new SSH2Transport("team", testConfig, "session-1");
+      const t2 = new SSH2Transport("team", testConfig, "session-2");
+      const t3 = new SSH2Transport("team", testConfig, null as any);
 
       expect(t1.getMetrics().uptime).toBe(0);
       expect(t2.getMetrics().uptime).toBe(0);
@@ -226,7 +226,7 @@ describe("RemoteSSHTransport", () => {
         remote: "jenova@example.com",
       };
 
-      const transport = new RemoteSSHTransport("team", config, "session");
+      const transport = new SSH2Transport("team", config, "session");
       expect(transport).toBeDefined();
     });
 
@@ -237,7 +237,7 @@ describe("RemoteSSHTransport", () => {
         remote: "example.com",
       };
 
-      const transport = new RemoteSSHTransport("team", config, "session");
+      const transport = new SSH2Transport("team", config, "session");
       expect(transport).toBeDefined();
     });
 
@@ -248,7 +248,7 @@ describe("RemoteSSHTransport", () => {
         remote: "user@192.168.1.100",
       };
 
-      const transport = new RemoteSSHTransport("team", config, "session");
+      const transport = new SSH2Transport("team", config, "session");
       expect(transport).toBeDefined();
     });
   });
@@ -261,7 +261,7 @@ describe("RemoteSSHTransport", () => {
         remote: "user@host",
       };
 
-      const transport = new RemoteSSHTransport("team", config, "session");
+      const transport = new SSH2Transport("team", config, "session");
       expect(transport).toBeDefined();
     });
 
@@ -272,7 +272,7 @@ describe("RemoteSSHTransport", () => {
         remote: "user@host",
       };
 
-      const transport = new RemoteSSHTransport("team", config, "session");
+      const transport = new SSH2Transport("team", config, "session");
       expect(transport).toBeDefined();
     });
   });

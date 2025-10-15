@@ -101,7 +101,7 @@ Enable Iris to:
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │         TransportFactory (NEW)                        │  │
 │  │  createTransport(irisConfig) → Transport             │  │
-│  │    - if (config.remote): RemoteSSHTransport          │  │
+│  │    - if (config.remote): SSH2Transport          │  │
 │  │    - else: LocalTransport                            │  │
 │  └────────────────────┬─────────────────────────────────┘  │
 └────────────────────────┼─────────────────────────────────────┘
@@ -110,7 +110,7 @@ Enable Iris to:
          │                             │
          ▼                             ▼
 ┌──────────────────┐          ┌──────────────────┐
-│ LocalTransport   │          │ RemoteSSHTransport│
+│ LocalTransport   │          │ SSH2Transport│
 │                  │          │                  │
 │ spawn():         │          │ spawn():         │
 │   child_process  │          │   ssh connection │
@@ -162,8 +162,163 @@ interface Transport {
 **Implementations:**
 
 1. **LocalTransport** (existing ClaudeProcess logic)
-2. **RemoteSSHTransport** (new - SSH tunneling)
-3. **Future**: DockerTransport, KubernetesTransport, WSLTransport
+2. **SSHTransport** (OpenSSH client - default for remote execution)
+3. **RemoteSSH2Transport** (ssh2 library - opt-in via `ssh2: true`)
+4. **Future**: DockerTransport, KubernetesTransport, WSLTransport
+
+### Dual SSH Implementation Strategy
+
+Iris supports **two SSH implementations** for remote execution, each with distinct trade-offs:
+
+#### Option 1: OpenSSH Client Transport (Default)
+
+**Uses:** Local `ssh` command-line client (OpenSSH)
+
+**Advantages:**
+- ✅ Leverages existing `~/.ssh/config` automatically
+- ✅ SSH agent integration works out-of-the-box
+- ✅ ProxyJump/bastions work seamlessly
+- ✅ All SSH features supported (ControlMaster, compression, etc.)
+- ✅ Simpler implementation (~300 LOC)
+- ✅ Battle-tested SSH client behavior
+- ✅ No additional dependencies
+
+**Disadvantages:**
+- ❌ Requires OpenSSH installed on system
+- ❌ Less control over connection lifecycle
+- ❌ Harder to detect specific error types
+- ❌ Platform-dependent behavior (OpenSSH vs other SSH clients)
+
+**When to use:**
+- Default choice for most use cases
+- When leveraging complex SSH config (ProxyJump, ControlMaster, etc.)
+- When SSH agent authentication is required
+- When portability across SSH clients is needed
+
+#### Option 2: ssh2 Library Transport (Opt-in)
+
+**Uses:** Node.js `ssh2` library with `ssh-config` parser
+
+**Advantages:**
+- ✅ Pure JavaScript, no external dependencies
+- ✅ Full control over connection lifecycle
+- ✅ Granular error detection and handling
+- ✅ Programmatic SSH config parsing
+- ✅ Better for reconnect logic
+- ✅ Works without SSH client installed
+- ✅ Consistent cross-platform behavior
+
+**Disadvantages:**
+- ❌ Must manually parse `~/.ssh/config`
+- ❌ Limited SSH feature support (no ControlMaster, etc.)
+- ❌ Encrypted keys require passphrase in config
+- ❌ More complex implementation (~800 LOC)
+- ❌ Additional npm dependencies
+
+**When to use:**
+- Environments without OpenSSH (Windows, containers)
+- When fine-grained connection control is needed
+- When programmatic error handling is critical
+- When consistent cross-platform behavior is required
+
+#### Configuration
+
+**OpenSSH Client (Default):**
+```json
+{
+  "team-backend": {
+    "remote": "ssh inanna",
+    "path": "/opt/containers",
+    "description": "Backend team on remote host"
+  }
+}
+```
+
+**ssh2 Library (Opt-in):**
+```json
+{
+  "team-backend": {
+    "remote": "ssh inanna",
+    "ssh2": true,
+    "path": "/opt/containers",
+    "description": "Backend team on remote host",
+    "remoteOptions": {
+      "passphrase": "${SSH_KEY_PASSPHRASE}"
+    }
+  }
+}
+```
+
+#### SSH Config Integration
+
+Both implementations leverage `~/.ssh/config`, but differently:
+
+**OpenSSH Client:**
+- Automatically reads and applies SSH config
+- No additional parsing needed
+- Iris passes host alias to `ssh` command
+
+**ssh2 Library:**
+- Manually parses `~/.ssh/config` using `ssh-config` package
+- Computes host configuration with `.compute(hostAlias)`
+- Resolves HostName, User, Port, IdentityFile, etc.
+- Applies configuration programmatically to ssh2 connection
+
+**Example SSH Config:**
+```bash
+Host inanna
+  HostName inanna.cmd.rso
+  User jenova
+  IdentityFile ~/.ssh/id_ed25519
+  ServerAliveInterval 30
+  ServerAliveCountMax 3
+```
+
+**OpenSSH execution:**
+```bash
+ssh inanna "cd /opt/containers && claude --print ..."
+# OpenSSH reads config automatically
+```
+
+**ssh2 execution:**
+```typescript
+// Parse config file
+const config = SSHConfig.parse(readFileSync('~/.ssh/config', 'utf8'));
+
+// Compute host config
+const hostConfig = config.compute('inanna');
+// Returns: { HostName: 'inanna.cmd.rso', User: 'jenova', ... }
+
+// Apply to ssh2 connection
+client.connect({
+  host: hostConfig.HostName,
+  username: hostConfig.User,
+  privateKey: readFileSync(expandTilde(hostConfig.IdentityFile[0])),
+  keepaliveInterval: 30000,
+});
+```
+
+#### Implementation Selection
+
+**TransportFactory logic:**
+```typescript
+class TransportFactory {
+  static create(teamName: string, irisConfig: IrisConfig, sessionId: string): Transport {
+    if (!irisConfig.remote) {
+      return new LocalTransport(teamName, irisConfig, sessionId);
+    }
+
+    // Remote execution - choose SSH implementation
+    if (irisConfig.ssh2) {
+      // Opt-in: Use ssh2 library with ssh-config parsing
+      return new RemoteSSH2Transport(teamName, irisConfig, sessionId);
+    } else {
+      // Default: Use local OpenSSH client
+      return new SSHTransport(teamName, irisConfig, sessionId);
+    }
+  }
+}
+```
 
 ---
 
@@ -177,16 +332,22 @@ interface IrisConfig {
   description: string;
 
   // NEW: Remote execution command
-  remote?: string;                // e.g., "ssh user@host.com"
+  remote?: string;                // e.g., "ssh user@host.com" or "ssh inanna"
+
+  // NEW: SSH implementation selection
+  ssh2?: boolean;                 // Use ssh2 library instead of OpenSSH client (default: false)
 
   // Optional SSH-specific configuration
   remoteOptions?: {
     identity?: string;            // Path to SSH private key
+    passphrase?: string;          // Passphrase for encrypted key (ssh2 only)
     port?: number;                // SSH port (default: 22)
     strictHostKeyChecking?: boolean; // Default: true
     connectTimeout?: number;      // Connection timeout (ms)
     serverAliveInterval?: number; // Keepalive interval (default: 30s)
     serverAliveCountMax?: number; // Max keepalive failures (default: 3)
+    compression?: boolean;        // Enable SSH compression
+    forwardAgent?: boolean;       // Forward SSH agent (OpenSSH only)
   };
 
   // Existing optional fields
@@ -316,7 +477,7 @@ Network Failure → Session goes OFFLINE, auto-reconnect attempts
 **Keepalive Configuration:**
 
 ```typescript
-// RemoteSSHTransport automatically includes keepalive
+// SSH2Transport automatically includes keepalive
 const sshCmd = [
   this.config.remote,
   '-o', 'ServerAliveInterval=30',      // Send keepalive every 30s
@@ -349,7 +510,7 @@ ssh -tt user@host "cd /path && claude --input-format stream-json --output-format
 **Stdio Handling:**
 
 ```typescript
-class RemoteSSHTransport implements Transport {
+class SSH2Transport implements Transport {
   private sshProcess: ChildProcess;
 
   async spawn(spawnCacheEntry: CacheEntry): Promise<void> {
@@ -615,7 +776,7 @@ Suggestion: "Check SSH key at ~/.ssh/company_rsa or run: ssh-add ~/.ssh/company_
    }
    ```
 
-### Phase 2: RemoteSSHTransport Implementation
+### Phase 2: SSH2Transport Implementation
 
 **Goal:** Implement SSH tunneling transport.
 
@@ -625,14 +786,14 @@ Suggestion: "Check SSH key at ~/.ssh/company_rsa or run: ssh-add ~/.ssh/company_
 src/transport/
 ├── transport.interface.ts       # Transport interface
 ├── local-transport.ts           # LocalTransport (existing logic)
-├── remote-ssh-transport.ts      # RemoteSSHTransport (new)
+├── remote-ssh-transport.ts      # SSH2Transport (new)
 └── transport-factory.ts         # Factory to select transport
 ```
 
-**RemoteSSHTransport Implementation:**
+**SSH2Transport Implementation:**
 
 ```typescript
-class RemoteSSHTransport implements Transport {
+class SSH2Transport implements Transport {
   private sshProcess: ChildProcess | null = null;
   private currentCacheEntry: CacheEntry | null = null;
   private isReady = false;
@@ -768,7 +929,7 @@ ALTER TABLE team_sessions ADD COLUMN reconnect_attempts INTEGER DEFAULT 0;
 **Auto-Reconnect Implementation:**
 
 ```typescript
-class RemoteSSHTransport {
+class SSH2Transport {
   private reconnectConfig = {
     maxAttempts: 5,
     backoffMs: [1000, 2000, 4000, 8000, 16000], // Exponential backoff
@@ -882,14 +1043,14 @@ const IrisConfigSchema = z.object({
 **Integration Tests:**
 
 ```typescript
-describe('RemoteSSHTransport', () => {
+describe('SSH2Transport', () => {
   it('should spawn Claude on remote host', async () => {
     const config = {
       remote: 'ssh test@localhost',
       path: '/tmp/test-project',
     };
 
-    const transport = new RemoteSSHTransport('test', config, null);
+    const transport = new SSH2Transport('test', config, null);
     const spawnEntry = new CacheEntryImpl(CacheEntryType.SPAWN, 'ping');
 
     await transport.spawn(spawnEntry);
@@ -903,7 +1064,7 @@ describe('RemoteSSHTransport', () => {
       path: '/tmp/test',
     };
 
-    const transport = new RemoteSSHTransport('test', config, null);
+    const transport = new SSH2Transport('test', config, null);
 
     await expect(transport.spawn(spawnEntry)).rejects.toThrow('Connection refused');
   });
@@ -1237,7 +1398,7 @@ Total:          6200ms  (+24% overhead)
    class TransportFactory {
      static create(irisConfig: IrisConfig): Transport {
        if (irisConfig.remote) {
-         return new RemoteSSHTransport(irisConfig);
+         return new SSH2Transport(irisConfig);
        }
        return new LocalTransport(irisConfig);
      }
@@ -1323,8 +1484,8 @@ Total:          6200ms  (+24% overhead)
 - [ ] Update config schema with `remote` field
 - [ ] Unit tests for transport abstraction
 
-### Phase 2: RemoteSSHTransport (2 weeks)
-- [ ] Implement RemoteSSHTransport class
+### Phase 2: SSH2Transport (2 weeks)
+- [ ] Implement SSH2Transport class
 - [ ] SSH stdio tunneling (stdin/stdout piping)
 - [ ] Keepalive configuration (ServerAliveInterval)
 - [ ] Session file initialization on remote host

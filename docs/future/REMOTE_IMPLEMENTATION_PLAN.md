@@ -11,7 +11,7 @@
 
 1. [Overview](#overview)
 2. [Phase 1: Transport Abstraction (Week 1)](#phase-1-transport-abstraction-week-1)
-3. [Phase 2: RemoteSSHTransport (Week 2-3)](#phase-2-remotesshtransport-week-2-3)
+3. [Phase 2: SSH2Transport (Week 2-3)](#phase-2-SSH2Transport-week-2-3)
 4. [Phase 3: Reconnect Logic & Session State (Week 4)](#phase-3-reconnect-logic--session-state-week-4)
 5. [Phase 4: Dashboard Fork Enhancement (Week 5)](#phase-4-dashboard-fork-enhancement-week-5)
 6. [Phase 5: Testing & Documentation (Week 6)](#phase-5-testing--documentation-week-6)
@@ -207,7 +207,7 @@ export class TransportFactory {
     sessionId: string | null
   ): Transport {
     // Phase 1: Only LocalTransport
-    // Phase 2: Add RemoteSSHTransport
+    // Phase 2: Add SSH2Transport
     if (irisConfig.remote) {
       throw new Error('Remote execution not yet implemented');
     }
@@ -385,11 +385,11 @@ describe('TransportFactory', () => {
 
 ---
 
-## Phase 2: RemoteSSHTransport (Week 2-3)
+## Phase 2: SSH2Transport (Week 2-3)
 
 **Goal:** Implement SSH tunneling transport for remote Claude Code execution.
 
-### Task 2.1: Implement RemoteSSHTransport Class
+### Task 2.1: Implement SSH2Transport Class
 
 **File:** `src/transport/remote-ssh-transport.ts` (NEW)
 
@@ -403,7 +403,7 @@ import type { IrisConfig } from '../config/types.js';
 import { getChildLogger } from '../utils/logger.js';
 import { ProcessError, TimeoutError } from '../utils/errors.js';
 
-export class RemoteSSHTransport implements Transport {
+export class SSH2Transport implements Transport {
   private sshProcess: ChildProcess | null = null;
   private currentCacheEntry: CacheEntry | null = null;
   private ready = false;
@@ -638,7 +638,7 @@ export class RemoteSSHTransport implements Transport {
 ```typescript
 import type { Transport } from './transport.interface.js';
 import { LocalTransport } from './local-transport.js';
-import { RemoteSSHTransport } from './remote-ssh-transport.js';  // NEW
+import { SSH2Transport } from './remote-ssh-transport.js';  // NEW
 import type { IrisConfig } from '../config/types.js';
 
 export class TransportFactory {
@@ -649,7 +649,7 @@ export class TransportFactory {
   ): Transport {
     // Check for remote execution
     if (irisConfig.remote) {
-      return new RemoteSSHTransport(teamName, irisConfig, sessionId);
+      return new SSH2Transport(teamName, irisConfig, sessionId);
     }
 
     return new LocalTransport(teamName, irisConfig, sessionId);
@@ -666,7 +666,7 @@ export class TransportFactory {
 **File:** `tests/integration/transport/remote-ssh.test.ts` (NEW)
 
 ```typescript
-describe('RemoteSSHTransport', () => {
+describe('SSH2Transport', () => {
   describe('localhost SSH', () => {
     it('should spawn Claude on localhost via SSH', async () => {
       const config = {
@@ -675,7 +675,7 @@ describe('RemoteSSHTransport', () => {
         description: 'Test remote execution',
       };
 
-      const transport = new RemoteSSHTransport('test', config, null);
+      const transport = new SSH2Transport('test', config, null);
       const spawnEntry = new CacheEntryImpl(CacheEntryType.SPAWN, 'ping');
 
       await transport.spawn(spawnEntry);
@@ -704,7 +704,7 @@ describe('RemoteSSHTransport', () => {
         description: 'Test timeout',
       };
 
-      const transport = new RemoteSSHTransport('test', config, null);
+      const transport = new SSH2Transport('test', config, null);
       const spawnEntry = new CacheEntryImpl(CacheEntryType.SPAWN, 'ping');
 
       await expect(transport.spawn(spawnEntry)).rejects.toThrow();
@@ -717,7 +717,7 @@ describe('RemoteSSHTransport', () => {
         description: 'Test auth failure',
       };
 
-      const transport = new RemoteSSHTransport('test', config, null);
+      const transport = new SSH2Transport('test', config, null);
       const spawnEntry = new CacheEntryImpl(CacheEntryType.SPAWN, 'ping');
 
       await expect(transport.spawn(spawnEntry)).rejects.toThrow();
@@ -778,7 +778,7 @@ describe('RemoteSSHTransport', () => {
 
 ### Phase 2 Deliverables
 
-- ✅ RemoteSSHTransport implemented
+- ✅ SSH2Transport implemented
 - ✅ TransportFactory updated to select remote vs local
 - ✅ Integration tests with localhost SSH
 - ✅ Example config with remote teams
@@ -889,14 +889,14 @@ getSession(poolKey: string): SessionRecord | null {
 
 ---
 
-### Task 3.2: Implement Auto-Reconnect in RemoteSSHTransport
+### Task 3.2: Implement Auto-Reconnect in SSH2Transport
 
 **File:** `src/transport/remote-ssh-transport.ts` (MODIFY)
 
 **Add reconnect logic:**
 
 ```typescript
-export class RemoteSSHTransport implements Transport {
+export class SSH2Transport implements Transport {
   // ... existing fields ...
 
   // NEW: Reconnect configuration
@@ -2009,10 +2009,10 @@ See [Remote Execution Documentation](docs/future/REMOTE.md) for full details.
 ### Dependencies
 
 1. **Phase 1 → Phase 2**
-   - Transport abstraction must be complete before implementing RemoteSSHTransport
+   - Transport abstraction must be complete before implementing SSH2Transport
 
 2. **Phase 2 → Phase 3**
-   - RemoteSSHTransport must work before adding reconnect logic
+   - SSH2Transport must work before adding reconnect logic
 
 3. **Phase 3 → Phase 4**
    - Session state tracking required for remote fork UI
@@ -2071,7 +2071,7 @@ See [Remote Execution Documentation](docs/future/REMOTE.md) for full details.
 | Week | Phase | Deliverables | Hours |
 |------|-------|--------------|-------|
 | 1 | Phase 1: Transport Abstraction | Interface, LocalTransport, Factory, Config schema | 13 |
-| 2-3 | Phase 2: RemoteSSHTransport | SSH transport, stdio tunneling, integration tests | 13.5 |
+| 2-3 | Phase 2: SSH2Transport | SSH transport, stdio tunneling, integration tests | 13.5 |
 | 4 | Phase 3: Reconnect & Session State | Auto-reconnect, state machine, dashboard updates | 12 |
 | 5 | Phase 4: Dashboard Fork | Remote fork support, UI updates, docs | 9 |
 | 6 | Phase 5: Testing & Documentation | E2E tests, benchmarks, security audit, user guide | 18 |

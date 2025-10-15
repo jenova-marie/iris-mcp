@@ -37,10 +37,20 @@ export class IrisWebServer {
    */
   async start(config: DashboardConfig): Promise<void> {
     try {
+      const urls: string[] = [];
+      if (config.http > 0) {
+        urls.push(`http://${config.host}:${config.http}`);
+      }
+      if (config.https > 0) {
+        urls.push(`https://${config.host}:${config.https}`);
+      }
+
       logger.info(
         {
           host: config.host,
-          port: config.port,
+          http: config.http || 'disabled',
+          https: config.https || 'disabled',
+          selfsigned: config.selfsigned,
         },
         "Starting web server...",
       );
@@ -49,7 +59,7 @@ export class IrisWebServer {
 
       logger.info(
         {
-          url: `http://${config.host}:${config.port}`,
+          urls,
         },
         "Web server started successfully",
       );

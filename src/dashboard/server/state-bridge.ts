@@ -55,15 +55,18 @@ export class DashboardStateBridge extends EventEmitter {
     private pool: ClaudeProcessPool,
     private sessionManager: SessionManager,
     private configManager: TeamsConfigManager,
+    iris?: IrisOrchestrator,
   ) {
     super();
 
-    // Create IrisOrchestrator for accessing CacheManager
-    this.iris = new IrisOrchestrator(
-      this.sessionManager,
-      this.pool,
-      this.configManager.getConfig(),
-    );
+    // Use provided IrisOrchestrator or create new one for accessing CacheManager
+    this.iris =
+      iris ||
+      new IrisOrchestrator(
+        this.sessionManager,
+        this.pool,
+        this.configManager.getConfig(),
+      );
 
     this.setupEventForwarding();
   }
@@ -381,10 +384,42 @@ export class DashboardStateBridge extends EventEmitter {
   }
 
   /**
-   * Get the terminal script path (if configured)
+   * Get the fork script path (if configured)
    */
-  getTerminalScriptPath(): string | null {
+  getForkScriptPath(): string | null {
     const config = this.getConfig();
-    return config.dashboard?.terminalScriptPath || null;
+    return config.dashboard?.forkScriptPath || null;
+  }
+
+  /**
+   * Get remote connection info for a team (if configured)
+   * Parses the remote string to extract SSH host and options
+   */
+  getTeamRemoteInfo(teamName: string): { sshHost: string; sshOptions: string } | null {
+    const teamConfig = this.configManager.getIrisConfig(teamName);
+
+    if (!teamConfig || !teamConfig.remote) {
+      return null;
+    }
+
+    // Parse remote string (e.g., "ssh inanna" or "ssh -J jumphost user@host")
+    const remoteParts = teamConfig.remote.split(/\s+/);
+
+    // Skip "ssh" command
+    if (remoteParts[0] === 'ssh') {
+      remoteParts.shift();
+    }
+
+    if (remoteParts.length === 0) {
+      return null;
+    }
+
+    // Last part is the host
+    const sshHost = remoteParts[remoteParts.length - 1];
+
+    // Everything else is options
+    const sshOptions = remoteParts.slice(0, -1).join(' ');
+
+    return { sshHost, sshOptions };
   }
 }

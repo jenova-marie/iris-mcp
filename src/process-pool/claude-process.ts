@@ -15,10 +15,11 @@
 
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
+import { BehaviorSubject, Observable } from "rxjs";
 import type { IrisConfig } from "./types.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError } from "../utils/errors.js";
-import { CacheEntry, CacheEntryType } from "../cache/types.js";
+import { CacheEntry, CacheEntryType, CacheEntryStatus } from "../cache/types.js";
 import { TransportFactory } from "../transport/transport-factory.js";
 import type { Transport } from "../transport/transport.interface.js";
 import { ProcessBusyError } from "../transport/local-transport.js";
@@ -29,12 +30,22 @@ import { CacheEntryImpl } from "../cache/cache-entry.js";
 export { ProcessBusyError };
 
 /**
+ * Process status enum
+ */
+export enum ProcessStatus {
+  STOPPED = "stopped",
+  SPAWNING = "spawning",
+  IDLE = "idle",
+  PROCESSING = "processing",
+}
+
+/**
  * Basic process metrics - compatible with ProcessMetrics interface
  */
 export interface BasicProcessMetrics {
   teamName: string;
   pid: number | null;
-  status: "spawning" | "idle" | "processing" | "stopped";
+  status: ProcessStatus;
   messagesProcessed: number;
   lastUsed: number;
   uptime: number;
@@ -63,6 +74,10 @@ export class ClaudeProcess extends EventEmitter {
   private messageCount = 0;
   private lastUsed = 0;
 
+  // RxJS reactive status tracking
+  private statusSubject = new BehaviorSubject<ProcessStatus>(ProcessStatus.STOPPED);
+  public status$: Observable<ProcessStatus>;
+
   constructor(
     public readonly teamName: string,
     private irisConfig: IrisConfig,
@@ -70,6 +85,9 @@ export class ClaudeProcess extends EventEmitter {
   ) {
     super();
     this.logger = getChildLogger(`pool:process:${teamName}`);
+
+    // Expose status observable
+    this.status$ = this.statusSubject.asObservable();
 
     // Create transport using factory (Phase 1: LocalTransport only)
     this.transport = TransportFactory.create(teamName, irisConfig, sessionId);
@@ -225,8 +243,14 @@ export class ClaudeProcess extends EventEmitter {
 
     this.spawnTime = Date.now();
 
+    // Emit spawning status
+    this.statusSubject.next(ProcessStatus.SPAWNING);
+
     // Delegate to transport
     await this.transport.spawn(spawnCacheEntry, spawnTimeout);
+
+    // Emit idle status when ready
+    this.statusSubject.next(ProcessStatus.IDLE);
 
     this.logger.info("Process ready via transport", {
       teamName: this.teamName,
@@ -247,6 +271,18 @@ export class ClaudeProcess extends EventEmitter {
     // Update metrics
     this.messageCount++;
     this.lastUsed = Date.now();
+
+    // Emit processing status
+    this.statusSubject.next(ProcessStatus.PROCESSING);
+
+    // Subscribe to cache entry status to know when processing completes
+    const subscription = cacheEntry.status$.subscribe(status => {
+      // When cache entry completes or terminates, back to idle
+      if (status === CacheEntryStatus.COMPLETED || status === CacheEntryStatus.TERMINATED) {
+        this.statusSubject.next(ProcessStatus.IDLE);
+        subscription.unsubscribe(); // Clean up subscription
+      }
+    });
 
     // Delegate to transport
     this.transport.executeTell(cacheEntry);
@@ -288,31 +324,8 @@ export class ClaudeProcess extends EventEmitter {
     const isBusy = this.transport.isBusy();
     const pid = this.transport.getPid();
 
-    // Derive status from transport state
-    let status: "spawning" | "idle" | "processing" | "stopped";
-
-    // If uptime is 0, process never started or was terminated
-    if (transportMetrics.uptime === 0) {
-      status = "stopped";
-    }
-    // If there's no PID but we have uptime, either spawning or terminated
-    else if (pid === null) {
-      // Check if we ever got ready - if so, it's now stopped
-      if (transportMetrics.messagesProcessed > 0 || isReady) {
-        status = "stopped";
-      } else {
-        status = "spawning";
-      }
-    }
-    // Process is alive (has PID)
-    else if (isBusy) {
-      status = "processing";
-    } else if (isReady) {
-      status = "idle";
-    } else {
-      // Has PID but not ready yet = spawning
-      status = "spawning";
-    }
+    // Use the current status from the BehaviorSubject (single source of truth)
+    const status = this.statusSubject.value;
 
     return {
       teamName: this.teamName,
@@ -328,7 +341,7 @@ export class ClaudeProcess extends EventEmitter {
       lastActivity: transportMetrics.lastResponseAt || this.spawnTime,
       // Helper properties
       isReady,
-      isSpawning: status === "spawning",
+      isSpawning: status === ProcessStatus.SPAWNING,
       isBusy,
     };
   }
@@ -372,6 +385,10 @@ export class ClaudeProcess extends EventEmitter {
 
     // Delegate to transport
     await this.transport.terminate();
+
+    // Emit stopped status
+    this.statusSubject.next(ProcessStatus.STOPPED);
+    this.statusSubject.complete(); // No more status changes after termination
 
     this.logger.info("Process terminated via transport", {
       teamName: this.teamName,

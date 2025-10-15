@@ -254,12 +254,24 @@ export class ClaudeProcess extends EventEmitter {
 
   /**
    * Convenience method for tests: Send a tell message
-   * Creates a CacheEntry and delegates to executeTell
+   * Creates a CacheEntry, delegates to executeTell, and emits events when complete
    * @param message - Message to send
    */
   tell(message: string): void {
     // Create a cache entry
     const cacheEntry = new CacheEntryImpl(CacheEntryType.TELL, message);
+
+    // Subscribe to messages to detect completion
+    cacheEntry.messages$.subscribe((msg) => {
+      if (msg.type === "result") {
+        // Tell completed - emit message-response event for tests
+        this.emit("message-response", {
+          teamName: this.teamName,
+          success: msg.data.subtype === "success",
+          message: msg.data,
+        });
+      }
+    });
 
     this.executeTell(cacheEntry);
   }

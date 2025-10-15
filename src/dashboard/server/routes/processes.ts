@@ -69,26 +69,22 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
   });
 
   /**
-   * GET /api/processes/cache/:sessionId
-   * Returns cache entries for a specific session
+   * GET /api/processes/report/:fromTeam/:toTeam
+   * Returns cache report for a team pair
    */
-  router.get('/cache/:sessionId', (req, res) => {
+  router.get('/report/:fromTeam/:toTeam', async (req, res) => {
     try {
-      const { sessionId } = req.params;
-      const cache = bridge.getSessionCache(sessionId);
+      const { fromTeam, toTeam } = req.params;
+      const report = await bridge.getSessionReport(fromTeam, toTeam);
 
-      res.json({
-        success: true,
-        sessionId,
-        entries: cache,
-      });
+      res.json(report);
     } catch (error: any) {
       logger.error({
         err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to get session cache');
+      }, 'Failed to get session report');
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to retrieve session cache',
+        error: error.message || 'Failed to retrieve session report',
       });
     }
   });

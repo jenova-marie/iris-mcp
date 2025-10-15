@@ -44,8 +44,8 @@ export const api = {
   getSessions: () => apiClient.get('/processes'),
   getSessionMetrics: (fromTeam: string, toTeam: string) =>
     apiClient.get(`/processes/${fromTeam}/${toTeam}`),
-  getSessionCache: (sessionId: string) =>
-    apiClient.get(`/processes/cache/${sessionId}`),
+  getSessionCache: (fromTeam: string, toTeam: string) =>
+    apiClient.get(`/processes/report/${fromTeam}/${toTeam}`),
 
   // Terminal
   launchTerminal: (sessionId: string, toTeam: string) =>

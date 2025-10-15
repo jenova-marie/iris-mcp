@@ -70,6 +70,7 @@ export function ProcessMonitor() {
   const [cacheData, setCacheData] = useState<{ [sessionId: string]: string[] }>({});
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
   const [terminalStatus, setTerminalStatus] = useState<{ [sessionId: string]: 'idle' | 'launching' | 'success' | 'copied' }>({});
+  const [showStoppedSessions, setShowStoppedSessions] = useState(false);
 
   // Handle WebSocket updates
   const handleProcessStatus = useCallback((_data: ProcessStatus) => {
@@ -87,7 +88,7 @@ export function ProcessMonitor() {
     }));
   }, []);
 
-  const { connected, streamCache } = useWebSocket(handleProcessStatus, handleCacheStream);
+  const { connected } = useWebSocket(handleProcessStatus, handleCacheStream);
 
   // Fetch config to check if terminal script is available
   const { data: configData } = useQuery({
@@ -111,13 +112,61 @@ export function ProcessMonitor() {
     refetchInterval: 5000, // Refresh every 5 seconds
   });
 
-  const sessions: SessionProcessInfo[] = data?.sessions || [];
+  const allSessions: SessionProcessInfo[] = data?.sessions || [];
   const poolStatus = data?.poolStatus || {};
 
-  const handleViewCache = (sessionId: string) => {
+  // Filter sessions based on showStoppedSessions toggle
+  const sessions = showStoppedSessions
+    ? allSessions
+    : allSessions.filter(s => s.processState !== 'stopped');
+
+  const handleViewCache = async (sessionId: string, fromTeam: string, toTeam: string) => {
     setSelectedSession(sessionId);
-    setCacheData((prev) => ({ ...prev, [sessionId]: [] }));
-    streamCache(sessionId);
+    setCacheData((prev) => ({ ...prev, [sessionId]: ['Loading cache data...'] }));
+
+    try {
+      // Use the report endpoint to get cache data
+      const response = await api.getSessionCache(fromTeam, toTeam);
+
+      if (response.data) {
+        const report = response.data;
+        const cacheLines: string[] = [];
+
+        // Format cache entries for display
+        if (report.entries && report.entries.length > 0) {
+          for (const entry of report.entries) {
+            cacheLines.push(`\n=== ${entry.type.toUpperCase()} | ${entry.status} ===`);
+            cacheLines.push(`Tell String: ${entry.tellString}`);
+            cacheLines.push(`Messages: ${entry.messageCount}`);
+            cacheLines.push(`Created: ${new Date(entry.createdAt).toLocaleString()}`);
+            if (entry.completedAt) {
+              cacheLines.push(`Completed: ${new Date(entry.completedAt).toLocaleString()}`);
+            }
+            cacheLines.push('');
+
+            // Show messages
+            for (const msg of entry.messages) {
+              const timestamp = new Date(msg.timestamp).toLocaleTimeString();
+              cacheLines.push(`[${timestamp}] ${msg.type}`);
+              if (msg.content) {
+                cacheLines.push(msg.content);
+                cacheLines.push('');
+              }
+            }
+          }
+        } else {
+          cacheLines.push('No cache entries found for this session.');
+        }
+
+        setCacheData((prev) => ({ ...prev, [sessionId]: cacheLines }));
+      }
+    } catch (error) {
+      console.error('Failed to load cache:', error);
+      setCacheData((prev) => ({
+        ...prev,
+        [sessionId]: [`Error loading cache: ${error instanceof Error ? error.message : String(error)}`],
+      }));
+    }
   };
 
   const handleCopySessionId = useCallback((sessionId: string) => {
@@ -191,6 +240,20 @@ export function ProcessMonitor() {
             <p className="text-text-secondary mt-2">
               Real-time status of all team sessions (fromTeam→toTeam)
             </p>
+            <div className="mt-3 flex items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showStoppedSessions}
+                  onChange={(e) => setShowStoppedSessions(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-600 bg-bg-dark text-accent-purple focus:ring-accent-purple focus:ring-offset-0"
+                />
+                <span className="text-sm text-text-secondary">Show stopped sessions</span>
+              </label>
+              <span className="text-xs text-text-secondary">
+                ({sessions.length} of {allSessions.length})
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -268,7 +331,7 @@ export function ProcessMonitor() {
               {session.processState !== 'stopped' && (
                 <div className="mt-4 flex gap-2">
                   <button
-                    onClick={() => handleViewCache(session.sessionId)}
+                    onClick={() => handleViewCache(session.sessionId, session.fromTeam, session.toTeam)}
                     className={`btn-secondary ${terminalScriptAvailable ? 'flex-1' : 'w-full'} flex items-center justify-center gap-2`}
                   >
                     <Eye size={16} />

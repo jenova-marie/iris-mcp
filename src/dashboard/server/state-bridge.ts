@@ -14,6 +14,7 @@ import type { ClaudeProcessPool } from "../../process-pool/pool-manager.js";
 import type { SessionManager } from "../../session/session-manager.js";
 import type { TeamsConfigManager } from "../../config/iris-config.js";
 import type { TeamsConfig } from "../../process-pool/types.js";
+import { IrisOrchestrator } from "../../iris.js";
 import { getChildLogger } from "../../utils/logger.js";
 
 const logger = getChildLogger("dashboard:state");
@@ -48,12 +49,22 @@ export interface SessionProcessInfo {
  * Provides read access to state and forwards events
  */
 export class DashboardStateBridge extends EventEmitter {
+  private iris: IrisOrchestrator;
+
   constructor(
     private pool: ClaudeProcessPool,
     private sessionManager: SessionManager,
     private configManager: TeamsConfigManager,
   ) {
     super();
+
+    // Create IrisOrchestrator for accessing CacheManager
+    this.iris = new IrisOrchestrator(
+      this.sessionManager,
+      this.pool,
+      this.configManager.getConfig(),
+    );
+
     this.setupEventForwarding();
   }
 
@@ -237,12 +248,96 @@ export class DashboardStateBridge extends EventEmitter {
   }
 
   /**
-   * Get cache data for a specific session
-   * TODO: Implement when CacheManager is available in dashboard
+   * Get cache report for a specific team pair (fromTeam->toTeam)
    */
-  getSessionCache(sessionId: string): any[] {
-    logger.warn({ sessionId }, "getSessionCache not yet implemented");
-    return [];
+  async getSessionReport(fromTeam: string, toTeam: string): Promise<any> {
+    // Get message cache for this team pair
+    const messageCache = this.iris.getMessageCacheForTeams(fromTeam, toTeam);
+
+    if (!messageCache) {
+      logger.info({ fromTeam, toTeam }, "No message cache found (no session yet)");
+
+      return {
+        team: toTeam,
+        fromTeam,
+        hasSession: false,
+        hasProcess: false,
+        allComplete: true,
+        entries: [],
+        stats: {
+          totalEntries: 0,
+          spawnEntries: 0,
+          tellEntries: 0,
+          activeEntries: 0,
+          completedEntries: 0,
+        },
+        timestamp: Date.now(),
+      };
+    }
+
+    // Get all cache entries
+    const entries = messageCache.getAllEntries();
+    const stats = messageCache.getStats();
+
+    // Format entries for output
+    const formattedEntries = entries.map((entry) => {
+      const messages = entry.getMessages().map((msg) => {
+        let content: string | undefined;
+
+        // Extract text content from assistant messages
+        if (msg.type === "assistant" && msg.data?.message?.content) {
+          const textBlocks = msg.data.message.content.filter(
+            (c: any) => c.type === "text",
+          );
+          if (textBlocks.length > 0) {
+            content = textBlocks.map((b: any) => b.text).join("\n");
+          }
+        }
+
+        return {
+          timestamp: msg.timestamp,
+          type: msg.type,
+          content,
+        };
+      });
+
+      return {
+        type: entry.cacheEntryType as "spawn" | "tell",
+        tellString: entry.tellString,
+        status: entry.status,
+        isComplete: entry.status === "completed",
+        messageCount: entry.getMessages().length,
+        createdAt: entry.createdAt,
+        completedAt: entry.completedAt,
+        messages,
+      };
+    });
+
+    // Check if all entries are complete
+    const allComplete = entries.every((entry) => entry.status === "completed");
+
+    // Check if process is active
+    const session = this.iris.getSession(messageCache.sessionId);
+    const hasProcess = session ? this.iris.isAwake(fromTeam, toTeam) : false;
+
+    // Get process state if session exists
+    let processState: string | undefined;
+    if (session) {
+      processState = session.processState;
+    }
+
+    return {
+      team: toTeam,
+      fromTeam,
+      hasSession: true,
+      hasProcess,
+      processState,
+      sessionId: messageCache.sessionId,
+      allComplete,
+      entries: formattedEntries,
+      stats,
+      timestamp: Date.now(),
+    };
   }
 
   /**

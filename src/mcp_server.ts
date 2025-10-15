@@ -15,6 +15,7 @@ import express from "express";
 
 import { getConfigManager } from "./config/iris-config.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
+import { PoolEvent } from "./process-pool/types.js";
 import { SessionManager } from "./session/session-manager.js";
 import { IrisOrchestrator } from "./iris.js";
 import { getChildLogger } from "./utils/logger.js";
@@ -607,16 +608,12 @@ export class IrisMcpServer {
   }
 
   private setupEventListeners(): void {
-    // Log important pool events
-    this.processPool.on("process-spawned", (data) => {
-      logger.info(data, "Process spawned");
-    });
-
-    this.processPool.on("process-terminated", (data) => {
+    // Log important pool events using enum to prevent typos
+    this.processPool.on(PoolEvent.PROCESS_TERMINATED, (data) => {
       logger.info(data, "Process terminated");
     });
 
-    this.processPool.on("process-error", (data) => {
+    this.processPool.on(PoolEvent.PROCESS_ERROR, (data) => {
       logger.error(
         {
           err:

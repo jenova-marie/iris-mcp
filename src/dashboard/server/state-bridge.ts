@@ -14,6 +14,7 @@ import type { ClaudeProcessPool } from "../../process-pool/pool-manager.js";
 import type { SessionManager } from "../../session/session-manager.js";
 import type { TeamsConfigManager } from "../../config/iris-config.js";
 import type { TeamsConfig } from "../../process-pool/types.js";
+import { PoolEvent } from "../../process-pool/types.js";
 import { IrisOrchestrator } from "../../iris.js";
 import { getChildLogger } from "../../utils/logger.js";
 
@@ -75,52 +76,23 @@ export class DashboardStateBridge extends EventEmitter {
    * Forward events from process pool and session manager to dashboard clients
    */
   private setupEventForwarding(): void {
-    // Forward process lifecycle events
-    this.pool.on(
-      "process-spawned",
-      (data: { poolKey: string; pid: number }) => {
-        logger.debug(data, "Forwarding process-spawned event");
-        this.emit("ws:process-status", {
-          poolKey: data.poolKey,
-          status: "spawning",
-          pid: data.pid,
-        });
-      },
-    );
-
-    this.pool.on("process-terminated", (data: { poolKey: string }) => {
+    // Forward process lifecycle events using enum to prevent typos
+    this.pool.on(PoolEvent.PROCESS_TERMINATED, (data: { teamName: string }) => {
       logger.debug(data, "Forwarding process-terminated event");
+      // Note: We don't have poolKey in the event data, so we can't forward it
+      // Dashboard will need to refresh via polling or use a different approach
       this.emit("ws:process-status", {
-        poolKey: data.poolKey,
+        teamName: data.teamName,
         status: "stopped",
       });
     });
 
-    this.pool.on(
-      "process-status",
-      (data: { poolKey: string; status: string }) => {
-        logger.debug(data, "Forwarding process-status event");
-
-        const [fromTeam, toTeam] = data.poolKey.split("->") as [string, string];
-
-        this.emit("ws:process-status", {
-          poolKey: data.poolKey,
-          fromTeam,
-          toTeam,
-          status: data.status,
-        });
-      },
-    );
-
-    // Forward message events
-    this.pool.on("message-sent", (data: any) => {
-      logger.debug(data, "Forwarding message-sent event");
-      this.emit("ws:message-sent", data);
-    });
-
-    this.pool.on("message-response", (data: any) => {
-      logger.debug(data, "Forwarding message-response event");
-      this.emit("ws:message-response", data);
+    this.pool.on(PoolEvent.PROCESS_ERROR, (data: { teamName: string; error: Error }) => {
+      logger.debug(data, "Forwarding process-error event");
+      this.emit("ws:process-error", {
+        teamName: data.teamName,
+        error: data.error.message,
+      });
     });
 
     logger.info("Event forwarding initialized");

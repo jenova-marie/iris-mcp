@@ -1,9 +1,9 @@
 /**
  * Iris MCP Module: cancel
- * Attempt to cancel a running operation by sending ESC to stdin
+ * Attempt to cancel a running operation by sending 'cancel' to stdin
  *
  * EXPERIMENTAL: This may or may not work depending on whether
- * Claude's headless mode implements ESC interrupt handling
+ * Claude's headless mode implements cancel command handling
  */
 
 import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
@@ -54,7 +54,7 @@ export async function cancel(
 
   logger.info(
     { team, fromTeam, poolKey },
-    "Attempting to cancel operation via ESC"
+    "Attempting to cancel operation by sending 'cancel' message"
   );
 
   // Check if process exists (using poolKey format)
@@ -74,12 +74,22 @@ export async function cancel(
   }
 
   try {
-    // Send ESC character to stdin
-    process.cancel();
+    // Send 'cancel' string to stdin
+    if (!process['childProcess'] || !process['childProcess'].stdin) {
+      throw new Error("Process stdin not available");
+    }
 
     logger.info(
       { team, fromTeam, poolKey },
-      "ESC sent to process - waiting to see if Claude responds"
+      "Sending 'cancel' to stdin"
+    );
+
+    // Try sending 'cancel' as a plain string
+    process['childProcess'].stdin.write('cancel\n');
+
+    logger.info(
+      { team, fromTeam, poolKey },
+      "'cancel' sent to process - waiting to see if Claude responds"
     );
 
     return {
@@ -87,7 +97,7 @@ export async function cancel(
       fromTeam,
       attempted: true,
       processFound: true,
-      message: `ESC sent to ${poolKey}. If Claude supports ESC in headless mode, the operation should cancel.`,
+      message: `'cancel' sent to ${poolKey}. If Claude supports cancel commands in headless mode, the operation should cancel.`,
       timestamp: Date.now(),
     };
   } catch (error) {

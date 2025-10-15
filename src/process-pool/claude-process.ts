@@ -1,9 +1,11 @@
 /**
  * Claude Process - Dumb Pipe for stdio communication
  *
+ * Phase 1 Refactor: Now uses Transport abstraction for local/remote execution.
+ *
  * This is a SIMPLIFIED process wrapper that:
- * - Spawns Claude CLI in headless mode
- * - Pipes stdio/stderr messages to cache entries
+ * - Delegates to Transport for actual execution (local or remote)
+ * - Provides consistent interface regardless of execution method
  * - Does NOT handle completion detection (that's Iris's job)
  * - Does NOT manage timeouts (that's Iris's job)
  * - Does NOT queue messages (return "busy" instead)
@@ -18,16 +20,12 @@ import type { IrisConfig } from "./types.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError } from "../utils/errors.js";
 import { CacheEntry } from "../cache/types.js";
+import { TransportFactory } from "../transport/transport-factory.js";
+import type { Transport } from "../transport/transport.interface.js";
+import { ProcessBusyError } from "../transport/local-transport.js";
 
-/**
- * Error thrown when process is busy
- */
-export class ProcessBusyError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ProcessBusyError";
-  }
-}
+// ProcessBusyError now exported from local-transport.ts
+export { ProcessBusyError };
 
 /**
  * Basic process metrics - compatible with ProcessMetrics interface
@@ -51,24 +49,17 @@ export interface BasicProcessMetrics {
 }
 
 /**
- * Claude Process - Minimal wrapper for Claude CLI
+ * Claude Process - Minimal wrapper delegating to Transport
+ *
+ * Phase 1: Uses Transport abstraction for execution
  */
 export class ClaudeProcess extends EventEmitter {
-  private childProcess: ChildProcess | null = null;
-  private currentCacheEntry: CacheEntry | null = null;
-  private isReady = false;
-  private spawnTime = 0;
-  private responseBuffer = "";
+  private transport: Transport;
   private logger: ReturnType<typeof getChildLogger>;
+  private spawnTime = 0;
 
-  // Init promise for spawn()
-  private initResolve: (() => void) | null = null;
-  private initReject: ((error: Error) => void) | null = null;
-
-  // Metrics tracking
-  private messagesProcessed = 0;
+  // Metrics tracking (for compatibility with existing code)
   private messageCount = 0;
-  private lastActivity = 0;
   private lastUsed = 0;
 
   constructor(
@@ -78,6 +69,34 @@ export class ClaudeProcess extends EventEmitter {
   ) {
     super();
     this.logger = getChildLogger(`pool:process:${teamName}`);
+
+    // Create transport using factory (Phase 1: LocalTransport only)
+    this.transport = TransportFactory.create(teamName, irisConfig, sessionId);
+
+    // Forward transport events to ClaudeProcess events
+    // Transport implementations (LocalTransport, RemoteSSHTransport) extend EventEmitter
+    const transportEmitter = this.transport as unknown as EventEmitter;
+
+    transportEmitter.on('process-spawned', (data) => {
+      this.emit('process-spawned', data);
+    });
+
+    transportEmitter.on('process-exited', (data) => {
+      this.emit('process-exited', data);
+    });
+
+    transportEmitter.on('process-error', (data) => {
+      this.emit('process-error', data);
+    });
+
+    transportEmitter.on('process-terminated', (data) => {
+      this.emit('process-terminated', data);
+    });
+
+    this.logger.debug('ClaudeProcess created with transport', {
+      teamName,
+      transportType: this.transport.constructor.name,
+    });
   }
 
   /**
@@ -355,75 +374,19 @@ export class ClaudeProcess extends EventEmitter {
     spawnCacheEntry: CacheEntry,
     spawnTimeout = 20000,
   ): Promise<void> {
-    if (this.childProcess) {
-      throw new ProcessError("Process already spawned", this.teamName);
-    }
-
-    this.logger.info("Spawning Claude process", {
+    this.logger.info("Spawning Claude process via transport", {
       teamName: this.teamName,
       sessionId: this.sessionId,
       cacheEntryType: spawnCacheEntry.cacheEntryType,
+      transportType: this.transport.constructor.name,
     });
 
-    // Set current cache entry for init messages
-    this.currentCacheEntry = spawnCacheEntry;
     this.spawnTime = Date.now();
 
-    // Build args
-    const args: string[] = [];
+    // Delegate to transport
+    await this.transport.spawn(spawnCacheEntry, spawnTimeout);
 
-    // Resume existing session (not in test mode)
-    if (process.env.NODE_ENV !== "test") {
-      args.push("--resume", this.sessionId);
-    }
-
-    // Enable debug mode in test/debug environment
-    if (process.env.NODE_ENV === "test" || process.env.DEBUG) {
-      args.push("--debug");
-    }
-
-    args.push(
-      "--print", // Non-interactive headless mode
-      "--verbose", // Required for stream-json output
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-    );
-
-    if (this.irisConfig.skipPermissions) {
-      args.push("--dangerously-skip-permissions");
-    }
-
-    // Spawn process
-    this.childProcess = spawn("claude", args, {
-      cwd: this.irisConfig.path,
-      stdio: ["pipe", "pipe", "pipe"],
-      env: process.env,
-    });
-
-    this.logger.info("Process spawned", {
-      teamName: this.teamName,
-      pid: this.childProcess.pid,
-    });
-
-    // Setup stdio handlers
-    this.setupStdioHandlers();
-
-    // Emit spawned event
-    this.emit("process-spawned", {
-      teamName: this.teamName,
-      pid: this.childProcess.pid,
-    });
-
-    // Send spawn ping
-    this.writeToStdin(spawnCacheEntry.tellString);
-
-    // Wait for init message
-    await this.waitForInit(spawnTimeout);
-
-    this.isReady = true;
-    this.logger.info("Process ready", { teamName: this.teamName });
+    this.logger.info("Process ready via transport", { teamName: this.teamName });
   }
 
   /**
@@ -431,201 +394,38 @@ export class ClaudeProcess extends EventEmitter {
    * @param cacheEntry - CacheEntry with type=TELL, tellString=message
    */
   executeTell(cacheEntry: CacheEntry): void {
-    if (!this.isReady) {
-      throw new ProcessError("Process not ready", this.teamName);
-    }
-
-    if (this.currentCacheEntry) {
-      throw new ProcessBusyError("Process already processing a request");
-    }
-
-    this.logger.debug("Executing tell", {
+    this.logger.debug("Executing tell via transport", {
       teamName: this.teamName,
       cacheEntryType: cacheEntry.cacheEntryType,
       tellStringLength: cacheEntry.tellString.length,
     });
 
-    // Set current cache entry
-    this.currentCacheEntry = cacheEntry;
-
     // Update metrics
     this.messageCount++;
     this.lastUsed = Date.now();
 
-    // Write to stdin
-    this.writeToStdin(cacheEntry.tellString);
+    // Delegate to transport
+    this.transport.executeTell(cacheEntry);
   }
 
-  /**
-   * Setup stdio handlers (SIMPLIFIED - just pipes to cache)
-   */
-  private setupStdioHandlers(): void {
-    if (!this.childProcess) return;
-
-    // Stdout handler
-    this.childProcess.stdout!.on("data", (data) => {
-      this.handleStdoutData(data);
-    });
-
-    // Stderr handler
-    this.childProcess.stderr!.on("data", (data) => {
-      this.logger.debug("Claude stderr", {
-        teamName: this.teamName,
-        output: data.toString().substring(0, 500),
-      });
-    });
-
-    // Exit handler
-    this.childProcess.on("exit", (code, signal) => {
-      this.logger.info("Process exited", {
-        teamName: this.teamName,
-        code,
-        signal,
-      });
-
-      this.emit("process-exited", {
-        teamName: this.teamName,
-        code,
-        signal,
-      });
-
-      this.childProcess = null;
-      this.isReady = false;
-      this.currentCacheEntry = null;
-    });
-
-    // Error handler
-    this.childProcess.on("error", (error) => {
-      this.logger.error(
-        {
-          err: error,
-          teamName: this.teamName,
-        },
-        "Process error",
-      );
-
-      this.emit("process-error", {
-        teamName: this.teamName,
-        error,
-      });
-    });
-  }
-
-  /**
-   * Handle stdout data (DUMB PIPE - just write to cache)
-   */
-  private handleStdoutData(data: Buffer): void {
-    const rawData = data.toString();
-    this.responseBuffer += rawData;
-
-    // Parse newline-delimited JSON
-    const lines = this.responseBuffer.split("\n");
-    this.responseBuffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-
-      try {
-        const json = JSON.parse(line);
-
-        this.logger.debug("Parsed JSON message", {
-          type: json.type,
-          subtype: json.subtype,
-        });
-
-        // DUMB PIPE: Just write to current cache entry
-        if (this.currentCacheEntry) {
-          this.currentCacheEntry.addMessage(json);
-        }
-
-        // Special handling for init (resolve spawn promise)
-        if (json.type === "system" && json.subtype === "init") {
-          if (this.initResolve) {
-            this.initResolve();
-            this.initResolve = null;
-            this.initReject = null;
-          }
-        }
-
-        // Clear current cache entry on result (but don't notify anyone - that's Iris's job)
-        if (json.type === "result") {
-          this.logger.debug("Result message received, clearing cache entry", {
-            teamName: this.teamName,
-          });
-
-          // Update metrics
-          this.messagesProcessed++;
-          this.lastActivity = Date.now();
-
-          this.currentCacheEntry = null;
-        }
-      } catch (e) {
-        // Not JSON, ignore
-        this.logger.debug("Non-JSON stdout line", {
-          line: line.substring(0, 200),
-        });
-      }
-    }
-  }
-
-  /**
-   * Write message to stdin
-   */
-  private writeToStdin(message: string): void {
-    if (!this.childProcess || !this.childProcess.stdin) {
-      throw new ProcessError("Process stdin not available", this.teamName);
-    }
-
-    const userMessage = {
-      type: "user",
-      message: {
-        role: "user",
-        content: [{ type: "text", text: message }],
-      },
-    };
-
-    this.childProcess.stdin.write(JSON.stringify(userMessage) + "\n");
-
-    this.logger.debug("Wrote message to stdin", {
-      teamName: this.teamName,
-      messageLength: message.length,
-    });
-  }
-
-  /**
-   * Wait for init message during spawn
-   */
-  private async waitForInit(timeout = 20000): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.initResolve = resolve;
-      this.initReject = reject;
-
-      const timeoutId = setTimeout(() => {
-        this.initReject = null;
-        this.initResolve = null;
-        reject(new ProcessError("Init timeout", this.teamName));
-      }, timeout);
-
-      // Wrap resolve to clear timeout
-      const originalResolve = this.initResolve;
-      this.initResolve = () => {
-        clearTimeout(timeoutId);
-        originalResolve();
-      };
-    });
-  }
+  // Private methods removed - now in LocalTransport (and RemoteSSHTransport in Phase 2)
 
   /**
    * Get basic metrics - returns all ProcessMetrics properties
    */
   getBasicMetrics(): BasicProcessMetrics {
-    // Derive status from internal state
+    // Get metrics from transport
+    const transportMetrics = this.transport.getMetrics();
+    const isReady = this.transport.isReady();
+    const isBusy = this.transport.isBusy();
+
+    // Derive status from transport state
     let status: "spawning" | "idle" | "processing" | "stopped";
-    if (!this.childProcess) {
+    if (transportMetrics.uptime === 0) {
       status = "stopped";
-    } else if (!this.isReady) {
+    } else if (!isReady && !isBusy) {
       status = "spawning";
-    } else if (this.currentCacheEntry) {
+    } else if (isBusy) {
       status = "processing";
     } else {
       status = "idle";
@@ -633,20 +433,20 @@ export class ClaudeProcess extends EventEmitter {
 
     return {
       teamName: this.teamName,
-      pid: this.childProcess?.pid ?? null,
+      pid: null, // PID not exposed by transport abstraction (local-only concept)
       status,
-      messagesProcessed: this.messagesProcessed,
+      messagesProcessed: transportMetrics.messagesProcessed,
       lastUsed: this.lastUsed || this.spawnTime,
-      uptime: this.childProcess ? Date.now() - this.spawnTime : 0,
+      uptime: transportMetrics.uptime,
       idleTimeRemaining: 0, // Iris manages timeouts, not ClaudeProcess
       queueLength: 0, // No queue in dumb pipe model
       sessionId: this.sessionId,
       messageCount: this.messageCount,
-      lastActivity: this.lastActivity || this.spawnTime,
+      lastActivity: transportMetrics.lastResponseAt || this.spawnTime,
       // Helper properties
-      isReady: this.isReady,
-      isSpawning: !this.isReady && this.childProcess !== null,
-      isBusy: this.currentCacheEntry !== null,
+      isReady,
+      isSpawning: !isReady && transportMetrics.uptime > 0,
+      isBusy,
     };
   }
 
@@ -654,7 +454,8 @@ export class ClaudeProcess extends EventEmitter {
    * Check if spawning
    */
   isSpawning(): boolean {
-    return !this.isReady && this.childProcess !== null;
+    const transportMetrics = this.transport.getMetrics();
+    return !this.transport.isReady() && transportMetrics.uptime > 0;
   }
 
   /**
@@ -662,56 +463,35 @@ export class ClaudeProcess extends EventEmitter {
    * This is experimental - may or may not work depending on Claude's headless mode implementation
    */
   cancel(): void {
-    if (!this.childProcess || !this.childProcess.stdin) {
-      throw new ProcessError("Process stdin not available", this.teamName);
-    }
-
-    this.logger.info("Sending ESC to stdin (cancel attempt)", {
+    this.logger.info("Canceling via transport", {
       teamName: this.teamName,
-      pid: this.childProcess.pid,
-      isBusy: this.currentCacheEntry !== null,
+      isBusy: this.transport.isBusy(),
     });
 
-    // Send ESC character (ASCII 27 / 0x1B)
-    this.childProcess.stdin.write('\x1B');
-
-    this.logger.debug("ESC character sent to stdin");
+    // Delegate to transport (if supported)
+    if (this.transport.cancel) {
+      this.transport.cancel();
+    } else {
+      this.logger.warn("Cancel not supported by transport", {
+        transportType: this.transport.constructor.name,
+      });
+    }
   }
 
   /**
-   * Terminate process
+   * Terminate process via transport
    */
   async terminate(): Promise<void> {
-    if (!this.childProcess) return;
+    this.logger.info("Terminating process via transport", {
+      teamName: this.teamName,
+      transportType: this.transport.constructor.name,
+    });
 
-    this.logger.info("Terminating process", { teamName: this.teamName });
+    // Delegate to transport
+    await this.transport.terminate();
 
-    return new Promise<void>((resolve) => {
-      if (!this.childProcess) {
-        resolve();
-        return;
-      }
-
-      // Force kill after 5 seconds
-      const killTimer = setTimeout(() => {
-        if (this.childProcess) {
-          this.logger.warn("Force killing process");
-          this.childProcess.kill("SIGKILL");
-        }
-      }, 5000);
-
-      // Clean up on exit
-      this.childProcess.once("exit", () => {
-        clearTimeout(killTimer);
-        this.childProcess = null;
-        this.isReady = false;
-        this.currentCacheEntry = null;
-        this.emit("process-terminated", { teamName: this.teamName });
-        resolve();
-      });
-
-      // Try graceful shutdown first
-      this.childProcess.kill("SIGTERM");
+    this.logger.info("Process terminated via transport", {
+      teamName: this.teamName,
     });
   }
 }

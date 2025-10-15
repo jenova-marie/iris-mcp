@@ -41,6 +41,12 @@ logger:
       mkdir: true
       sync: false
 
+    # Memory transport (queryable in-memory store)
+    - type: memory
+      name: iris-mcp  # Registry name for querying logs
+      maxSize: 10000  # Max logs to store (circular buffer)
+      level: ${LOG_LEVEL:-warn}
+
   # Plugins - all disabled for tests
   plugins:
     traceContext: false

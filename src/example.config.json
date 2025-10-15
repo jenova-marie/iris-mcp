@@ -12,8 +12,12 @@
   },
   "dashboard": {
     "enabled": true,
-    "port": 3100,
-    "host": "localhost"
+    "host": "localhost",
+    "http": 0,
+    "https": 3100,
+    "selfsigned": false,
+    "certPath": "./cert.pem",
+    "keyPath": "./key.pem"
   },
   "database": {
     "path": "data/team-sessions.db",

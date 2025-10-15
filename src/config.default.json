@@ -12,8 +12,8 @@
   },
   "dashboard": {
     "enabled": true,
-    "port": 3100,
-    "host": "localhost"
+    "host": "localhost",
+    "http": 3100
   },
   "database": {
     "path": "data/team-sessions.db",

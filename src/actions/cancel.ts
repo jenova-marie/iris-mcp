@@ -74,22 +74,17 @@ export async function cancel(
   }
 
   try {
-    // Send 'cancel' string to stdin
-    if (!process['childProcess'] || !process['childProcess'].stdin) {
-      throw new Error("Process stdin not available");
-    }
-
+    // Use the cancel() method (which delegates to transport)
     logger.info(
       { team, fromTeam, poolKey },
-      "Sending 'cancel' to stdin"
+      "Sending cancel signal via transport"
     );
 
-    // Try sending 'cancel' as a plain string
-    process['childProcess'].stdin.write('cancel\n');
+    process.cancel();
 
     logger.info(
       { team, fromTeam, poolKey },
-      "'cancel' sent to process - waiting to see if Claude responds"
+      "Cancel signal sent to transport - waiting to see if Claude responds"
     );
 
     return {

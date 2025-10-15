@@ -78,14 +78,46 @@ const TeamsConfigSchema = z.object({
   dashboard: z
     .object({
       enabled: z.boolean().default(true),
-      port: z.number().int().min(1).max(65535).default(3100),
       host: z.string().default("localhost"),
+      http: z.number().int().min(0).max(65535).optional().default(0),
+      https: z.number().int().min(0).max(65535).optional().default(3100),
+      selfsigned: z.boolean().optional().default(false),
+      certPath: z.string().optional(),
+      keyPath: z.string().optional(),
     })
+    .refine(
+      (data) => {
+        // At least one of http or https must be enabled (non-zero)
+        if (data.http === 0 && data.https === 0) {
+          return false;
+        }
+        return true;
+      },
+      {
+        message: "At least one of http or https must be enabled (non-zero port)",
+      }
+    )
+    .refine(
+      (data) => {
+        // If https is enabled, must have either selfsigned=true OR both certPath and keyPath
+        if (data.https !== 0) {
+          if (!data.selfsigned && (!data.certPath || !data.keyPath)) {
+            return false;
+          }
+        }
+        return true;
+      },
+      {
+        message: "HTTPS requires either selfsigned=true or both certPath and keyPath",
+      }
+    )
     .optional()
     .default({
       enabled: true,
-      port: 3100,
       host: "localhost",
+      http: 3100,
+      https: 0,
+      selfsigned: false,
     }),
   database: z
     .object({

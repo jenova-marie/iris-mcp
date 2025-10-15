@@ -44,8 +44,12 @@ export interface IrisConfig {
 
 export interface DashboardConfig {
   enabled: boolean;
-  port: number;
   host: string;
+  http: number; // HTTP port (0 = disabled)
+  https: number; // HTTPS port (0 = disabled)
+  selfsigned: boolean; // Use self-signed certificate for HTTPS
+  certPath?: string; // Path to SSL certificate file (required if https enabled and selfsigned=false)
+  keyPath?: string; // Path to SSL private key file (required if https enabled and selfsigned=false)
   terminalScriptPath?: string; // Path to terminal.sh/bat script (runtime detected)
 }
 

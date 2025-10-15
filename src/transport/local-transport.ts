@@ -6,9 +6,10 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
-import { EventEmitter } from 'events';
+import { BehaviorSubject, Subject, Observable } from 'rxjs';
 import type { CacheEntry } from '../cache/types.js';
-import type { Transport, TransportMetrics } from './transport.interface.js';
+import type { Transport, TransportMetrics, TransportStatus } from './transport.interface.js';
+import { TransportStatus as Status } from './transport.interface.js';
 import type { IrisConfig } from '../process-pool/types.js';
 import { getChildLogger } from '../utils/logger.js';
 import { ProcessError } from '../utils/errors.js';
@@ -26,13 +27,20 @@ export class ProcessBusyError extends Error {
 /**
  * LocalTransport - Executes Claude locally via child_process
  */
-export class LocalTransport extends EventEmitter implements Transport {
+export class LocalTransport implements Transport {
   private childProcess: ChildProcess | null = null;
   private currentCacheEntry: CacheEntry | null = null;
   private ready = false;
   private startTime = 0;
   private responseBuffer = '';
   private logger: ReturnType<typeof getChildLogger>;
+
+  // RxJS Reactive Streams
+  private statusSubject = new BehaviorSubject<TransportStatus>(Status.STOPPED);
+  public status$: Observable<TransportStatus>;
+
+  private errorsSubject = new Subject<Error>();
+  public errors$: Observable<Error>;
 
   // Init promise for spawn()
   private initResolve: (() => void) | null = null;
@@ -47,8 +55,11 @@ export class LocalTransport extends EventEmitter implements Transport {
     private irisConfig: IrisConfig,
     private sessionId: string,
   ) {
-    super();
     this.logger = getChildLogger(`transport:local:${teamName}`);
+
+    // Expose observables
+    this.status$ = this.statusSubject.asObservable();
+    this.errors$ = this.errorsSubject.asObservable();
   }
 
   /**
@@ -67,6 +78,9 @@ export class LocalTransport extends EventEmitter implements Transport {
       sessionId: this.sessionId,
       cacheEntryType: spawnCacheEntry.cacheEntryType,
     });
+
+    // Emit SPAWNING status
+    this.statusSubject.next(Status.SPAWNING);
 
     // Set current cache entry for init messages
     this.currentCacheEntry = spawnCacheEntry;
@@ -116,12 +130,6 @@ export class LocalTransport extends EventEmitter implements Transport {
     // Setup stdio handlers
     this.setupStdioHandlers();
 
-    // Emit spawned event
-    this.emit('process-spawned', {
-      teamName: this.teamName,
-      pid: this.childProcess.pid,
-    });
-
     // Send spawn ping
     this.writeToStdin(spawnCacheEntry.tellString);
 
@@ -129,6 +137,10 @@ export class LocalTransport extends EventEmitter implements Transport {
     await this.waitForInit(spawnTimeout);
 
     this.ready = true;
+
+    // Emit READY status
+    this.statusSubject.next(Status.READY);
+
     this.logger.info('Local transport ready', { teamName: this.teamName });
   }
 
@@ -150,6 +162,9 @@ export class LocalTransport extends EventEmitter implements Transport {
       tellStringLength: cacheEntry.tellString.length,
     });
 
+    // Emit BUSY status
+    this.statusSubject.next(Status.BUSY);
+
     // Set current cache entry
     this.currentCacheEntry = cacheEntry;
 
@@ -164,6 +179,9 @@ export class LocalTransport extends EventEmitter implements Transport {
     if (!this.childProcess) return;
 
     this.logger.info('Terminating local process', { teamName: this.teamName });
+
+    // Emit TERMINATING status
+    this.statusSubject.next(Status.TERMINATING);
 
     return new Promise<void>((resolve) => {
       if (!this.childProcess) {
@@ -185,7 +203,10 @@ export class LocalTransport extends EventEmitter implements Transport {
         this.childProcess = null;
         this.ready = false;
         this.currentCacheEntry = null;
-        this.emit('process-terminated', { teamName: this.teamName });
+
+        // Emit STOPPED status
+        this.statusSubject.next(Status.STOPPED);
+
         resolve();
       });
 
@@ -277,16 +298,13 @@ export class LocalTransport extends EventEmitter implements Transport {
         signal,
       });
 
-      this.emit('process-exited', {
-        teamName: this.teamName,
-        code,
-        signal,
-      });
-
       this.childProcess = null;
       this.ready = false;
       this.currentCacheEntry = null;
       this.startTime = 0; // Reset uptime so getMetrics() returns uptime: 0
+
+      // Emit STOPPED status
+      this.statusSubject.next(Status.STOPPED);
     });
 
     // Error handler
@@ -299,10 +317,11 @@ export class LocalTransport extends EventEmitter implements Transport {
         'Local process error',
       );
 
-      this.emit('process-error', {
-        teamName: this.teamName,
-        error,
-      });
+      // Emit error to errors$ stream
+      this.errorsSubject.next(error);
+
+      // Emit ERROR status
+      this.statusSubject.next(Status.ERROR);
     });
   }
 
@@ -353,6 +372,9 @@ export class LocalTransport extends EventEmitter implements Transport {
           this.lastResponseAt = Date.now();
 
           this.currentCacheEntry = null;
+
+          // Emit READY status (back to idle)
+          this.statusSubject.next(Status.READY);
         }
       } catch (e) {
         // Not JSON, ignore

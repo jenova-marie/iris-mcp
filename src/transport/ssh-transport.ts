@@ -16,14 +16,15 @@
  */
 
 import { ChildProcess, spawn } from "child_process";
-import { EventEmitter } from "events";
+import { BehaviorSubject, Subject, Observable } from "rxjs";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError, TimeoutError } from "../utils/errors.js";
 import type { IrisConfig } from "../process-pool/types.js";
-import type { Transport } from "./transport.interface.js";
+import type { Transport, TransportStatus } from "./transport.interface.js";
+import { TransportStatus as Status } from "./transport.interface.js";
 import type { CacheEntry } from "../cache/types.js";
 
-export class SSHTransport extends EventEmitter implements Transport {
+export class SSHTransport implements Transport {
   private sshProcess: ChildProcess | null = null;
   private currentCacheEntry: CacheEntry | null = null;
   private ready = false;
@@ -31,6 +32,13 @@ export class SSHTransport extends EventEmitter implements Transport {
   private responseBuffer = "";
   private stderrBuffer = "";
   private logger: ReturnType<typeof getChildLogger>;
+
+  // RxJS Reactive Streams
+  private statusSubject = new BehaviorSubject<TransportStatus>(Status.STOPPED);
+  public status$: Observable<TransportStatus>;
+
+  private errorsSubject = new Subject<Error>();
+  public errors$: Observable<Error>;
 
   // Init promise for spawn()
   private initResolve: (() => void) | null = null;
@@ -45,7 +53,6 @@ export class SSHTransport extends EventEmitter implements Transport {
     private irisConfig: IrisConfig,
     private sessionId: string,
   ) {
-    super();
     this.logger = getChildLogger("transport:ssh-client");
 
     if (!irisConfig.remote) {
@@ -54,6 +61,10 @@ export class SSHTransport extends EventEmitter implements Transport {
         teamName,
       );
     }
+
+    // Expose observables
+    this.status$ = this.statusSubject.asObservable();
+    this.errors$ = this.errorsSubject.asObservable();
   }
 
   /**
@@ -187,6 +198,9 @@ export class SSHTransport extends EventEmitter implements Transport {
       path: this.irisConfig.path,
     });
 
+    // Emit SPAWNING status
+    this.statusSubject.next(Status.SPAWNING);
+
     this.startTime = Date.now();
     this.currentCacheEntry = spawnCacheEntry;
 
@@ -221,11 +235,9 @@ export class SSHTransport extends EventEmitter implements Transport {
       await this.waitForInit(spawnTimeout);
 
       this.ready = true;
-      this.emit("process-spawned", {
-        teamName: this.teamName,
-        pid: this.sshProcess.pid,
-        sessionId: this.sessionId,
-      });
+
+      // Emit READY status
+      this.statusSubject.next(Status.READY);
 
       this.logger.info("SSH transport ready", {
         teamName: this.teamName,
@@ -282,11 +294,9 @@ export class SSHTransport extends EventEmitter implements Transport {
       });
 
       this.ready = false;
-      this.emit("process-exited", {
-        teamName: this.teamName,
-        code,
-        signal,
-      });
+
+      // Emit STOPPED status
+      this.statusSubject.next(Status.STOPPED);
 
       // Reject init if still waiting
       if (this.initReject) {
@@ -308,10 +318,11 @@ export class SSHTransport extends EventEmitter implements Transport {
         error: error.message,
       });
 
-      this.emit("process-error", {
-        teamName: this.teamName,
-        error,
-      });
+      // Emit error to errors$ stream
+      this.errorsSubject.next(error);
+
+      // Emit ERROR status
+      this.statusSubject.next(Status.ERROR);
 
       // Reject init if still waiting
       if (this.initReject) {
@@ -370,6 +381,9 @@ export class SSHTransport extends EventEmitter implements Transport {
           this.lastResponseAt = Date.now();
           this.currentCacheEntry = null; // Ready for next tell
 
+          // Emit READY status (back to idle)
+          this.statusSubject.next(Status.READY);
+
           this.logger.debug("Received result from remote Claude", {
             teamName: this.teamName,
             messagesProcessed: this.messagesProcessed,
@@ -409,10 +423,8 @@ export class SSHTransport extends EventEmitter implements Transport {
         line.includes("Permission denied") ||
         line.includes("Authentication failed")
       ) {
-        this.emit("process-error", {
-          teamName: this.teamName,
-          error: new ProcessError("SSH authentication failed", this.teamName),
-        });
+        const error = new ProcessError("SSH authentication failed", this.teamName);
+        this.errorsSubject.next(error);
       }
 
       // Detect SSH connection failures
@@ -420,10 +432,8 @@ export class SSHTransport extends EventEmitter implements Transport {
         line.includes("Connection refused") ||
         line.includes("Connection timed out")
       ) {
-        this.emit("process-error", {
-          teamName: this.teamName,
-          error: new ProcessError("SSH connection failed", this.teamName),
-        });
+        const error = new ProcessError("SSH connection failed", this.teamName);
+        this.errorsSubject.next(error);
       }
     }
   }
@@ -510,6 +520,9 @@ export class SSHTransport extends EventEmitter implements Transport {
       );
     }
 
+    // Emit BUSY status
+    this.statusSubject.next(Status.BUSY);
+
     this.currentCacheEntry = cacheEntry;
 
     this.logger.debug("Executing tell on remote transport", {
@@ -536,6 +549,9 @@ export class SSHTransport extends EventEmitter implements Transport {
       teamName: this.teamName,
       pid: this.sshProcess.pid,
     });
+
+    // Emit TERMINATING status
+    this.statusSubject.next(Status.TERMINATING);
 
     this.ready = false;
 
@@ -564,7 +580,10 @@ export class SSHTransport extends EventEmitter implements Transport {
       process.once("exit", () => {
         clearTimeout(timer);
         this.sshProcess = null;
-        this.emit("process-terminated", { teamName: this.teamName });
+
+        // Emit STOPPED status
+        this.statusSubject.next(Status.STOPPED);
+
         resolve();
       });
 

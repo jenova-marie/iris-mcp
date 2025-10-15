@@ -92,7 +92,8 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
   /**
    * POST /api/processes/terminal/launch
    * Launches a terminal in the team's folder with --resume
-   * Executes the user-configured terminal script (terminal.sh/bat/ps1)
+   * Executes the user-configured fork script (fork.sh/bat/ps1)
+   * For remote teams, passes SSH host and options to the script
    */
   router.post('/terminal/launch', (req, res) => {
     try {
@@ -105,13 +106,13 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         });
       }
 
-      // Check if terminal script is configured
-      const terminalScriptPath = bridge.getTerminalScriptPath();
+      // Check if fork script is configured
+      const forkScriptPath = bridge.getForkScriptPath();
 
-      if (!terminalScriptPath) {
+      if (!forkScriptPath) {
         return res.status(404).json({
           success: false,
-          error: 'Terminal script not found. Create terminal.sh (or terminal.bat/ps1 on Windows) in your IRIS_HOME directory.',
+          error: 'Fork script not found. Create fork.sh (or fork.bat/ps1 on Windows) in your IRIS_HOME directory.',
         });
       }
 
@@ -125,35 +126,57 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         });
       }
 
-      logger.info(
-        { sessionId, toTeam, teamPath, terminalScriptPath },
-        'Launching terminal for session'
-      );
+      // Check if team is remote
+      const remoteInfo = bridge.getTeamRemoteInfo(toTeam);
+
+      let command: string;
+      if (remoteInfo) {
+        // Remote team: pass sessionId, teamPath, sshHost, sshOptions
+        logger.info(
+          { sessionId, toTeam, teamPath, forkScriptPath, remoteInfo },
+          'Launching remote fork for session'
+        );
+
+        // Build command with SSH host and options
+        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}" "${remoteInfo.sshHost}"`;
+        if (remoteInfo.sshOptions) {
+          command += ` "${remoteInfo.sshOptions}"`;
+        }
+      } else {
+        // Local team: pass sessionId, teamPath only
+        logger.info(
+          { sessionId, toTeam, teamPath, forkScriptPath },
+          'Launching local fork for session'
+        );
+
+        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}"`;
+      }
 
       try {
-        // Execute the terminal script with sessionId and teamPath arguments
-        execSync(`"${terminalScriptPath}" "${sessionId}" "${teamPath}"`, {
+        // Execute the fork script with appropriate arguments
+        execSync(command, {
           timeout: 5000,
           stdio: 'ignore' // Ignore output since terminal will be launched async
         });
 
-        logger.info({ sessionId, toTeam }, 'Terminal launched successfully');
+        logger.info({ sessionId, toTeam, remote: !!remoteInfo }, 'Terminal fork launched successfully');
 
         return res.json({
           success: true,
-          message: 'Terminal launched successfully',
+          message: 'Terminal fork launched successfully',
         });
       } catch (execError: any) {
         logger.error({
           err: execError instanceof Error ? execError : new Error(String(execError)),
           sessionId,
           toTeam,
-          terminalScriptPath
-        }, 'Failed to execute terminal script');
+          forkScriptPath,
+          command
+        }, 'Failed to execute fork script');
 
         return res.status(500).json({
           success: false,
-          error: 'Failed to launch terminal. Check terminal script execution.',
+          error: 'Failed to launch terminal fork. Check fork script execution.',
         });
       }
     } catch (error: any) {

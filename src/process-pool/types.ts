@@ -3,6 +3,16 @@
  * TypeScript interfaces for process management and team coordination
  */
 
+/**
+ * Process Pool Event Names
+ * Use enum to prevent typos in event listeners
+ */
+export enum PoolEvent {
+  PROCESS_TERMINATED = "process-terminated",
+  PROCESS_ERROR = "process-error",
+  HEALTH_CHECK = "health-check",
+}
+
 export interface ProcessPoolConfig {
   idleTimeout: number;
   maxProcesses: number;

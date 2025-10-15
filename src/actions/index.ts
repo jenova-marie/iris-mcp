@@ -6,6 +6,7 @@
 export * from "./tell.js";
 export * from "./quick_tell.js";
 export * from "./cancel.js";
+export * from "./clear.js";
 export * from "./report.js";
 export * from "./command.js";
 export * from "./wake.js";

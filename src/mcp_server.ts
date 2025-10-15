@@ -22,6 +22,7 @@ import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { tell } from "./actions/tell.js";
 import { quickTell } from "./actions/quick_tell.js";
 import { cancel } from "./actions/cancel.js";
+import { clear } from "./actions/clear.js";
 import { isAwake } from "./actions/isAwake.js";
 import { wake } from "./actions/wake.js";
 import { sleep } from "./actions/sleep.js";
@@ -116,6 +117,29 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["team", "fromTeam"],
+    },
+  },
+  {
+    name: "team_clear",
+    description:
+      "Create a fresh new session for a team pair. Use this to start over with a clean slate, " +
+      "restart the conversation, or reset when you want a fresh beginning without prior message history. " +
+      "Terminates existing process, deletes old session (including file cleanup), and creates a brand new " +
+      "session with a new UUID. Perfect for starting fresh, clearing history, getting a new start, or resetting " +
+      "after context has become too large or confused.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toTeam: {
+          type: "string",
+          description: "Name of the team to create fresh session for",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team requesting the clear/reset",
+        },
+      },
+      required: ["toTeam", "fromTeam"],
     },
   },
   {
@@ -347,6 +371,26 @@ export class IrisMcpServer {
                   type: "text",
                   text: JSON.stringify(
                     await cancel(args as any, this.processPool),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+            break;
+
+          case "team_clear":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await clear(
+                      args as any,
+                      this.iris,
+                      this.sessionManager,
+                      this.processPool,
+                    ),
                     null,
                     2,
                   ),

@@ -384,11 +384,15 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
       const session = sessionManager.getSession(FROM_TEAM, REMOTE_TEAM);
 
       expect(session).toBeDefined();
-      expect(session?.messageCount).toBeGreaterThan(0);
+      expect(session?.sessionId).toBeDefined();
+      expect(session?.fromTeam).toBe(FROM_TEAM);
+      expect(session?.toTeam).toBe(REMOTE_TEAM);
 
       console.log("Session metrics:", {
-        messageCount: session?.messageCount,
-        lastUsed: session?.lastUsedAt.toISOString(),
+        sessionId: session?.sessionId,
+        fromTeam: session?.fromTeam,
+        toTeam: session?.toTeam,
+        createdAt: session?.createdAt.toISOString(),
         uptime: `${((Date.now() - session?.createdAt.getTime()) / 1000).toFixed(1)}s`,
       });
     });

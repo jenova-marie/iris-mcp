@@ -67,6 +67,9 @@ export interface CacheEntry {
   // Observable for new messages
   messages$: Observable<CacheMessage>;
 
+  // Observable for status changes
+  status$: Observable<CacheEntryStatus>;
+
   // Lifecycle (called by Iris)
   complete(): void;
   terminate(reason: TerminationReason): void;

@@ -2,7 +2,7 @@
  * Cache Entry - Individual tell or spawn with message accumulation
  */
 
-import { ReplaySubject, Observable } from "rxjs";
+import { ReplaySubject, BehaviorSubject, Observable } from "rxjs";
 import {
   CacheEntry,
   CacheMessage,
@@ -32,6 +32,10 @@ export class CacheEntryImpl implements CacheEntry {
   private messagesSubject = new ReplaySubject<CacheMessage>();
   public messages$: Observable<CacheMessage>;
 
+  // Use BehaviorSubject for status so subscribers get current status immediately
+  private statusSubject = new BehaviorSubject<CacheEntryStatus>(CacheEntryStatus.ACTIVE);
+  public status$: Observable<CacheEntryStatus>;
+
   // Debug ID for tracking instance identity
   private static debugIdCounter = 0;
   public __debugId = ++CacheEntryImpl.debugIdCounter;
@@ -41,6 +45,7 @@ export class CacheEntryImpl implements CacheEntry {
     this.tellString = tellString;
     this.createdAt = Date.now();
     this.messages$ = this.messagesSubject.asObservable();
+    this.status$ = this.statusSubject.asObservable();
 
     logger.debug("CacheEntry created", {
       cacheEntryType,
@@ -138,6 +143,9 @@ export class CacheEntryImpl implements CacheEntry {
     this.status = CacheEntryStatus.COMPLETED;
     this.completedAt = Date.now();
 
+    // Emit the new status
+    this.statusSubject.next(CacheEntryStatus.COMPLETED);
+
     logger.debug("About to complete ReplaySubject", {
       cacheEntryType: this.cacheEntryType,
       debugId: this.__debugId,
@@ -145,6 +153,7 @@ export class CacheEntryImpl implements CacheEntry {
     });
 
     this.messagesSubject.complete();
+    this.statusSubject.complete();
 
     logger.debug("ReplaySubject completed", {
       cacheEntryType: this.cacheEntryType,
@@ -177,7 +186,12 @@ export class CacheEntryImpl implements CacheEntry {
     this.status = CacheEntryStatus.TERMINATED;
     this.terminationReason = reason;
     this.completedAt = Date.now();
+
+    // Emit the new status
+    this.statusSubject.next(CacheEntryStatus.TERMINATED);
+
     this.messagesSubject.complete();
+    this.statusSubject.complete();
 
     logger.warn("CacheEntry terminated", {
       cacheEntryType: this.cacheEntryType,

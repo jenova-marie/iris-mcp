@@ -8,6 +8,7 @@ import { Subscription } from "rxjs";
 import { filter } from "rxjs/operators";
 import { ClaudeProcess, ProcessStatus } from "./claude-process.js";
 import type { ProcessPoolStatus, ProcessPoolConfig } from "./types.js";
+import { PoolEvent } from "./types.js";
 import { TeamsConfigManager } from "../config/iris-config.js";
 import { getChildLogger } from "../utils/logger.js";
 import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
@@ -87,7 +88,7 @@ export class ClaudeProcessPool extends EventEmitter {
         this.removeFromAccessOrder(poolKey);
 
         // Emit event for backward compatibility
-        this.emit("process-terminated", { teamName: process.teamName });
+        this.emit(PoolEvent.PROCESS_TERMINATED, { teamName: process.teamName });
       }
     });
 
@@ -103,7 +104,7 @@ export class ClaudeProcessPool extends EventEmitter {
       );
 
       // Emit error event for backward compatibility
-      this.emit("process-error", {
+      this.emit(PoolEvent.PROCESS_ERROR, {
         teamName: process.teamName,
         error,
       });
@@ -508,6 +509,6 @@ export class ClaudeProcessPool extends EventEmitter {
     }
 
     // Emit health check event
-    this.emit("health-check", this.getStatus());
+    this.emit(PoolEvent.HEALTH_CHECK, this.getStatus());
   }
 }

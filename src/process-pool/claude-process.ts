@@ -64,7 +64,7 @@ export interface BasicProcessMetrics {
 /**
  * Claude Process - Minimal wrapper delegating to Transport
  *
- * Phase 1: Uses Transport abstraction for execution
+ * Fully reactive with RxJS observables + EventEmitter bridge for backward compatibility
  */
 export class ClaudeProcess extends EventEmitter {
   private transport: Transport;

@@ -36,8 +36,10 @@ export interface IrisConfig {
   skipPermissions?: boolean;
   color?: string;
   // Phase 2: Remote execution via SSH
-  remote?: string; // SSH connection string (e.g., "user@host")
+  remote?: string; // SSH connection string (e.g., "user@host" or "ssh inanna")
+  ssh2?: boolean; // Use ssh2 library instead of OpenSSH client (default: false)
   remoteOptions?: RemoteOptions;
+  claudePath?: string; // Custom path to Claude CLI executable (default: "claude", supports ~ expansion)
 }
 
 export interface DashboardConfig {

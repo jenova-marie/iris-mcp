@@ -33,9 +33,11 @@ const IrisConfigSchema = z.object({
     .optional(),
   // Phase 2: Remote execution via SSH
   remote: z.string().optional(), // SSH connection string (e.g., "user@host")
+  ssh2: z.boolean().optional(), // Use ssh2 library instead of OpenSSH client (default: false)
   remoteOptions: z
     .object({
       identity: z.string().optional(), // Path to SSH private key
+      passphrase: z.string().optional(), // Passphrase for encrypted SSH key (ssh2 only)
       port: z.number().int().min(1).max(65535).optional(), // SSH port
       strictHostKeyChecking: z.boolean().optional(), // SSH host key checking
       connectTimeout: z.number().positive().optional(), // Connection timeout in ms
@@ -46,7 +48,20 @@ const IrisConfigSchema = z.object({
       extraSshArgs: z.array(z.string()).optional(), // Additional SSH arguments
     })
     .optional(),
-});
+  claudePath: z.string().optional(), // Custom path to Claude CLI executable (default: "claude", supports ~ expansion)
+}).refine(
+  (data) => {
+    // If remote is specified, claudePath is required
+    if (data.remote && !data.claudePath) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "claudePath is required when remote is specified",
+    path: ["claudePath"],
+  }
+);
 
 const TeamsConfigSchema = z.object({
   settings: z.object({

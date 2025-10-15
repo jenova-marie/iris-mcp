@@ -29,6 +29,7 @@ import { sleep } from "./actions/sleep.js";
 import { wakeAll } from "./actions/wake-all.js";
 import { report } from "./actions/report.js";
 import { teams } from "./actions/teams.js";
+import { debug } from "./actions/debug.js";
 
 const logger = getChildLogger("iris:mcp");
 
@@ -269,6 +270,47 @@ const TOOLS: Tool[] = [
       properties: {},
     },
   },
+  {
+    name: "team_debug",
+    description:
+      "Query in-memory logs from Wonder Logger memory transport. " +
+      "Returns logs since a specified timestamp, with optional filtering by level and format. " +
+      "Use getAllStores=true to see available memory store names.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        logs_since: {
+          type: "number",
+          description:
+            "Timestamp (milliseconds) to get logs since. If not provided, returns all logs in memory.",
+        },
+        storeName: {
+          type: "string",
+          description:
+            "Memory store name to query. If not provided, queries the default 'iris-mcp' store. Use getAllStores=true to see available store names.",
+        },
+        format: {
+          type: "string",
+          enum: ["raw", "parsed"],
+          description:
+            "Return format: 'raw' (Pino JSON objects as-is) or 'parsed' (human-readable format with string levels). Default: 'parsed'",
+        },
+        level: {
+          oneOf: [
+            { type: "string" },
+            { type: "array", items: { type: "string" } },
+          ],
+          description:
+            "Filter by log level(s). Single level: 'error'. Multiple levels: ['error', 'warn']. Available levels: trace, debug, info, warn, error, fatal",
+        },
+        getAllStores: {
+          type: "boolean",
+          description:
+            "If true, returns list of all available memory store names instead of logs",
+        },
+      },
+    },
+  },
 ];
 
 export class IrisMcpServer {
@@ -497,6 +539,21 @@ export class IrisMcpServer {
                   type: "text",
                   text: JSON.stringify(
                     await teams(args as any, this.configManager),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+            break;
+
+          case "team_debug":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await debug(args as any),
                     null,
                     2,
                   ),

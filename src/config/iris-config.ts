@@ -206,7 +206,16 @@ export class TeamsConfigManager {
           team.path = resolve(configDir, team.path);
         }
 
-        // Validate team paths exist
+        // Skip path validation for remote teams - paths exist on remote host
+        if (team.remote) {
+          getLogger().debug(
+            { name, path: team.path, remote: team.remote },
+            `Skipping path validation for remote team`,
+          );
+          continue;
+        }
+
+        // Validate local team paths exist
         if (!existsSync(team.path)) {
           getLogger().warn(
             { name, path: team.path },

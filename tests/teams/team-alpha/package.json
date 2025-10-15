@@ -1,0 +1,12 @@
+{
+  "name": "team-alpha-api",
+  "version": "1.0.0",
+  "description": "Simple Express.js API with status endpoint",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

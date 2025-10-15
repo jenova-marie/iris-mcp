@@ -229,7 +229,7 @@ git worktree add ../monorepo-api-team feature/v2-endpoints
 **New Configuration Properties:**
 
 ```typescript
-interface TeamConfig {
+interface IrisConfig {
   path: string;                    // Absolute path to worktree
   description: string;
   branch?: string;                 // Branch checked out in worktree

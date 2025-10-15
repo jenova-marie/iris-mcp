@@ -120,7 +120,7 @@ iris send backend,frontend,mobile "System maintenance scheduled for tonight"
 
 #### `iris notify`
 
-Send fire-and-forget notifications to teams.
+Send  notifications to teams.
 
 ```bash
 # Send notification

@@ -153,7 +153,6 @@ Response:
 {
   "team": "backend",
   "status": "awake",
-  "pid": 12345,
   "sessionId": "abc123-...",
   "duration": 150,
   "timestamp": 1697567890123
@@ -213,8 +212,6 @@ Response:
         "description": "Backend services"
       },
       "process": {
-        "pid": 12345,
-        "sessionId": "abc123-...",
         "messageCount": 42
       }
     }

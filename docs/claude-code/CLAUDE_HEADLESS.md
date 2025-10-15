@@ -347,3 +347,81 @@ For Iris MCP integration tests:
 3. **Process Pool**: Reuse processes across tests to avoid spawn overhead
 4. **Cleanup**: Always terminate processes in afterEach hooks
 5. **Logging**: Capture stderr for debugging test failures
+
+## More Notes
+Based on my search, here are all the message types that Claude Code returns when using --output-format stream-json:
+Main Message Types
+Each conversation begins with an initial init system message, followed by a list of user and assistant messages, followed by a final result system message with stats, with each message emitted as a separate JSON object Headless mode - Claude Docs.
+1. system (with subtype init)
+The initial session initialization message:
+json{
+  "type": "system",
+  "subtype": "init",
+  "session_id": "...",
+  "tools": [...]
+}
+2. user
+User messages in the conversation:
+json{
+  "type": "user",
+  "message": {
+    "role": "user",
+    "content": [...]
+  }
+}
+3. assistant
+Assistant (Claude's) responses:
+json{
+  "type": "assistant",
+  "message": {
+    "role": "assistant",
+    "content": [
+      {"type": "text", "text": "..."},
+      // or
+      {"type": "tool_use", "id": "...", "name": "...", "input": {...}}
+    ]
+  }
+}
+4. tool_use (within assistant messages)
+When Claude invokes a tool:
+json{
+  "type": "tool_use",
+  "name": "Bash",
+  "input": {"command": "ls -la"}
+}
+5. tool_result (within user messages)
+Results from tool execution:
+json{
+  "type": "tool_result",
+  "tool_use_id": "...",
+  "content": "..."
+}
+6. result
+The final message containing session statistics Headless mode - Claude Docs:
+json{
+  "type": "result",
+  "subtype": "success",
+  "total_cost_usd": 0.003,
+  "is_error": false,
+  "duration_ms": 1234,
+  "duration_api_ms": 800,
+  "num_turns": 6,
+  "result": "The response text here...",
+  "session_id": "abc123"
+}
+Message Flow Example
+A typical conversation produces this sequence Missing Final Result Event in Streaming JSON Output with sdk · Issue #1920 · anthropics/claude-code:
+json{"type":"system","subtype":"init","session_id":"...","tools":[...]}
+{"type":"assistant","message":{"content":[{"type":"text","text":"..."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"...","name":"TodoWrite",...}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"...","content":"..."}]}}
+{"type":"result","subtype":"success",...}
+Usage
+This format is perfect for:
+
+Programmatic processing with jq or other JSON tools
+Multi-turn conversations via stdin/stdout
+Real-time monitoring of Claude's actions
+Building automation pipelines
+
+The stream-json format uses JSONL (newline-delimited JSON), where each line is a complete, parseable JSON object!

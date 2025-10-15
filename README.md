@@ -20,6 +20,26 @@
 
 Iris MCP is a **groundbreaking Model Context Protocol server** that enables direct communication between Claude Code instances across different project directories. It creates the **first true cross-codebase AI collaboration system**.
 
+### My Personal Use Case
+
+On the larger sysem I'm building I have 29 current projects - meaning 29 different CLAUDE.md files and 29 different claude code sessions.  Often while I'm working in the common project, for example, I might make a change that needs to be propagated and verified through a significant number of projects that depend on common.  This means opening a terminal for each project starting claude code and then manually instructing in the adoption of this latest change.  Ugh, that stinks.
+
+Wouldn't it be amazing if I could tell my current claude code session to review with all 28 other projects these common changes that may affect them?  Yes, it would be amazing.
+
+Another situation is I'm debugging a project and claude says "The issue appears to be in the api and this is what needs to be fixed there ......".  So I open a api terminal and copy paste the previous session's output to be discussed and resolved in the api claude code.  Why does copy/paste from one claude to another feel so wrong?
+
+Wouldn't it be great if I could just stay in the original project session and tell claude to relay his instructions to team-api, discuss the proposed fix, coming to a resolution, and then implementing it?  Yes, that would be great.
+
+Those cross session communications can get complicated quickly.  No big deal, I open a terminal to the other project and execute
+
+```bash
+claude --continue
+```
+
+...and the conversation is there exactly as claude had been talking to the original session - ready for me to continue the conversation - fully loaded with the verbal context passed from original to current session.  Once the issue has been resolved, I simply ask iris to tell the original team the bug is fixed and to run their tests to verify the fix.
+
+With Iris MCP I'm now working in all my projects - from any project.
+
 ### The Problem
 
 Modern software development involves multiple codebases (frontend, backend, mobile, infrastructure) that must stay synchronized. Currently, when you need to coordinate changes across projects:
@@ -38,7 +58,7 @@ Stay in your current project while Claude coordinates with other teams automatic
 
 ```
 You (in frontend project):
-"Using Iris, ask the backend team what their API versioning strategy is"
+"Iris, ask the backend team what their API versioning strategy is"
 
 Claude (in frontend) → Iris MCP → Claude (in backend) → analyzes backend code → responds
                                                                               ↓
@@ -63,6 +83,7 @@ Iris fills **critical gaps** that no existing multi-agent system addresses:
 **All existing solutions** work within a **single project boundary**. Iris breaks this limitation by enabling communication between completely independent codebases, each with their own:
 - Directory structure and dependencies
 - `.claude/` configuration
+- Session/Context
 - MCP servers and tools
 - Git repositories
 - Team-specific context
@@ -285,7 +306,6 @@ Claude will automatically use Iris MCP to coordinate!
       "path": "/Users/you/projects/acme-backend",
       "active": true,
       "processMetrics": {
-        "pid": 12345,
         "status": "idle",
         "messagesProcessed": 47,
         "lastUsed": 1704067200000,

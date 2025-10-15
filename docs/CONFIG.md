@@ -51,6 +51,10 @@ The Configuration subsystem provides **validated, hot-reloadable settings** usin
     "port": 3100,
     "host": "localhost"
   },
+  "database": {
+    "path": "data/team-sessions.db",
+    "inMemory": false
+  },
   "teams": {
     "team-alpha": {
       "path": "/Users/jenova/projects/alpha",
@@ -292,7 +296,7 @@ configManager.watch((newConfig) => {
 ```typescript
 import { z } from 'zod';
 
-const TeamConfigSchema = z.object({
+const IrisConfigSchema = z.object({
   path: z.string().min(1, "Path cannot be empty"),
   description: z.string(),
   idleTimeout: z.number().positive().optional(),
@@ -323,7 +327,14 @@ const TeamsConfigSchema = z.object({
     port: 3100,
     host: "localhost",
   }),
-  teams: z.record(z.string(), TeamConfigSchema),
+  database: z.object({
+    path: z.string().optional().default("data/team-sessions.db"),
+    inMemory: z.boolean().optional().default(false),
+  }).optional().default({
+    path: "data/team-sessions.db",
+    inMemory: false,
+  }),
+  teams: z.record(z.string(), IrisConfigSchema),
 });
 ```
 
@@ -478,10 +489,52 @@ interface Dashboard {
 }
 ```
 
+### Database Section
+
+```typescript
+interface Database {
+  path?: string;       // "data/team-sessions.db" - path to database file (relative to IRIS_HOME or absolute)
+  inMemory?: boolean;  // false - use in-memory database (for testing)
+}
+```
+
+**Path Resolution:**
+
+- **Relative paths** are resolved relative to `IRIS_HOME` (default: `~/.iris`)
+- **Absolute paths** are used as-is
+- Default: `data/team-sessions.db` (resolves to `~/.iris/data/team-sessions.db`)
+
+**In-Memory Mode:**
+
+Set `inMemory: true` to use SQLite in-memory database. Useful for:
+- Running tests without persisting data
+- Temporary sessions
+- Development environments
+
+**Example - Custom Path:**
+
+```json
+{
+  "database": {
+    "path": "/var/lib/iris/sessions.db"
+  }
+}
+```
+
+**Example - In-Memory (Testing):**
+
+```json
+{
+  "database": {
+    "inMemory": true
+  }
+}
+```
+
 ### Team Configuration
 
 ```typescript
-interface TeamConfig {
+interface IrisConfig {
   path: string;                   // Absolute or relative path to project
   description: string;            // Human-readable description
   idleTimeout?: number;           // Optional override for this team
@@ -579,7 +632,7 @@ class TeamsConfigManager {
   getConfig(): TeamsConfig;
 
   // Get configuration for specific team
-  getTeamConfig(teamName: string): TeamConfig | null;
+  getIrisConfig(teamName: string): IrisConfig | null;
 
   // Get list of all team names
   getTeamNames(): string[];

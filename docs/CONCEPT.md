@@ -441,7 +441,7 @@ import { spawn } from 'child_process';
 
 class StdioManager {
   async sendMessageToTeam(teamName: string, message: string): Promise<string> {
-    const teamConfig = this.getTeamConfig(teamName);
+    const irisConfig = this.getIrisConfig(teamName);
 
     // Spawn Claude Code with stdio streaming
     const claude = spawn('claude', [
@@ -449,7 +449,7 @@ class StdioManager {
       '--output-format', 'stream-json',
       '--dangerously-skip-permissions' // Optional: auto-approve actions
     ], {
-      cwd: teamConfig.path,
+      cwd: irisConfig.path,
       stdio: ['pipe', 'pipe', 'pipe']
     });
 

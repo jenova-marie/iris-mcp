@@ -118,7 +118,7 @@ Configuration structure:
 - WAL mode for better concurrency
 - Indexes on `(toTeam, status)` and `(expiresAt)`
 
-Use case: `teams_notify` tool for fire-and-forget messages that persist across server restarts.
+Use case: `teams_notify` tool for  messages that persist across server restarts.
 
 ## MCP Tools Implementation
 

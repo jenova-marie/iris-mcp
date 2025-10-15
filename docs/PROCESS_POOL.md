@@ -664,7 +664,7 @@ class ClaudeProcessPool extends EventEmitter {
 class ClaudeProcess extends EventEmitter {
   constructor(
     teamName: string,
-    teamConfig: TeamConfig,
+    irisConfig: IrisConfig,
     sessionId: string | null
   );
 

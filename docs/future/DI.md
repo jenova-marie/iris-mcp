@@ -99,12 +99,12 @@ The proposed architecture follows these principles:
 export interface ISessionInitializer {
   /**
    * Initialize a session file for a team
-   * @param teamConfig - Team configuration
+   * @param irisConfig - Team configuration
    * @param sessionId - UUID for session
    * @param timeout - Initialization timeout in ms
    */
   initializeSessionFile(
-    teamConfig: TeamConfig,
+    irisConfig: IrisConfig,
     sessionId: string,
     timeout: number
   ): Promise<void>;
@@ -148,18 +148,18 @@ export class SessionManager {
 
   async initialize(): Promise<void> {
     // Validate all team paths
-    for (const [teamName, teamConfig] of Object.entries(this.teamsConfig.teams)) {
-      this.pathValidator.validateSecureProjectPath(teamConfig.path);
+    for (const [teamName, irisConfig] of Object.entries(this.teamsConfig.teams)) {
+      this.pathValidator.validateSecureProjectPath(irisConfig.path);
     }
 
     // Pre-initialize sessions using injected initializer
-    for (const [teamName, teamConfig] of Object.entries(this.teamsConfig.teams)) {
+    for (const [teamName, irisConfig] of Object.entries(this.teamsConfig.teams)) {
       const existing = this.sessionRepository.getByTeamPair(null, teamName);
 
-      if (!existing || !this.sessionFileExists(teamConfig.path, existing.sessionId)) {
+      if (!existing || !this.sessionFileExists(irisConfig.path, existing.sessionId)) {
         const sessionId = generateSecureUUID();
         await this.sessionInitializer.initializeSessionFile(
-          teamConfig,
+          irisConfig,
           sessionId,
           this.teamsConfig.settings.sessionInitTimeout
         );
@@ -183,12 +183,12 @@ export class ClaudeSessionInitializer implements ISessionInitializer {
   ) {}
 
   async initializeSessionFile(
-    teamConfig: TeamConfig,
+    irisConfig: IrisConfig,
     sessionId: string,
     timeout: number
   ): Promise<void> {
     // Use injected processSpawner instead of direct spawn()
-    return ClaudeProcess.initializeSessionFile(teamConfig, sessionId, timeout);
+    return ClaudeProcess.initializeSessionFile(irisConfig, sessionId, timeout);
   }
 }
 
@@ -316,7 +316,7 @@ export class ClaudeProcess extends EventEmitter {
 
   constructor(
     private teamName: string,
-    private teamConfig: TeamConfig,
+    private irisConfig: IrisConfig,
     private idleTimeout: number,
     private sessionId: string | undefined,
     private processSpawner: IProcessSpawner // INJECTED!
@@ -330,7 +330,7 @@ export class ClaudeProcess extends EventEmitter {
 
     // Use injected spawner instead of direct spawn()
     this.process = this.processSpawner.spawn('claude', args, {
-      cwd: this.teamConfig.path,
+      cwd: this.irisConfig.path,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
     });
@@ -456,7 +456,7 @@ export interface IProcessFactory {
    */
   createProcess(
     teamName: string,
-    teamConfig: TeamConfig,
+    irisConfig: IrisConfig,
     idleTimeout: number,
     sessionId: string
   ): ClaudeProcess;
@@ -487,8 +487,8 @@ export class ClaudeProcessPool extends EventEmitter {
     // Create new process using injected factory
     const process = this.processFactory.createProcess(
       teamName,
-      teamConfig,
-      teamConfig.idleTimeout || this.config.idleTimeout,
+      irisConfig,
+      irisConfig.idleTimeout || this.config.idleTimeout,
       sessionId
     );
 
@@ -506,13 +506,13 @@ export class ClaudeProcessFactory implements IProcessFactory {
 
   createProcess(
     teamName: string,
-    teamConfig: TeamConfig,
+    irisConfig: IrisConfig,
     idleTimeout: number,
     sessionId: string
   ): ClaudeProcess {
     return new ClaudeProcess(
       teamName,
-      teamConfig,
+      irisConfig,
       idleTimeout,
       sessionId,
       this.processSpawner

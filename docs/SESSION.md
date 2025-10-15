@@ -366,9 +366,9 @@ async getOrCreateSession(
 
   // Initialize session file (if not in test mode)
   if (process.env.NODE_ENV !== "test") {
-    const teamConfig = this.getTeamConfig(toTeam);
+    const irisConfig = this.getIrisConfig(toTeam);
     await ClaudeProcess.initializeSessionFile(
-      teamConfig,
+      irisConfig,
       sessionId,
       this.config.settings.sessionInitTimeout
     );

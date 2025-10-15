@@ -15,7 +15,7 @@
 
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
-import { BehaviorSubject, Observable, Subscription } from "rxjs";
+import { BehaviorSubject, Observable, Subject, Subscription } from "rxjs";
 import type { IrisConfig } from "./types.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError } from "../utils/errors.js";
@@ -79,6 +79,10 @@ export class ClaudeProcess extends EventEmitter {
   private statusSubject = new BehaviorSubject<ProcessStatus>(ProcessStatus.STOPPED);
   public status$: Observable<ProcessStatus>;
 
+  // RxJS reactive error tracking
+  private errorsSubject = new Subject<Error>();
+  public errors$: Observable<Error>;
+
   // Subscriptions for cleanup
   private subscriptions: Subscription[] = [];
 
@@ -90,8 +94,9 @@ export class ClaudeProcess extends EventEmitter {
     super();
     this.logger = getChildLogger(`pool:process:${teamName}`);
 
-    // Expose status observable
+    // Expose status and errors observables
     this.status$ = this.statusSubject.asObservable();
+    this.errors$ = this.errorsSubject.asObservable();
 
     // Create transport using factory (Phase 1: LocalTransport only)
     this.transport = TransportFactory.create(teamName, irisConfig, sessionId);
@@ -171,6 +176,9 @@ export class ClaudeProcess extends EventEmitter {
         },
         "Transport error received",
       );
+
+      // Emit to errors$ observable
+      this.errorsSubject.next(error);
 
       // Emit process-error event for backward compatibility
       this.emit("process-error", {
@@ -437,8 +445,9 @@ export class ClaudeProcess extends EventEmitter {
     // Delegate to transport (status updates happen via transport.status$ subscription)
     await this.transport.terminate();
 
-    // Complete status subject (no more status changes after termination)
+    // Complete observables (no more emissions after termination)
     this.statusSubject.complete();
+    this.errorsSubject.complete();
 
     this.logger.info("Process terminated via transport", {
       teamName: this.teamName,

@@ -4,14 +4,15 @@
  */
 
 import { EventEmitter } from "events";
-import { ClaudeProcess } from "./claude-process.js";
+import { Subscription } from "rxjs";
+import { filter } from "rxjs/operators";
+import { ClaudeProcess, ProcessStatus } from "./claude-process.js";
 import type { ProcessPoolStatus, ProcessPoolConfig } from "./types.js";
 import { TeamsConfigManager } from "../config/iris-config.js";
 import { getChildLogger } from "../utils/logger.js";
 import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
 import { CacheEntryImpl } from "../cache/cache-entry.js";
 import { CacheEntryType } from "../cache/types.js";
-import { filter } from "rxjs/operators";
 
 export class ClaudeProcessPool extends EventEmitter {
   private processes = new Map<string, ClaudeProcess>();
@@ -19,6 +20,9 @@ export class ClaudeProcessPool extends EventEmitter {
   private accessOrder: string[] = []; // For LRU tracking
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private logger = getChildLogger("pool:manager");
+
+  // RxJS subscriptions per process (poolKey -> Subscription[])
+  private processSubscriptions = new Map<string, Subscription[]>();
 
   constructor(
     private configManager: TeamsConfigManager,
@@ -42,6 +46,71 @@ export class ClaudeProcessPool extends EventEmitter {
    */
   private getPoolKey(fromTeam: string, toTeam: string): string {
     return `${fromTeam}->${toTeam}`;
+  }
+
+  /**
+   * Setup RxJS subscriptions to process observables
+   * Replaces old EventEmitter event listeners
+   */
+  private setupProcessSubscriptions(
+    process: ClaudeProcess,
+    poolKey: string,
+    sessionId: string,
+  ): void {
+    const subscriptions: Subscription[] = [];
+
+    // Subscribe to process status changes
+    const statusSub = process.status$.subscribe((status) => {
+      this.logger.debug("Process status changed", {
+        poolKey,
+        sessionId,
+        status,
+      });
+
+      // Handle terminal states - clean up process from pool
+      if (status === ProcessStatus.STOPPED) {
+        this.logger.info("Process stopped, cleaning up from pool", {
+          poolKey,
+          sessionId,
+        });
+
+        // Clean up subscriptions
+        const subs = this.processSubscriptions.get(poolKey);
+        if (subs) {
+          subs.forEach(sub => sub.unsubscribe());
+          this.processSubscriptions.delete(poolKey);
+        }
+
+        // Clean up from pool
+        this.processes.delete(poolKey);
+        this.sessionToProcess.delete(sessionId);
+        this.removeFromAccessOrder(poolKey);
+
+        // Emit event for backward compatibility
+        this.emit("process-terminated", { teamName: process.teamName });
+      }
+    });
+
+    // Subscribe to process errors
+    const errorsSub = process.errors$.subscribe((error) => {
+      this.logger.error(
+        {
+          err: error,
+          poolKey,
+          sessionId,
+        },
+        "Process error received",
+      );
+
+      // Emit error event for backward compatibility
+      this.emit("process-error", {
+        teamName: process.teamName,
+        error,
+      });
+    });
+
+    subscriptions.push(statusSub, errorsSub);
+    this.processSubscriptions.set(poolKey, subscriptions);
   }
 
   /**
@@ -104,25 +173,8 @@ export class ClaudeProcessPool extends EventEmitter {
 
     const process = new ClaudeProcess(teamName, irisConfig, sessionId);
 
-    // Set up event forwarding
-    process.on("spawned", (data) => this.emit("process-spawned", data));
-    process.on("terminated", (data) => {
-      this.emit("process-terminated", data);
-      this.processes.delete(poolKey);
-      this.sessionToProcess.delete(sessionId);
-      this.removeFromAccessOrder(poolKey);
-    });
-    process.on("exited", (data) => {
-      this.emit("process-exited", data);
-      this.processes.delete(poolKey);
-      this.sessionToProcess.delete(sessionId);
-      this.removeFromAccessOrder(poolKey);
-    });
-    process.on("error", (data) => this.emit("process-error", data));
-    process.on("message-sent", (data) => this.emit("message-sent", data));
-    process.on("message-response", (data) =>
-      this.emit("message-response", data),
-    );
+    // Set up RxJS subscriptions to process observables
+    this.setupProcessSubscriptions(process, poolKey, sessionId);
 
     // Spawn the process with a temporary cache entry for init ping
     try {
@@ -203,6 +255,12 @@ export class ClaudeProcessPool extends EventEmitter {
     }
 
     await Promise.all(promises);
+
+    // Clean up all subscriptions
+    for (const subs of this.processSubscriptions.values()) {
+      subs.forEach(sub => sub.unsubscribe());
+    }
+    this.processSubscriptions.clear();
 
     // Event handlers should have cleaned up, but ensure everything is cleared
     this.processes.clear();

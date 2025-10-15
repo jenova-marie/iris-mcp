@@ -36,7 +36,7 @@ All dependencies are compatible with the project's MIT license and allow commerc
 - **Description**: Model Context Protocol implementation for TypeScript
 
 #### @recoverysky/wonder-logger (MIT)
-- **Version**: 1.0.10
+- **Version**: 1.0.11
 - **Author**: jenova-marie
 - **Homepage**: https://github.com/jenova-marie/wonder-logger
 - **License**: MIT
@@ -92,6 +92,13 @@ All dependencies are compatible with the project's MIT license and allow commerc
 - **License**: MIT
 - **Description**: Real-time bidirectional event-based communication
 
+#### ssh-config (MIT)
+- **Version**: 5.0.3
+- **Author**: Chen Yangjian
+- **Homepage**: https://github.com/cyjake/ssh-config
+- **License**: MIT
+- **Description**: SSH config parser and stringifier
+
 #### ssh2 (MIT)
 - **Version**: 1.17.0
 - **Author**: Brian White
@@ -139,5 +146,5 @@ For complete license texts, see:
 
 ---
 
-**Last Updated**: 2025-10-14  
+**Last Updated**: 2025-10-15
 **Dependency Count**: 200+ packages

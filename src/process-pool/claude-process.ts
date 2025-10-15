@@ -15,13 +15,14 @@
 
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
-import { BehaviorSubject, Observable } from "rxjs";
+import { BehaviorSubject, Observable, Subscription } from "rxjs";
 import type { IrisConfig } from "./types.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError } from "../utils/errors.js";
 import { CacheEntry, CacheEntryType, CacheEntryStatus } from "../cache/types.js";
 import { TransportFactory } from "../transport/transport-factory.js";
 import type { Transport } from "../transport/transport.interface.js";
+import { TransportStatus } from "../transport/transport.interface.js";
 import { ProcessBusyError } from "../transport/local-transport.js";
 import { ClaudePrintExecutor } from "../utils/claude-print.js";
 import { CacheEntryImpl } from "../cache/cache-entry.js";
@@ -78,6 +79,9 @@ export class ClaudeProcess extends EventEmitter {
   private statusSubject = new BehaviorSubject<ProcessStatus>(ProcessStatus.STOPPED);
   public status$: Observable<ProcessStatus>;
 
+  // Subscriptions for cleanup
+  private subscriptions: Subscription[] = [];
+
   constructor(
     public readonly teamName: string,
     private irisConfig: IrisConfig,
@@ -92,8 +96,11 @@ export class ClaudeProcess extends EventEmitter {
     // Create transport using factory (Phase 1: LocalTransport only)
     this.transport = TransportFactory.create(teamName, irisConfig, sessionId);
 
-    // Forward transport events to ClaudeProcess events
-    // Transport implementations (LocalTransport, SSH2Transport) extend EventEmitter
+    // Subscribe to transport observables (replaces event forwarding)
+    this.setupTransportSubscriptions();
+
+    // Forward transport events to ClaudeProcess events (backward compatibility during migration)
+    // TODO: Remove this once all consumers use observables
     const transportEmitter = this.transport as unknown as EventEmitter;
 
     transportEmitter.on("process-spawned", (data) => {
@@ -116,6 +123,64 @@ export class ClaudeProcess extends EventEmitter {
       teamName,
       transportType: this.transport.constructor.name,
     });
+  }
+
+  /**
+   * Setup subscriptions to transport observables
+   * Maps Transport status → ClaudeProcess status
+   */
+  private setupTransportSubscriptions(): void {
+    // Subscribe to transport status changes
+    const statusSub = this.transport.status$.subscribe((transportStatus) => {
+      this.logger.debug("Transport status changed", {
+        teamName: this.teamName,
+        transportStatus,
+      });
+
+      // Map TransportStatus → ProcessStatus
+      switch (transportStatus) {
+        case TransportStatus.STOPPED:
+          this.statusSubject.next(ProcessStatus.STOPPED);
+          break;
+        case TransportStatus.CONNECTING:
+        case TransportStatus.SPAWNING:
+          this.statusSubject.next(ProcessStatus.SPAWNING);
+          break;
+        case TransportStatus.READY:
+          this.statusSubject.next(ProcessStatus.IDLE);
+          break;
+        case TransportStatus.BUSY:
+          this.statusSubject.next(ProcessStatus.PROCESSING);
+          break;
+        case TransportStatus.TERMINATING:
+          // Keep current status during termination
+          break;
+        case TransportStatus.ERROR:
+          // Emit error event for backward compatibility
+          // Status remains unchanged (will be set to STOPPED on exit)
+          break;
+      }
+    });
+
+    // Subscribe to transport errors
+    const errorsSub = this.transport.errors$.subscribe((error) => {
+      this.logger.error(
+        {
+          err: error,
+          teamName: this.teamName,
+        },
+        "Transport error received",
+      );
+
+      // Emit process-error event for backward compatibility
+      this.emit("process-error", {
+        teamName: this.teamName,
+        error,
+      });
+    });
+
+    // Store subscriptions for cleanup
+    this.subscriptions.push(statusSub, errorsSub);
   }
 
   /**
@@ -243,14 +308,8 @@ export class ClaudeProcess extends EventEmitter {
 
     this.spawnTime = Date.now();
 
-    // Emit spawning status
-    this.statusSubject.next(ProcessStatus.SPAWNING);
-
-    // Delegate to transport
+    // Delegate to transport (status updates happen via transport.status$ subscription)
     await this.transport.spawn(spawnCacheEntry, spawnTimeout);
-
-    // Emit idle status when ready
-    this.statusSubject.next(ProcessStatus.IDLE);
 
     this.logger.info("Process ready via transport", {
       teamName: this.teamName,
@@ -272,19 +331,7 @@ export class ClaudeProcess extends EventEmitter {
     this.messageCount++;
     this.lastUsed = Date.now();
 
-    // Emit processing status
-    this.statusSubject.next(ProcessStatus.PROCESSING);
-
-    // Subscribe to cache entry status to know when processing completes
-    const subscription = cacheEntry.status$.subscribe(status => {
-      // When cache entry completes or terminates, back to idle
-      if (status === CacheEntryStatus.COMPLETED || status === CacheEntryStatus.TERMINATED) {
-        this.statusSubject.next(ProcessStatus.IDLE);
-        subscription.unsubscribe(); // Clean up subscription
-      }
-    });
-
-    // Delegate to transport
+    // Delegate to transport (status updates happen via transport.status$ subscription)
     this.transport.executeTell(cacheEntry);
   }
 
@@ -383,12 +430,15 @@ export class ClaudeProcess extends EventEmitter {
       transportType: this.transport.constructor.name,
     });
 
-    // Delegate to transport
+    // Unsubscribe from transport observables
+    this.subscriptions.forEach(sub => sub.unsubscribe());
+    this.subscriptions = [];
+
+    // Delegate to transport (status updates happen via transport.status$ subscription)
     await this.transport.terminate();
 
-    // Emit stopped status
-    this.statusSubject.next(ProcessStatus.STOPPED);
-    this.statusSubject.complete(); // No more status changes after termination
+    // Complete status subject (no more status changes after termination)
+    this.statusSubject.complete();
 
     this.logger.info("Process terminated via transport", {
       teamName: this.teamName,

@@ -98,8 +98,11 @@ export class LocalTransport extends EventEmitter implements Transport {
       args.push('--dangerously-skip-permissions');
     }
 
+    // Use custom claudePath if provided, otherwise default to 'claude'
+    const claudeExecutable = this.irisConfig.claudePath || 'claude';
+
     // Spawn process
-    this.childProcess = spawn('claude', args, {
+    this.childProcess = spawn(claudeExecutable, args, {
       cwd: this.irisConfig.path,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
@@ -217,6 +220,13 @@ export class LocalTransport extends EventEmitter implements Transport {
   }
 
   /**
+   * Get process ID (local only)
+   */
+  getPid(): number | null {
+    return this.childProcess?.pid ?? null;
+  }
+
+  /**
    * Send ESC character to stdin (attempt to cancel)
    */
   cancel(): void {
@@ -276,6 +286,7 @@ export class LocalTransport extends EventEmitter implements Transport {
       this.childProcess = null;
       this.ready = false;
       this.currentCacheEntry = null;
+      this.startTime = 0; // Reset uptime so getMetrics() returns uptime: 0
     });
 
     // Error handler

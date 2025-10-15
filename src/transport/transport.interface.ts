@@ -5,7 +5,7 @@
  * whether locally (child_process.spawn) or remotely (SSH tunneling).
  */
 
-import type { CacheEntry } from '../cache/types.js';
+import type { CacheEntry } from "../cache/types.js";
 
 /**
  * Transport metrics for monitoring performance
@@ -26,7 +26,7 @@ export interface TransportMetrics {
  *
  * Implementations:
  * - LocalTransport: Direct child_process.spawn (existing behavior)
- * - RemoteSSHTransport: SSH tunneling to remote host
+ * - SSH2Transport: SSH tunneling to remote host
  * - Future: DockerTransport, KubernetesTransport, WSLTransport
  */
 export interface Transport {
@@ -82,6 +82,16 @@ export interface Transport {
    * Get transport metrics (uptime, messages, etc.)
    */
   getMetrics(): TransportMetrics;
+
+  /**
+   * Get process ID (local only)
+   *
+   * Returns the OS process ID for local transports.
+   * Returns null for remote transports (PID is on remote host, not locally meaningful).
+   *
+   * @returns number | null - PID or null if not applicable
+   */
+  getPid(): number | null;
 
   /**
    * Send ESC character to stdin (attempt to cancel current operation)

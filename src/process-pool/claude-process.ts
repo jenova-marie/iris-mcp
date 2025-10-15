@@ -74,26 +74,26 @@ export class ClaudeProcess extends EventEmitter {
     this.transport = TransportFactory.create(teamName, irisConfig, sessionId);
 
     // Forward transport events to ClaudeProcess events
-    // Transport implementations (LocalTransport, RemoteSSHTransport) extend EventEmitter
+    // Transport implementations (LocalTransport, SSH2Transport) extend EventEmitter
     const transportEmitter = this.transport as unknown as EventEmitter;
 
-    transportEmitter.on('process-spawned', (data) => {
-      this.emit('process-spawned', data);
+    transportEmitter.on("process-spawned", (data) => {
+      this.emit("process-spawned", data);
     });
 
-    transportEmitter.on('process-exited', (data) => {
-      this.emit('process-exited', data);
+    transportEmitter.on("process-exited", (data) => {
+      this.emit("process-exited", data);
     });
 
-    transportEmitter.on('process-error', (data) => {
-      this.emit('process-error', data);
+    transportEmitter.on("process-error", (data) => {
+      this.emit("process-error", data);
     });
 
-    transportEmitter.on('process-terminated', (data) => {
-      this.emit('process-terminated', data);
+    transportEmitter.on("process-terminated", (data) => {
+      this.emit("process-terminated", data);
     });
 
-    this.logger.debug('ClaudeProcess created with transport', {
+    this.logger.debug("ClaudeProcess created with transport", {
       teamName,
       transportType: this.transport.constructor.name,
     });
@@ -386,7 +386,9 @@ export class ClaudeProcess extends EventEmitter {
     // Delegate to transport
     await this.transport.spawn(spawnCacheEntry, spawnTimeout);
 
-    this.logger.info("Process ready via transport", { teamName: this.teamName });
+    this.logger.info("Process ready via transport", {
+      teamName: this.teamName,
+    });
   }
 
   /**
@@ -408,7 +410,7 @@ export class ClaudeProcess extends EventEmitter {
     this.transport.executeTell(cacheEntry);
   }
 
-  // Private methods removed - now in LocalTransport (and RemoteSSHTransport in Phase 2)
+  // Private methods removed - now in LocalTransport (and SSH2Transport in Phase 2)
 
   /**
    * Get basic metrics - returns all ProcessMetrics properties
@@ -418,22 +420,37 @@ export class ClaudeProcess extends EventEmitter {
     const transportMetrics = this.transport.getMetrics();
     const isReady = this.transport.isReady();
     const isBusy = this.transport.isBusy();
+    const pid = this.transport.getPid();
 
     // Derive status from transport state
     let status: "spawning" | "idle" | "processing" | "stopped";
+
+    // If uptime is 0, process never started or was terminated
     if (transportMetrics.uptime === 0) {
       status = "stopped";
-    } else if (!isReady && !isBusy) {
-      status = "spawning";
-    } else if (isBusy) {
+    }
+    // If there's no PID but we have uptime, either spawning or terminated
+    else if (pid === null) {
+      // Check if we ever got ready - if so, it's now stopped
+      if (transportMetrics.messagesProcessed > 0 || isReady) {
+        status = "stopped";
+      } else {
+        status = "spawning";
+      }
+    }
+    // Process is alive (has PID)
+    else if (isBusy) {
       status = "processing";
-    } else {
+    } else if (isReady) {
       status = "idle";
+    } else {
+      // Has PID but not ready yet = spawning
+      status = "spawning";
     }
 
     return {
       teamName: this.teamName,
-      pid: null, // PID not exposed by transport abstraction (local-only concept)
+      pid,
       status,
       messagesProcessed: transportMetrics.messagesProcessed,
       lastUsed: this.lastUsed || this.spawnTime,
@@ -445,7 +462,7 @@ export class ClaudeProcess extends EventEmitter {
       lastActivity: transportMetrics.lastResponseAt || this.spawnTime,
       // Helper properties
       isReady,
-      isSpawning: !isReady && transportMetrics.uptime > 0,
+      isSpawning: status === "spawning",
       isBusy,
     };
   }

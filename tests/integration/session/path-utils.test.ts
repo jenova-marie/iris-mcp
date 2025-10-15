@@ -20,7 +20,7 @@ import {
   validateProjectPath,
 } from "../../../src/session/path-utils.js";
 
-describe("Path Utilities Integration (New Architecture)", () => {
+describe("Path Utilities Integration", () => {
   const testProjectPath = "/tmp/test-project";
 
   beforeEach(() => {
@@ -182,9 +182,7 @@ describe("Path Utilities Integration (New Architecture)", () => {
       const filePath = "/tmp/test-file-not-dir";
       writeFileSync(filePath, "test");
 
-      expect(() => validateProjectPath(filePath)).toThrow(
-        "is not a directory",
-      );
+      expect(() => validateProjectPath(filePath)).toThrow("is not a directory");
 
       // Cleanup
       if (existsSync(filePath)) {

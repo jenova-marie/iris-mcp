@@ -17,7 +17,7 @@ import { existsSync, unlinkSync } from "fs";
 import { resolve } from "path";
 import { SessionStore } from "../../../src/session/session-store.js";
 
-describe("SessionStore Integration (New Architecture)", () => {
+describe("SessionStore Integration", () => {
   let store: SessionStore;
   const testDbPath = resolve(
     process.cwd(),
@@ -142,7 +142,7 @@ describe("SessionStore Integration (New Architecture)", () => {
       expect(sessions).toHaveLength(50);
 
       // All should have required fromTeam
-      sessions.forEach(s => {
+      sessions.forEach((s) => {
         expect(s.fromTeam).toBeDefined();
         expect(s.fromTeam).not.toBeNull();
       });
@@ -449,7 +449,13 @@ describe("SessionStore Integration (New Architecture)", () => {
     });
 
     it("should handle all process state values", () => {
-      const states = ["stopped", "spawning", "idle", "processing", "terminating"];
+      const states = [
+        "stopped",
+        "spawning",
+        "idle",
+        "processing",
+        "terminating",
+      ];
       const sessionId = "session-1";
       store.create("team-iris", "team-alpha", sessionId);
 
@@ -479,7 +485,9 @@ describe("SessionStore Integration (New Architecture)", () => {
       expect(store.getBySessionId(session1.sessionId)?.processState).toBe(
         "processing",
       );
-      expect(store.getBySessionId(session2.sessionId)?.processState).toBe("idle");
+      expect(store.getBySessionId(session2.sessionId)?.processState).toBe(
+        "idle",
+      );
       expect(store.getBySessionId(session3.sessionId)?.processState).toBe(
         "spawning",
       );

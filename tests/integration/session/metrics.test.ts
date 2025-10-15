@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { SessionMetricsCollector } from "../../../src/session/metrics.js";
 
-describe("Session Metrics Integration (New Architecture)", () => {
+describe("Session Metrics Integration", () => {
   let collector: SessionMetricsCollector;
   const testSessionId = "test-session-123";
 

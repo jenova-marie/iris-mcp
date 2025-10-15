@@ -11,7 +11,7 @@ import { CacheEntryImpl } from "../../../src/cache/cache-entry.js";
 import { CacheEntryType } from "../../../src/cache/types.js";
 import { existsSync } from "fs";
 
-describe("ClaudeProcess Integration (New Architecture)", () => {
+describe("ClaudeProcess Integration", () => {
   let claudeProcess: ClaudeProcess;
   const testIrisConfig: IrisConfig = {
     path: process.cwd(),

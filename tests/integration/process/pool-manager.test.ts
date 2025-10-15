@@ -14,7 +14,7 @@ import { SessionManager } from "../../../src/session/session-manager.js";
 import type { ProcessPoolConfig } from "../../../src/process-pool/types.js";
 import { unlinkSync, existsSync } from "fs";
 
-describe("ClaudeProcessPool Integration (New Architecture)", () => {
+describe("ClaudeProcessPool Integration", () => {
   let pool: ClaudeProcessPool;
   let configManager: TeamsConfigManager;
   let sessionManager: SessionManager;

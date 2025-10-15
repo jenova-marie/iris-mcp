@@ -26,7 +26,7 @@ import { wake } from "../../../src/actions/wake.js";
 import { wakeAll } from "../../../src/actions/wake-all.js";
 import { command } from "../../../src/actions/command.js";
 
-describe("Actions Integration Tests (New Architecture)", () => {
+describe("Actions Integration Tests", () => {
   let sessionManager: SessionManager;
   let configManager: TeamsConfigManager;
   let processPool: ClaudeProcessPool;

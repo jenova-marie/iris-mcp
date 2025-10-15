@@ -17,6 +17,7 @@ export interface ProcessPoolConfig {
 
 export interface RemoteOptions {
   identity?: string; // Path to SSH private key
+  passphrase?: string; // Passphrase for encrypted SSH key
   port?: number; // SSH port
   strictHostKeyChecking?: boolean; // SSH host key checking
   connectTimeout?: number; // Connection timeout in ms

@@ -1,13 +1,14 @@
 /**
  * Transport Factory - Selects appropriate transport based on config
  *
- * Phase 1: Only LocalTransport supported
- * Phase 2: Will add RemoteSSHTransport
+ * Phase 1: LocalTransport for local execution
+ * Phase 2: RemoteSSHTransport for SSH execution (CURRENT)
  * Future: DockerTransport, KubernetesTransport, etc.
  */
 
 import type { Transport } from './transport.interface.js';
 import { LocalTransport } from './local-transport.js';
+import { RemoteSSHTransport } from './remote-ssh-transport.js';
 import type { IrisConfig } from '../process-pool/types.js';
 import { getChildLogger } from '../utils/logger.js';
 
@@ -32,18 +33,14 @@ export class TransportFactory {
   ): Transport {
     // Phase 2: Check for remote execution
     if (irisConfig.remote) {
-      logger.error(
+      logger.info(
         { teamName, remote: irisConfig.remote },
-        'Remote execution not yet implemented (Phase 2)',
+        'Creating RemoteSSHTransport for remote execution',
       );
-      throw new Error(
-        `Remote execution not yet implemented. Team "${teamName}" specifies remote: "${irisConfig.remote}". ` +
-        'This feature will be available in Phase 2 of the remote execution implementation. ' +
-        'See docs/future/REMOTE_IMPLEMENTATION_PLAN.md for details.',
-      );
+      return new RemoteSSHTransport(teamName, irisConfig, sessionId);
     }
 
-    // Phase 1: Only LocalTransport
+    // Phase 1: LocalTransport for local execution
     logger.debug({ teamName }, 'Creating LocalTransport');
     return new LocalTransport(teamName, irisConfig, sessionId);
   }

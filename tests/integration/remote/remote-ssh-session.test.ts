@@ -71,6 +71,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
   let poolManager: ClaudeProcessPool;
   let sessionManager: SessionManager;
   let claudeAvailable = false;
+  let testSession: Awaited<ReturnType<typeof sessionManager.getOrCreateSession>> | null = null;
 
   const REMOTE_TEAM = "team-inanna";
   const REMOTE_HOST = "inanna"; // SSH config alias
@@ -190,8 +191,15 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         });
 
         // Wake the remote team (spawns SSH connection via OpenSSH client)
+        // Get or create session for this team pair
+        testSession = await sessionManager.getOrCreateSession(
+          FROM_TEAM,
+          REMOTE_TEAM,
+        );
+
         const process = await poolManager.getOrCreateProcess(
           REMOTE_TEAM,
+          testSession.sessionId,
           FROM_TEAM,
         );
 
@@ -248,8 +256,11 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const logger = getChildLogger("test:remote-tell");
 
+        if (!testSession) throw new Error("Test session not initialized");
+
         const process = await poolManager.getOrCreateProcess(
           REMOTE_TEAM,
+          testSession.sessionId,
           FROM_TEAM,
         );
 
@@ -298,8 +309,11 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const logger = getChildLogger("test:remote-sequential");
 
+        if (!testSession) throw new Error("Test session not initialized");
+
         const process = await poolManager.getOrCreateProcess(
           REMOTE_TEAM,
+          testSession.sessionId,
           FROM_TEAM,
         );
 
@@ -340,8 +354,11 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
     it("should report correct process state", async () => {
       if (!claudeAvailable) return;
 
+      if (!testSession) throw new Error("Test session not initialized");
+
       const process = await poolManager.getOrCreateProcess(
         REMOTE_TEAM,
+        testSession.sessionId,
         FROM_TEAM,
       );
 
@@ -385,8 +402,11 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const logger = getChildLogger("test:remote-terminate");
 
+        if (!testSession) throw new Error("Test session not initialized");
+
         const process = await poolManager.getOrCreateProcess(
           REMOTE_TEAM,
+          testSession.sessionId,
           FROM_TEAM,
         );
 
@@ -430,10 +450,17 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         // Remove from pool to force fresh spawn
         poolManager["processes"].delete(`${FROM_TEAM}->${REMOTE_TEAM}`);
 
+        // Create new session for fresh spawn
+        const perfSession = await sessionManager.getOrCreateSession(
+          FROM_TEAM,
+          REMOTE_TEAM,
+        );
+
         // Measure spawn time
         const startTime = Date.now();
         const process = await poolManager.getOrCreateProcess(
           REMOTE_TEAM,
+          perfSession.sessionId,
           FROM_TEAM,
         );
         const spawnTime = Date.now() - startTime;
@@ -463,8 +490,11 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const logger = getChildLogger("test:remote-latency");
 
+        if (!testSession) throw new Error("Test session not initialized");
+
         const process = await poolManager.getOrCreateProcess(
           REMOTE_TEAM,
+          testSession.sessionId,
           FROM_TEAM,
         );
 

@@ -21,6 +21,7 @@ import { getChildLogger } from "./utils/logger.js";
 import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { tell } from "./actions/tell.js";
 import { quickTell } from "./actions/quick_tell.js";
+import { cancel } from "./actions/cancel.js";
 import { isAwake } from "./actions/isAwake.js";
 import { wake } from "./actions/wake.js";
 import { sleep } from "./actions/sleep.js";
@@ -94,6 +95,27 @@ const TOOLS: Tool[] = [
         },
       },
       required: ["toTeam", "message", "fromTeam"],
+    },
+  },
+  {
+    name: "team_cancel",
+    description:
+      "EXPERIMENTAL: Attempt to cancel a running operation by sending ESC to stdin. " +
+      "This may or may not work depending on whether Claude's headless mode supports ESC interrupt handling. " +
+      "Use this when you want to try interrupting a long-running Claude operation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team: {
+          type: "string",
+          description: "Name of the team whose operation to cancel",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team requesting the cancel",
+        },
+      },
+      required: ["team", "fromTeam"],
     },
   },
   {
@@ -310,6 +332,21 @@ export class IrisMcpServer {
                   type: "text",
                   text: JSON.stringify(
                     await quickTell(args as any, this.iris),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+            break;
+
+          case "team_cancel":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await cancel(args as any, this.processPool),
                     null,
                     2,
                   ),

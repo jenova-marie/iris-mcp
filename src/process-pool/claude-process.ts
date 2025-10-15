@@ -107,12 +107,11 @@ export class ClaudeProcess extends EventEmitter {
         "ping", // REQUIRED: Add a ping command to create session conversation
       ];
 
-      // Use absolute path to claude binary to avoid PATH resolution issues
-      const claudePath =
-        "/Users/jenova/.asdf/installs/nodejs/22.16.0/bin/claude";
+      // Use 'claude' command from PATH
+      const claudeCommand = "claude";
 
       // Log the exact command being run
-      const command = `${claudePath} ${args.join(" ")}`;
+      const command = `${claudeCommand} ${args.join(" ")}`;
       logger.info("Spawning claude process", {
         sessionId,
         command,
@@ -120,7 +119,7 @@ export class ClaudeProcess extends EventEmitter {
       });
 
       // Spawn Claude
-      const claudeProcess = spawn(claudePath, args, {
+      const claudeProcess = spawn(claudeCommand, args, {
         cwd: projectPath,
         stdio: ["pipe", "pipe", "pipe"],
         env: process.env, // Inherit environment
@@ -241,7 +240,7 @@ export class ClaudeProcess extends EventEmitter {
               {
                 sessionId,
                 code,
-                command: `${claudePath} ${args.join(" ")}`,
+                command: `${claudeCommand} ${args.join(" ")}`,
                 cwd: projectPath,
                 stdoutLength: stdoutData.length,
                 stderrLength: stderrData.length,
@@ -656,6 +655,27 @@ export class ClaudeProcess extends EventEmitter {
    */
   isSpawning(): boolean {
     return !this.isReady && this.childProcess !== null;
+  }
+
+  /**
+   * Send ESC character to stdin (attempt to cancel current operation)
+   * This is experimental - may or may not work depending on Claude's headless mode implementation
+   */
+  cancel(): void {
+    if (!this.childProcess || !this.childProcess.stdin) {
+      throw new ProcessError("Process stdin not available", this.teamName);
+    }
+
+    this.logger.info("Sending ESC to stdin (cancel attempt)", {
+      teamName: this.teamName,
+      pid: this.childProcess.pid,
+      isBusy: this.currentCacheEntry !== null,
+    });
+
+    // Send ESC character (ASCII 27 / 0x1B)
+    this.childProcess.stdin.write('\x1B');
+
+    this.logger.debug("ESC character sent to stdin");
   }
 
   /**

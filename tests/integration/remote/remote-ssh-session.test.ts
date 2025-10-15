@@ -393,7 +393,9 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         fromTeam: session?.fromTeam,
         toTeam: session?.toTeam,
         createdAt: session?.createdAt.toISOString(),
-        uptime: `${((Date.now() - session?.createdAt.getTime()) / 1000).toFixed(1)}s`,
+        uptime: session?.createdAt
+          ? `${((Date.now() - session.createdAt.getTime()) / 1000).toFixed(1)}s`
+          : "unknown",
       });
     });
   });
@@ -445,14 +447,18 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const logger = getChildLogger("test:remote-performance");
 
-        // Terminate existing process first
-        const existingProcess = poolManager.getProcess(REMOTE_TEAM, FROM_TEAM);
-        if (existingProcess) {
-          await existingProcess.terminate();
-        }
+        // Terminate existing process first (if testSession exists)
+        if (testSession) {
+          const existingProcess = poolManager.getProcessBySessionId(
+            testSession.sessionId,
+          );
+          if (existingProcess) {
+            await existingProcess.terminate();
+          }
 
-        // Remove from pool to force fresh spawn
-        poolManager["processes"].delete(`${FROM_TEAM}->${REMOTE_TEAM}`);
+          // Remove from pool to force fresh spawn
+          poolManager["processes"].delete(`${FROM_TEAM}->${REMOTE_TEAM}`);
+        }
 
         // Create new session for fresh spawn
         const perfSession = await sessionManager.getOrCreateSession(

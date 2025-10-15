@@ -28,6 +28,7 @@ const mockTransportMethods = {
     messagesProcessed: 0,
     lastResponseAt: null,
   } as TransportMetrics),
+  getPid: vi.fn().mockReturnValue(null),
   cancel: vi.fn(),
   // EventEmitter methods
   on: vi.fn(),
@@ -85,6 +86,11 @@ describe("ClaudeProcess Transport Delegation", () => {
       expect(mockTransportMethods.isBusy).toHaveBeenCalled();
     });
 
+    it("should delegate to transport.getPid()", () => {
+      claudeProcess.getBasicMetrics();
+      expect(mockTransportMethods.getPid).toHaveBeenCalled();
+    });
+
     it("should derive status from transport state", () => {
       const metrics = claudeProcess.getBasicMetrics();
       expect(metrics.status).toBeDefined();
@@ -131,12 +137,13 @@ describe("ClaudeProcess Transport Delegation", () => {
         messagesProcessed: 0,
         lastResponseAt: null,
       });
+      vi.mocked(mockTransportMethods.getPid).mockReturnValue(null);
 
       const metrics = claudeProcess.getBasicMetrics();
       expect(metrics.status).toBe("stopped");
     });
 
-    it("should return spawning when not ready and uptime > 0", () => {
+    it("should return spawning when not ready and uptime > 0 with PID", () => {
       vi.mocked(mockTransportMethods.getMetrics).mockReturnValue({
         uptime: 1000,
         messagesProcessed: 0,
@@ -144,9 +151,24 @@ describe("ClaudeProcess Transport Delegation", () => {
       });
       vi.mocked(mockTransportMethods.isReady).mockReturnValue(false);
       vi.mocked(mockTransportMethods.isBusy).mockReturnValue(false);
+      vi.mocked(mockTransportMethods.getPid).mockReturnValue(12345);
 
       const metrics = claudeProcess.getBasicMetrics();
       expect(metrics.status).toBe("spawning");
+    });
+
+    it("should return stopped when PID is null and process had messages", () => {
+      vi.mocked(mockTransportMethods.getMetrics).mockReturnValue({
+        uptime: 1000,
+        messagesProcessed: 5,
+        lastResponseAt: Date.now(),
+      });
+      vi.mocked(mockTransportMethods.isReady).mockReturnValue(false);
+      vi.mocked(mockTransportMethods.isBusy).mockReturnValue(false);
+      vi.mocked(mockTransportMethods.getPid).mockReturnValue(null);
+
+      const metrics = claudeProcess.getBasicMetrics();
+      expect(metrics.status).toBe("stopped");
     });
 
     it("should return processing when busy", () => {
@@ -157,6 +179,7 @@ describe("ClaudeProcess Transport Delegation", () => {
       });
       vi.mocked(mockTransportMethods.isReady).mockReturnValue(true);
       vi.mocked(mockTransportMethods.isBusy).mockReturnValue(true);
+      vi.mocked(mockTransportMethods.getPid).mockReturnValue(12345);
 
       const metrics = claudeProcess.getBasicMetrics();
       expect(metrics.status).toBe("processing");
@@ -170,6 +193,7 @@ describe("ClaudeProcess Transport Delegation", () => {
       });
       vi.mocked(mockTransportMethods.isReady).mockReturnValue(true);
       vi.mocked(mockTransportMethods.isBusy).mockReturnValue(false);
+      vi.mocked(mockTransportMethods.getPid).mockReturnValue(12345);
 
       const metrics = claudeProcess.getBasicMetrics();
       expect(metrics.status).toBe("idle");
@@ -187,6 +211,7 @@ describe("ClaudeProcess Transport Delegation", () => {
       vi.mocked(mockTransportMethods.getMetrics).mockReturnValue(transportMetrics);
       vi.mocked(mockTransportMethods.isReady).mockReturnValue(true);
       vi.mocked(mockTransportMethods.isBusy).mockReturnValue(false);
+      vi.mocked(mockTransportMethods.getPid).mockReturnValue(12345);
 
       const processMetrics = claudeProcess.getBasicMetrics();
 
@@ -196,6 +221,7 @@ describe("ClaudeProcess Transport Delegation", () => {
       );
       expect(processMetrics.isReady).toBe(true);
       expect(processMetrics.isBusy).toBe(false);
+      expect(processMetrics.pid).toBe(12345);
     });
 
     it("should handle null lastResponseAt", () => {
@@ -204,6 +230,7 @@ describe("ClaudeProcess Transport Delegation", () => {
         messagesProcessed: 0,
         lastResponseAt: null,
       });
+      vi.mocked(mockTransportMethods.getPid).mockReturnValue(12345);
 
       const metrics = claudeProcess.getBasicMetrics();
       // When lastResponseAt is null, should fall back to spawnTime (which is 0 for unspawned process)

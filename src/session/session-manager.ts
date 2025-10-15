@@ -5,11 +5,11 @@
  * for team pair communications.
  */
 
-import type { TeamsConfig, TeamConfig } from "../process-pool/types.js";
+import type { TeamsConfig, IrisConfig } from "../process-pool/types.js";
 import { ClaudeProcess } from "../process-pool/claude-process.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ConfigurationError, ProcessError } from "../utils/errors.js";
-import { SessionStore } from "./session-store.js";
+import { SessionStore, type SessionStoreOptions } from "./session-store.js";
 import {
   validateProjectPath,
   getSessionFilePath,
@@ -42,9 +42,22 @@ export class SessionManager {
   private cacheMaxAge = 60000; // 1 minute cache TTL
   private cacheTimestamps = new Map<string, number>();
 
-  constructor(teamsConfig: TeamsConfig, dbPath?: string) {
+  constructor(
+    teamsConfig: TeamsConfig,
+    dbOptions?: SessionStoreOptions | string,
+  ) {
     this.teamsConfig = teamsConfig;
-    this.store = new SessionStore(dbPath);
+
+    // If dbOptions not provided, use database config from TeamsConfig
+    if (!dbOptions && teamsConfig.database) {
+      this.store = new SessionStore({
+        path: teamsConfig.database.path,
+        inMemory: teamsConfig.database.inMemory,
+      });
+    } else {
+      // Use provided options (legacy string path or new options)
+      this.store = new SessionStore(dbOptions);
+    }
   }
 
   /**
@@ -52,6 +65,7 @@ export class SessionManager {
    * - Validates team project paths
    * - Discovers existing sessions
    * - Syncs database with filesystem
+   * - Resets stale process states from previous server instances
    *
    * NOTE: No longer pre-initializes sessions. In the new architecture, ALL sessions
    * require both fromTeam and toTeam. Sessions are created on-demand when the first
@@ -65,13 +79,17 @@ export class SessionManager {
 
     logger.info("Initializing session manager");
 
+    // Reset all process states to 'stopped' on server startup
+    // This clears stale runtime state from previous server instances
+    this.store.resetAllProcessStates();
+
     // Validate all team project paths
-    for (const [teamName, teamConfig] of Object.entries(
+    for (const [teamName, irisConfig] of Object.entries(
       this.teamsConfig.teams,
     )) {
       try {
         validateTeamName(teamName);
-        const projectPath = this.getProjectPath(teamConfig);
+        const projectPath = this.getProjectPath(irisConfig);
         validateSecureProjectPath(projectPath);
         logger.debug("Validated team project path", { teamName, projectPath });
       } catch (error) {
@@ -90,8 +108,8 @@ export class SessionManager {
   /**
    * Get project path from team config
    */
-  private getProjectPath(teamConfig: TeamConfig): string {
-    return teamConfig.path;
+  private getProjectPath(irisConfig: IrisConfig): string {
+    return irisConfig.path;
   }
 
   /**
@@ -143,12 +161,12 @@ export class SessionManager {
     validateTeamName(toTeam);
     validateTeamName(fromTeam);
 
-    const teamConfig = this.teamsConfig.teams[toTeam];
-    if (!teamConfig) {
+    const irisConfig = this.teamsConfig.teams[toTeam];
+    if (!irisConfig) {
       throw new ConfigurationError(`Unknown team: ${toTeam}`);
     }
 
-    const projectPath = this.getProjectPath(teamConfig);
+    const projectPath = this.getProjectPath(irisConfig);
     const sessionId = generateSecureUUID();
 
     logger.info("Creating new session", {
@@ -160,13 +178,13 @@ export class SessionManager {
 
     try {
       // Initialize the session file using ClaudeProcess static method
-      const teamConfig = this.teamsConfig.teams[toTeam];
+      const irisConfig = this.teamsConfig.teams[toTeam];
       const sessionInitTimeout =
-        teamConfig.sessionInitTimeout ??
+        irisConfig.sessionInitTimeout ??
         this.teamsConfig.settings.sessionInitTimeout;
 
       await ClaudeProcess.initializeSessionFile(
-        teamConfig,
+        irisConfig,
         sessionId,
         sessionInitTimeout,
       );
@@ -187,12 +205,15 @@ export class SessionManager {
 
       return sessionInfo;
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error)),
-        fromTeam,
-        toTeam,
-        sessionId,
-      }, "Failed to create session");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+          fromTeam,
+          toTeam,
+          sessionId,
+        },
+        "Failed to create session",
+      );
 
       throw new ProcessError(
         `Failed to create session: ${error instanceof Error ? error.message : String(error)}`,
@@ -323,9 +344,9 @@ export class SessionManager {
 
     // Optionally delete session file
     if (deleteFile) {
-      const teamConfig = this.teamsConfig.teams[session.toTeam];
-      if (teamConfig) {
-        const projectPath = this.getProjectPath(teamConfig);
+      const irisConfig = this.teamsConfig.teams[session.toTeam];
+      if (irisConfig) {
+        const projectPath = this.getProjectPath(irisConfig);
         const filePath = getSessionFilePath(projectPath, sessionId);
 
         try {
@@ -333,11 +354,14 @@ export class SessionManager {
           await fs.unlink(filePath);
           logger.info({ sessionId, filePath }, "Deleted session file");
         } catch (error) {
-          logger.warn({
-            err: error instanceof Error ? error : new Error(String(error)),
-            sessionId,
-            filePath,
-          }, "Failed to delete session file");
+          logger.warn(
+            {
+              err: error instanceof Error ? error : new Error(String(error)),
+              sessionId,
+              filePath,
+            },
+            "Failed to delete session file",
+          );
         }
       }
     }
@@ -377,10 +401,13 @@ export class SessionManager {
 
       logger.info({ sessionId }, "Session metadata compaction completed");
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error)),
-        sessionId,
-      }, "Session compaction failed");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+          sessionId,
+        },
+        "Session compaction failed",
+      );
 
       // Mark as error state
       this.store.updateStatus(sessionId, "error");

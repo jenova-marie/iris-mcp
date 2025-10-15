@@ -10,7 +10,7 @@ import { CacheEntry, CacheEntryType, CacheEntryStatus } from "./types.js";
 import { CacheEntryImpl } from "./cache-entry.js";
 import { getChildLogger } from "../utils/logger.js";
 
-const logger = getChildLogger("cache:message-cache");
+const logger = getChildLogger("cache:session");
 
 /**
  * In-memory message cache for a conversation (fromTeam→toTeam)

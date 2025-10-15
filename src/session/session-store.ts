@@ -7,9 +7,9 @@
 
 import Database from "better-sqlite3";
 import { existsSync, mkdirSync } from "fs";
-import { dirname, resolve } from "path";
+import { dirname, resolve, isAbsolute } from "path";
 import { getChildLogger } from "../utils/logger.js";
-import { getSessionDbPath } from "../utils/paths.js";
+import { getSessionDbPath, getIrisHome } from "../utils/paths.js";
 import type {
   SessionInfo,
   SessionRow,
@@ -20,30 +20,72 @@ import type {
 
 const logger = getChildLogger("session:store");
 
+export interface SessionStoreOptions {
+  path?: string; // Path to database file (relative to IRIS_HOME or absolute)
+  inMemory?: boolean; // Use in-memory database
+}
+
 /**
  * SQLite-based session storage
  */
 export class SessionStore {
   private db: Database.Database;
 
-  constructor(dbPath?: string) {
-    // Use provided path or default to $IRIS_HOME/data/team-sessions.db (or ~/.iris/data/team-sessions.db)
-    const absoluteDbPath = dbPath ? resolve(dbPath) : getSessionDbPath();
+  constructor(options?: SessionStoreOptions | string) {
+    // Handle legacy string parameter or new options object
+    let dbPath: string | undefined;
+    let inMemory = false;
 
-    // Ensure data directory exists
-    const dataDir = dirname(absoluteDbPath);
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
+    if (typeof options === 'string') {
+      // Legacy: direct path string
+      dbPath = options;
+    } else if (options) {
+      // New: options object
+      dbPath = options.path;
+      inMemory = options.inMemory ?? false;
+    }
+
+    // Determine final database path
+    let absoluteDbPath: string;
+
+    if (inMemory) {
+      // Use in-memory database
+      absoluteDbPath = ':memory:';
+      logger.info("Using in-memory database");
+    } else if (dbPath) {
+      // Use provided path
+      if (isAbsolute(dbPath)) {
+        // Already absolute
+        absoluteDbPath = dbPath;
+      } else {
+        // Relative to IRIS_HOME
+        absoluteDbPath = resolve(getIrisHome(), dbPath);
+      }
+    } else {
+      // Default: $IRIS_HOME/data/team-sessions.db
+      absoluteDbPath = getSessionDbPath();
+    }
+
+    // Ensure data directory exists (skip for in-memory)
+    if (!inMemory) {
+      const dataDir = dirname(absoluteDbPath);
+      if (!existsSync(dataDir)) {
+        mkdirSync(dataDir, { recursive: true });
+      }
     }
 
     // Open database
     this.db = new Database(absoluteDbPath);
-    this.db.pragma("journal_mode = WAL");
+
+    // Only set WAL mode for file-based databases
+    if (!inMemory) {
+      this.db.pragma("journal_mode = WAL");
+    }
 
     // Initialize schema
     this.initializeSchema();
 
-    logger.info("Session store initialized", { dbPath: absoluteDbPath });
+    logger.info("Session store initialized", { dbPath: absoluteDbPath, inMemory });
   }
 
   /**
@@ -437,6 +479,25 @@ export class SessionStore {
     stmt.run(timestamp, sessionId);
 
     logger.debug("Updated last response timestamp", { sessionId, timestamp });
+  }
+
+  /**
+   * Reset all process states to 'stopped' on server startup
+   * This clears stale runtime state from previous server instances
+   */
+  resetAllProcessStates(): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET process_state = 'stopped',
+          current_cache_session_id = NULL
+      WHERE process_state != 'stopped'
+    `);
+
+    const result = stmt.run();
+
+    logger.info("Reset process states on startup", {
+      sessionsReset: result.changes,
+    });
   }
 
   /**

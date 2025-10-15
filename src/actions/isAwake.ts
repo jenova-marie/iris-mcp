@@ -5,7 +5,7 @@
 
 import type { IrisOrchestrator } from "../iris.js";
 import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
-import type { TeamsConfigManager } from "../config/teams-config.js";
+import type { TeamsConfigManager } from "../config/iris-config.js";
 import type { SessionManager } from "../session/session-manager.js";
 import { validateTeamName } from "../utils/validation.js";
 import { getChildLogger } from "../utils/logger.js";
@@ -78,11 +78,7 @@ export async function isAwake(
   configManager: TeamsConfigManager,
   sessionManager: SessionManager,
 ): Promise<IsAwakeOutput> {
-  const {
-    fromTeam,
-    team,
-    includeNotifications = true,
-  } = input;
+  const { fromTeam, team, includeNotifications = true } = input;
 
   // Validate fromTeam (required)
   validateTeamName(fromTeam);
@@ -100,16 +96,14 @@ export async function isAwake(
     const teams: TeamStatus[] = [];
 
     // Get status for specific team or all teams
-    const teamsToCheck = team
-      ? { [team]: config.teams[team] }
-      : config.teams;
+    const teamsToCheck = team ? { [team]: config.teams[team] } : config.teams;
 
     if (team && !config.teams[team]) {
       throw new Error(`Unknown team: ${team}`);
     }
 
     // Check each team
-    for (const [teamName, teamConfig] of Object.entries(teamsToCheck)) {
+    for (const [teamName, irisConfig] of Object.entries(teamsToCheck)) {
       // Check if a session exists for this team pair in SessionManager
       const session = sessionManager.getSession(fromTeam, teamName);
 
@@ -121,9 +115,9 @@ export async function isAwake(
         name: teamName,
         status: poolProcess ? "awake" : "asleep",
         config: {
-          path: teamConfig.path,
-          description: teamConfig.description,
-          color: teamConfig.color,
+          path: irisConfig.path,
+          description: irisConfig.description,
+          color: irisConfig.color,
         },
       };
 
@@ -143,8 +137,10 @@ export async function isAwake(
 
     // Calculate pool statistics
     const activeProcesses = Object.keys(poolStatus.processes).length;
-    const totalMessages = Object.values(poolStatus.processes)
-      .reduce((sum, p) => sum + p.messageCount, 0);
+    const totalMessages = Object.values(poolStatus.processes).reduce(
+      (sum, p) => sum + p.messageCount,
+      0,
+    );
 
     const output: IsAwakeOutput = {
       teams,
@@ -165,16 +161,22 @@ export async function isAwake(
       };
     }
 
-    logger.info({
-      teamCount: teams.length,
-      activeCount: teams.filter(t => t.status === "awake").length
-    }, "Status retrieved");
+    logger.info(
+      {
+        teamCount: teams.length,
+        activeCount: teams.filter((t) => t.status === "awake").length,
+      },
+      "Status retrieved",
+    );
 
     return output;
   } catch (error) {
-    logger.error({
-      err: error instanceof Error ? error : new Error(String(error))
-    }, "Failed to get status");
+    logger.error(
+      {
+        err: error instanceof Error ? error : new Error(String(error)),
+      },
+      "Failed to get status",
+    );
     throw error;
   }
 }

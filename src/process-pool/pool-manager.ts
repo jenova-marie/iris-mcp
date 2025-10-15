@@ -6,7 +6,7 @@
 import { EventEmitter } from "events";
 import { ClaudeProcess } from "./claude-process.js";
 import type { ProcessPoolStatus, ProcessPoolConfig } from "./types.js";
-import { TeamsConfigManager } from "../config/teams-config.js";
+import { TeamsConfigManager } from "../config/iris-config.js";
 import { getChildLogger } from "../utils/logger.js";
 import { TeamNotFoundError, ProcessPoolLimitError } from "../utils/errors.js";
 import { CacheEntryImpl } from "../cache/cache-entry.js";
@@ -66,8 +66,8 @@ export class ClaudeProcessPool extends EventEmitter {
     fromTeam: string,
   ): Promise<ClaudeProcess> {
     // Check if team exists in configuration
-    const teamConfig = this.configManager.getTeamConfig(teamName);
-    if (!teamConfig) {
+    const irisConfig = this.configManager.getIrisConfig(teamName);
+    if (!irisConfig) {
       throw new TeamNotFoundError(teamName);
     }
 
@@ -102,7 +102,7 @@ export class ClaudeProcessPool extends EventEmitter {
       sessionId,
     });
 
-    const process = new ClaudeProcess(teamName, teamConfig, sessionId);
+    const process = new ClaudeProcess(teamName, irisConfig, sessionId);
 
     // Set up event forwarding
     process.on("spawned", (data) => this.emit("process-spawned", data));
@@ -127,7 +127,8 @@ export class ClaudeProcessPool extends EventEmitter {
     // Spawn the process with a temporary cache entry for init ping
     try {
       const spawnCacheEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
-      await process.spawn(spawnCacheEntry);
+      const spawnTimeout = this.config.spawnTimeout || 20000;
+      await process.spawn(spawnCacheEntry, spawnTimeout);
 
       // Add to pool with pool key
       this.processes.set(poolKey, process);
@@ -145,19 +146,28 @@ export class ClaudeProcessPool extends EventEmitter {
     } catch (error) {
       // CRITICAL: Clean up the failed process
       // The process object exists but spawn failed, so it's in a zombie state
-      this.logger.error({
-        err: error instanceof Error ? error : new Error(String(error)),
-        poolKey,
-        teamName,
-        sessionId,
-      }, "Process spawn failed, cleaning up");
+      this.logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+          poolKey,
+          teamName,
+          sessionId,
+        },
+        "Process spawn failed, cleaning up",
+      );
 
       // Terminate the zombie process to clean up any resources
       await process.terminate().catch((termError) => {
-        this.logger.warn({
-          err: termError instanceof Error ? termError : new Error(String(termError)),
-          poolKey,
-        }, "Failed to terminate zombie process");
+        this.logger.warn(
+          {
+            err:
+              termError instanceof Error
+                ? termError
+                : new Error(String(termError)),
+            poolKey,
+          },
+          "Failed to terminate zombie process",
+        );
       });
 
       // Re-throw the original error
@@ -325,11 +335,14 @@ export class ClaudeProcessPool extends EventEmitter {
       this.logger.info({ sessionId, command }, "Command sent to session");
       return response;
     } catch (error) {
-      this.logger.error({
-        err: error instanceof Error ? error : new Error(String(error)),
-        sessionId,
-        command,
-      }, "Failed to send command to session");
+      this.logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+          sessionId,
+          command,
+        },
+        "Failed to send command to session",
+      );
       throw error;
     }
   }

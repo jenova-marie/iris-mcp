@@ -66,7 +66,7 @@ beforeAll(() => {
 /**
  * Get test team configuration
  */
-export function getTestTeamConfig() {
+export function getTestIrisConfig() {
   return {
     settings: {
       idleTimeout: 300000,

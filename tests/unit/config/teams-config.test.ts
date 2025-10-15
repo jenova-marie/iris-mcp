@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { ConfigurationError } from "../../../src/utils/errors.js";
 
 // Mock modules
@@ -63,6 +63,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -92,6 +93,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -122,6 +124,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -203,6 +206,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -238,6 +242,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -267,7 +272,7 @@ describe("TeamsConfigManager", () => {
     });
   });
 
-  describe("getTeamConfig", () => {
+  describe("getIrisConfig", () => {
     beforeEach(async () => {
       const { readFileSync, existsSync } = await import("fs");
 
@@ -277,6 +282,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -300,29 +306,29 @@ describe("TeamsConfigManager", () => {
     });
 
     it("should return team configuration", () => {
-      const teamConfig = manager.getTeamConfig("team-alpha");
+      const irisConfig = manager.getIrisConfig("team-alpha");
 
-      expect(teamConfig).toBeDefined();
-      expect(teamConfig?.path).toBe("/path/to/team");
-      expect(teamConfig?.description).toBe("Test team");
+      expect(irisConfig).toBeDefined();
+      expect(irisConfig?.path).toBe("/path/to/team");
+      expect(irisConfig?.description).toBe("Test team");
     });
 
     it("should use global idleTimeout if team does not have custom value", () => {
-      const teamConfig = manager.getTeamConfig("team-alpha");
+      const irisConfig = manager.getIrisConfig("team-alpha");
 
-      expect(teamConfig?.idleTimeout).toBe(300000); // Global value
+      expect(irisConfig?.idleTimeout).toBe(300000); // Global value
     });
 
     it("should use team-specific idleTimeout if provided", () => {
-      const teamConfig = manager.getTeamConfig("team-beta");
+      const irisConfig = manager.getIrisConfig("team-beta");
 
-      expect(teamConfig?.idleTimeout).toBe(600000); // Custom value
+      expect(irisConfig?.idleTimeout).toBe(600000); // Custom value
     });
 
     it("should return null for non-existent team", () => {
-      const teamConfig = manager.getTeamConfig("nonexistent");
+      const irisConfig = manager.getIrisConfig("nonexistent");
 
-      expect(teamConfig).toBeNull();
+      expect(irisConfig).toBeNull();
     });
   });
 
@@ -336,6 +342,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -371,6 +378,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -393,7 +401,7 @@ describe("TeamsConfigManager", () => {
       expect(vi.mocked(watchFile)).toHaveBeenCalledWith(
         "/test/config.json",
         { interval: 1000 },
-        expect.any(Function)
+        expect.any(Function),
       );
     });
 
@@ -406,6 +414,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {
@@ -447,7 +456,7 @@ describe("TeamsConfigManager", () => {
           teams: expect.objectContaining({
             "team-beta": expect.any(Object),
           }),
-        })
+        }),
       );
     });
 
@@ -460,6 +469,7 @@ describe("TeamsConfigManager", () => {
           maxProcesses: 10,
           healthCheckInterval: 30000,
           sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
           responseTimeout: 120000,
         },
         teams: {

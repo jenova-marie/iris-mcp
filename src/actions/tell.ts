@@ -11,6 +11,7 @@ import {
   validateTimeout,
 } from "../utils/validation.js";
 import { getChildLogger } from "../utils/logger.js";
+import { argv0 } from "node:process";
 
 const logger = getChildLogger("action:tell");
 
@@ -24,14 +25,8 @@ export interface TellInput {
   /** Team sending the message */
   fromTeam: string;
 
-  /** Timeout in milliseconds (default: 30000) */
+  /** Timeout in milliseconds (default: 0 (indefinite)) */
   timeout?: number;
-
-  /** Use persistent queue for fire-and-forget (default: false) */
-  persist?: boolean;
-
-  /** TTL in days for persistent notifications (default: 30). Only used when persist=true */
-  ttlDays?: number;
 }
 
 export interface TellOutput {
@@ -52,29 +47,13 @@ export interface TellOutput {
 
   /** Timestamp of request */
   timestamp: number;
-
-  /** Notification ID (only when persist=true) */
-  notificationId?: string;
-
-  /** Expiration timestamp (only when persist=true) */
-  expiresAt?: number;
-
-  /** Task ID (only when async=true and using AsyncQueue) */
-  taskId?: string;
 }
 
 export async function tell(
   input: TellInput,
   iris: IrisOrchestrator,
 ): Promise<TellOutput> {
-  const {
-    fromTeam,
-    toTeam,
-    message,
-    timeout = 30000,
-    persist = false,
-    ttlDays = 30,
-  } = input;
+  const { fromTeam, toTeam, message, timeout = 0 } = input;
 
   // Validate inputs
   validateTeamName(toTeam);

@@ -1,8 +1,9 @@
 {
   "settings": {
     "sessionInitTimeout": 30000,
+    "spawnTimeout": 20000,
     "responseTimeout": 120000,
-    "idleTimeout": 30000000,
+    "idleTimeout": 3600000,
     "maxProcesses": 10,
     "healthCheckInterval": 30000,
     "httpPort": 1615,
@@ -13,6 +14,10 @@
     "enabled": true,
     "port": 3100,
     "host": "localhost"
+  },
+  "database": {
+    "path": "data/team-sessions.db",
+    "inMemory": false
   },
   "teams": {}
 }

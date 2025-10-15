@@ -13,7 +13,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, unlinkSync } from "fs";
 import { SessionManager } from "../../../src/session/session-manager.js";
-import { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
 import { IrisOrchestrator } from "../../../src/iris.js";
 
@@ -174,7 +174,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
 
       expect(result.teams[0].name).toBe("team-alpha");
       expect(result.teams[0].status).toBe("awake");
-      expect(result.teams[0].pid).toBeTruthy();
       expect(result.pool.activeProcesses).toBeGreaterThan(0);
     });
   });
@@ -352,7 +351,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
       expect(result).toBeDefined();
       expect(result.team).toBe("team-alpha");
       expect(result.status).toBe("sleeping");
-      expect(result.pid).toBeTruthy(); // Should have the PID that was terminated
     });
   });
 
@@ -394,7 +392,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
           const metrics = process.getBasicMetrics();
           console.log(`Process still exists after ${maxWaitTime}ms:`, {
             status: metrics.status,
-            pid: metrics.pid,
             sessionId: metrics.sessionId,
           });
         }
@@ -412,7 +409,6 @@ describe("Actions Integration Tests (New Architecture)", () => {
 
       expect(result.teams[0].name).toBe("team-alpha");
       expect(result.teams[0].status).toBe("asleep");
-      expect(result.teams[0].pid).toBeUndefined();
     });
   });
 
@@ -458,9 +454,7 @@ describe("Actions Integration Tests (New Architecture)", () => {
       console.log(`  Total messages: ${result.pool.totalMessages}`);
 
       result.teams.forEach((team) => {
-        console.log(
-          `  ${team.name}: ${team.status} ${team.pid ? `(PID: ${team.pid})` : ""}`,
-        );
+        console.log(`  ${team.name}: ${team.status}`);
       });
 
       expect(result.pool.activeProcesses).toBeGreaterThan(0);

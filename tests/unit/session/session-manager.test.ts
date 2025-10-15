@@ -17,7 +17,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
   })),
 }));
 
-import { existsSync, unlinkSync, mkdirSync, rmSync } from "fs";
+import { existsSync, mkdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { SessionManager } from "../../../src/session/session-manager.js";
@@ -27,7 +27,6 @@ import type { TeamsConfig } from "../../../src/process-pool/types.js";
 describe("SessionManager", () => {
   let manager: SessionManager;
   let testConfig: TeamsConfig;
-  const testDbPath = "./tests/data/test-session-manager.db";
   let testProjectPaths: string[] = [];
 
   beforeEach(() => {
@@ -75,7 +74,8 @@ describe("SessionManager", () => {
       },
     };
 
-    manager = new SessionManager(testConfig, testDbPath);
+    // Use in-memory database for unit tests
+    manager = new SessionManager(testConfig, { inMemory: true });
   });
 
   afterEach(() => {
@@ -84,17 +84,6 @@ describe("SessionManager", () => {
 
     // Clean up
     manager.close();
-
-    // Remove database files
-    if (existsSync(testDbPath)) {
-      unlinkSync(testDbPath);
-    }
-    if (existsSync(`${testDbPath}-shm`)) {
-      unlinkSync(`${testDbPath}-shm`);
-    }
-    if (existsSync(`${testDbPath}-wal`)) {
-      unlinkSync(`${testDbPath}-wal`);
-    }
 
     // Remove test project directories
     for (const path of testProjectPaths) {
@@ -124,7 +113,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const invalidManager = new SessionManager(invalidConfig, testDbPath);
+      const invalidManager = new SessionManager(invalidConfig, { inMemory: true });
 
       await expect(invalidManager.initialize()).rejects.toThrow(
         "Project path does not exist",
@@ -219,7 +208,7 @@ describe("SessionManager", () => {
     });
 
     it("should throw error if not initialized", async () => {
-      const uninitializedManager = new SessionManager(testConfig, testDbPath);
+      const uninitializedManager = new SessionManager(testConfig, { inMemory: true });
 
       await expect(
         uninitializedManager.getOrCreateSession("team-alpha", "team-beta"),
@@ -465,7 +454,7 @@ describe("SessionManager", () => {
         },
       };
 
-      const testManager = new SessionManager(configWithPath, testDbPath);
+      const testManager = new SessionManager(configWithPath, { inMemory: true });
 
       await expect(testManager.initialize()).resolves.not.toThrow();
 

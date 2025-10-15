@@ -8,8 +8,8 @@
 import { Command } from "commander";
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
-import { dirname, join } from "path";
-import { getConfigManager } from "./config/teams-config.js";
+import { dirname, join, resolve, isAbsolute } from "path";
+import { getConfigManager } from "./config/iris-config.js";
 import { IrisMcpServer } from "./mcp_server.js";
 import { IrisWebServer } from "./web_server.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
@@ -20,15 +20,25 @@ import { addTeam, install, uninstall } from "./cli/index.js";
 
 // Initialize Wonder Logger with config from teams config
 // This must happen BEFORE any getChildLogger() calls
-let wonderLoggerConfigPath = './wonder-logger.yaml'; // default fallback
+let wonderLoggerConfigPath = "./wonder-logger.yaml"; // default fallback
 try {
   const configManager = getConfigManager();
   const config = configManager.load();
-  wonderLoggerConfigPath = config.settings.wonderLoggerConfig || wonderLoggerConfigPath;
+
+  // Resolve wonderLoggerConfig path relative to the config file directory
+  const configPath = getConfigPath();
+  const configDir = dirname(resolve(configPath));
+  const relativeLoggerPath =
+    config.settings.wonderLoggerConfig || "./wonder-logger.yaml";
+
+  // If relative path, resolve relative to config directory, otherwise use as-is
+  wonderLoggerConfigPath = isAbsolute(relativeLoggerPath)
+    ? relativeLoggerPath
+    : resolve(configDir, relativeLoggerPath);
 } catch (error) {
   // Config load failed - use default path
   // This can happen on first run before config exists
-  console.warn('Config not found, using default wonder-logger.yaml path');
+  console.warn("Config not found, using default wonder-logger.yaml path");
 }
 
 // Initialize observability (logger + OTEL) with the configured path
@@ -89,13 +99,16 @@ program
 
     try {
       // Initialize shared components
-      logger.info({
-        irisHome: getIrisHome(),
-        configPath: getConfigPath(),
-        dataDir: getDataDir(),
-        teams: Object.keys(config.teams),
-        maxProcesses: config.settings.maxProcesses,
-      }, "Initializing Iris MCP...");
+      logger.info(
+        {
+          irisHome: getIrisHome(),
+          configPath: getConfigPath(),
+          dataDir: getDataDir(),
+          teams: Object.keys(config.teams),
+          maxProcesses: config.settings.maxProcesses,
+        },
+        "Initializing Iris MCP...",
+      );
 
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);
@@ -123,9 +136,12 @@ program
           );
           await webServer.start(config.dashboard);
         } catch (error) {
-          logger.error({
-            err: error instanceof Error ? error : new Error(String(error))
-          }, "Failed to start web dashboard");
+          logger.error(
+            {
+              err: error instanceof Error ? error : new Error(String(error)),
+            },
+            "Failed to start web dashboard",
+          );
           logger.warn("Continuing without dashboard");
         }
       }
@@ -133,9 +149,12 @@ program
       // Start MCP server
       await mcpServer.run(transport, port);
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, "Fatal error");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Fatal error",
+      );
       process.exit(1);
     }
   });
@@ -162,9 +181,12 @@ program
         color: options.color,
       });
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, "Failed to add team");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to add team",
+      );
       process.exit(1);
     }
   });
@@ -193,9 +215,12 @@ program
         // desktop: options.desktop, // DISABLED
       });
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, "Failed to install Iris MCP");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to install Iris MCP",
+      );
       process.exit(1);
     }
   });
@@ -215,9 +240,12 @@ program
         // desktop: options.desktop, // DISABLED
       });
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, "Failed to uninstall Iris MCP");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to uninstall Iris MCP",
+      );
       process.exit(1);
     }
   });
@@ -241,13 +269,16 @@ if (process.argv.length === 2) {
       const config = configManager.load();
 
       // Initialize shared components
-      logger.info({
-        irisHome: getIrisHome(),
-        configPath: getConfigPath(),
-        dataDir: getDataDir(),
-        teams: Object.keys(config.teams),
-        maxProcesses: config.settings.maxProcesses,
-      }, "Initializing Iris MCP...");
+      logger.info(
+        {
+          irisHome: getIrisHome(),
+          configPath: getConfigPath(),
+          dataDir: getDataDir(),
+          teams: Object.keys(config.teams),
+          maxProcesses: config.settings.maxProcesses,
+        },
+        "Initializing Iris MCP...",
+      );
 
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);
@@ -275,9 +306,12 @@ if (process.argv.length === 2) {
           );
           await webServer.start(config.dashboard);
         } catch (error) {
-          logger.error({
-            err: error instanceof Error ? error : new Error(String(error))
-          }, "Failed to start web dashboard");
+          logger.error(
+            {
+              err: error instanceof Error ? error : new Error(String(error)),
+            },
+            "Failed to start web dashboard",
+          );
           logger.warn("Continuing without dashboard");
         }
       }
@@ -288,9 +322,12 @@ if (process.argv.length === 2) {
         config.settings.httpPort || 1615,
       );
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, "Fatal error");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Fatal error",
+      );
       process.exit(1);
     }
   })();

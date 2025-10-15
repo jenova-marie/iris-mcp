@@ -59,7 +59,7 @@ describe("tell", () => {
         "team-beta",
         "team-alpha",
         "Hello team",
-        { timeout: 30000 },
+        { timeout: 0 },
       );
     });
 
@@ -237,7 +237,7 @@ describe("tell", () => {
       expect(result.response).toBe("Response");
     });
 
-    it("should use default timeout=30000", async () => {
+    it("should use default timeout=0", async () => {
       vi.mocked(mockIris.sendMessage).mockResolvedValue("Response");
 
       await tell(
@@ -253,7 +253,7 @@ describe("tell", () => {
         "team-beta",
         "team-alpha",
         "Message",
-        { timeout: 30000 },
+        { timeout: 0 },
       );
     });
   });

@@ -27,9 +27,6 @@ export interface WakeOutput {
   /** Status of the wake operation */
   status: "awake" | "waking";
 
-  /** Process ID if already awake */
-  pid?: number | null;
-
   /** Session ID used */
   sessionId?: string;
 
@@ -74,16 +71,18 @@ export async function wake(
       const metrics = existingProcess.getBasicMetrics();
       const duration = Date.now() - startTime;
 
-      logger.info({
-        team,
-        pid: metrics.pid,
-        status: metrics.status
-      }, "Team already awake");
+      logger.info(
+        {
+          team,
+          pid: metrics.pid,
+          status: metrics.status,
+        },
+        "Team already awake",
+      );
 
       return {
         team,
         status: "awake",
-        pid: metrics.pid,
         sessionId: metrics.sessionId,
         duration,
         timestamp: Date.now(),
@@ -98,32 +97,45 @@ export async function wake(
       const session = await sessionManager.getOrCreateSession(fromTeam, team);
 
       // Create process in pool (this will spawn it with session-specific pool key)
-      const process = await processPool.getOrCreateProcess(team, session.sessionId, fromTeam);
+      const process = await processPool.getOrCreateProcess(
+        team,
+        session.sessionId,
+        fromTeam,
+      );
       const metrics = process.getBasicMetrics();
+
+      // Update session state to idle after spawn completes
+      // This ensures the session is ready to accept messages
+      sessionManager.updateProcessState(session.sessionId, "idle");
 
       const duration = Date.now() - startTime;
 
-      logger.info({
-        team,
-        pid: metrics.pid,
-        sessionId: session.sessionId,
-        duration
-      }, "Team woken up successfully");
+      logger.info(
+        {
+          team,
+          pid: metrics.pid,
+          sessionId: session.sessionId,
+          duration,
+        },
+        "Team woken up successfully",
+      );
 
       return {
         team,
         status: "waking",
-        pid: metrics.pid,
         sessionId: session.sessionId,
         message: `Team ${team} is waking up and will be ready shortly`,
         duration,
         timestamp: Date.now(),
       };
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error)),
-        team
-      }, "Failed to wake team");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+          team,
+        },
+        "Failed to wake team",
+      );
 
       // Return waking status with error message
       const duration = Date.now() - startTime;
@@ -136,10 +148,13 @@ export async function wake(
       };
     }
   } catch (error) {
-    logger.error({
-      err: error instanceof Error ? error : new Error(String(error)),
-      team
-    }, "Wake operation failed");
+    logger.error(
+      {
+        err: error instanceof Error ? error : new Error(String(error)),
+        team,
+      },
+      "Wake operation failed",
+    );
     throw error;
   }
 }

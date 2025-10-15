@@ -96,8 +96,6 @@ describe("sleep", () => {
       expect(result).toMatchObject({
         team: "team-alpha",
         status: "sleeping",
-        pid: 12345,
-        sessionId: "session-123",
         message: "Team team-alpha has been put to sleep",
         duration: expect.any(Number),
         timestamp: expect.any(Number),
@@ -108,14 +106,23 @@ describe("sleep", () => {
       );
     });
 
-    it("should include lost messages when force=true", async () => {
+    it("should terminate team process when force=true", async () => {
       const result = await sleep(
         { team: "team-alpha", fromTeam: "team-beta", force: true },
         mockProcessPool,
       );
 
-      expect(result.lostMessages).toBe(5);
-      expect(result.message).toContain("5 messages lost");
+      expect(result).toMatchObject({
+        team: "team-alpha",
+        status: "sleeping",
+        message: "Team team-alpha has been put to sleep",
+        duration: expect.any(Number),
+        timestamp: expect.any(Number),
+      });
+
+      expect(mockProcessPool.terminateProcess).toHaveBeenCalledWith(
+        "team-alpha",
+      );
     });
 
     it("should handle termination errors", async () => {

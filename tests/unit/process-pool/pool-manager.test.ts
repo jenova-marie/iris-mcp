@@ -109,7 +109,7 @@ describe("ClaudeProcessPool", () => {
 
     mockConfigManager = {
       getConfig: vi.fn().mockReturnValue(testConfig),
-      getTeamConfig: vi.fn(
+      getIrisConfig: vi.fn(
         (teamName: string) => testConfig.teams[teamName] || null,
       ),
     };
@@ -294,7 +294,7 @@ describe("ClaudeProcessPool", () => {
       pool.getProcess("team-gamma");
 
       // Add team-delta to config for this test
-      mockConfigManager.getTeamConfig = vi.fn((teamName: string) => {
+      mockConfigManager.getIrisConfig = vi.fn((teamName: string) => {
         if (teamName === "team-delta") {
           return {
             path: "/path/to/delta",

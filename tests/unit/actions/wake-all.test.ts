@@ -59,6 +59,7 @@ describe("wake-all", () => {
         toTeam: "team-alpha",
         createdAt: new Date(),
       }),
+      updateProcessState: vi.fn(),
     } as unknown as SessionManager;
   });
 

@@ -5,7 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Loader2, Eye, X } from 'lucide-react';
+import { Activity, Loader2, Eye, X, Copy, Check } from 'lucide-react';
 import { api } from '../api/client';
 import { useWebSocket, type ProcessStatus, type CacheStreamData } from '../hooks/useWebSocket';
 
@@ -68,6 +68,7 @@ export function ProcessMonitor() {
   const queryClient = useQueryClient();
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [cacheData, setCacheData] = useState<{ [sessionId: string]: string[] }>({});
+  const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
 
   // Handle WebSocket updates
   const handleProcessStatus = useCallback((_data: ProcessStatus) => {
@@ -105,6 +106,13 @@ export function ProcessMonitor() {
     setCacheData((prev) => ({ ...prev, [sessionId]: [] }));
     streamCache(sessionId);
   };
+
+  const handleCopySessionId = useCallback((sessionId: string) => {
+    navigator.clipboard.writeText(sessionId).then(() => {
+      setCopiedSessionId(sessionId);
+      setTimeout(() => setCopiedSessionId(null), 2000);
+    });
+  }, []);
 
   if (isLoading) {
     return (
@@ -151,9 +159,20 @@ export function ProcessMonitor() {
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-bold">{session.poolKey}</h3>
-                  <p className="text-xs text-text-secondary font-mono mt-1">
-                    {session.sessionId.slice(0, 8)}...
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={() => handleCopySessionId(session.sessionId)}
+                      className="text-xs text-text-secondary font-mono hover:text-accent-purple transition-colors cursor-pointer flex items-center gap-1"
+                      title="Click to copy full session ID"
+                    >
+                      {session.sessionId.slice(0, 8)}...
+                      {copiedSessionId === session.sessionId ? (
+                        <Check size={12} className="text-status-idle" />
+                      ) : (
+                        <Copy size={12} />
+                      )}
+                    </button>
+                  </div>
                   {session.pid && (
                     <p className="text-sm text-text-secondary">PID: {session.pid}</p>
                   )}

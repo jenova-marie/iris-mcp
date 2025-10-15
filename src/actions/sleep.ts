@@ -28,15 +28,6 @@ export interface SleepOutput {
   /** Status of the sleep operation */
   status: "asleep" | "already_asleep" | "sleeping";
 
-  /** Process ID that was terminated (if applicable) */
-  pid?: number | null;
-
-  /** Session ID that was terminated (if applicable) */
-  sessionId?: string;
-
-  /** Number of pending messages that were lost (if force=true) */
-  lostMessages?: number;
-
   /** Message describing the operation */
   message?: string;
 
@@ -92,13 +83,16 @@ export async function sleep(
     const sessionId = metrics.sessionId;
     const pendingMessages = metrics.messageCount;
 
-    logger.info({
-      team,
-      pid,
-      sessionId,
-      pendingMessages,
-      force
-    }, "Terminating team process");
+    logger.info(
+      {
+        team,
+        pid,
+        sessionId,
+        pendingMessages,
+        force,
+      },
+      "Terminating team process",
+    );
 
     try {
       // Terminate the process
@@ -106,51 +100,50 @@ export async function sleep(
 
       const duration = Date.now() - startTime;
 
-      logger.info({
-        team,
-        pid,
-        duration
-      }, "Team put to sleep successfully");
+      logger.info(
+        {
+          team,
+          pid,
+          duration,
+        },
+        "Team put to sleep successfully",
+      );
 
       const output: SleepOutput = {
         team,
         status: "sleeping",
-        pid,
-        sessionId,
         message: `Team ${team} has been put to sleep`,
         duration,
         timestamp: Date.now(),
       };
 
-      // Add lost messages count if force was used and there were pending messages
-      if (force && pendingMessages > 0) {
-        output.lostMessages = pendingMessages;
-        output.message = `Team ${team} was forcefully put to sleep (${pendingMessages} messages lost)`;
-      }
-
       return output;
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error)),
-        team
-      }, "Failed to terminate team process");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+          team,
+        },
+        "Failed to terminate team process",
+      );
 
       const duration = Date.now() - startTime;
       return {
         team,
         status: "sleeping",
-        pid,
-        sessionId,
         message: `Failed to put team ${team} to sleep: ${error instanceof Error ? error.message : String(error)}`,
         duration,
         timestamp: Date.now(),
       };
     }
   } catch (error) {
-    logger.error({
-      err: error instanceof Error ? error : new Error(String(error)),
-      team
-    }, "Sleep operation failed");
+    logger.error(
+      {
+        err: error instanceof Error ? error : new Error(String(error)),
+        team,
+      },
+      "Sleep operation failed",
+    );
     throw error;
   }
 }

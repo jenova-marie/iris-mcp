@@ -14,7 +14,7 @@
 import { spawn, ChildProcess } from "child_process";
 import { EventEmitter } from "events";
 import { existsSync } from "fs";
-import type { TeamConfig } from "./types.js";
+import type { IrisConfig } from "./types.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError } from "../utils/errors.js";
 import { CacheEntry } from "../cache/types.js";
@@ -35,7 +35,7 @@ export class ProcessBusyError extends Error {
 export interface BasicProcessMetrics {
   teamName: string;
   pid: number | null;
-  status: 'spawning' | 'idle' | 'processing' | 'stopped';
+  status: "spawning" | "idle" | "processing" | "stopped";
   messagesProcessed: number;
   lastUsed: number;
   uptime: number;
@@ -73,7 +73,7 @@ export class ClaudeProcess extends EventEmitter {
 
   constructor(
     public readonly teamName: string,
-    private teamConfig: TeamConfig,
+    private irisConfig: IrisConfig,
     public readonly sessionId: string,
   ) {
     super();
@@ -85,12 +85,12 @@ export class ClaudeProcess extends EventEmitter {
    * UNCHANGED from original - this works perfectly
    */
   static async initializeSessionFile(
-    teamConfig: TeamConfig,
+    irisConfig: IrisConfig,
     sessionId: string,
     sessionInitTimeout = 30000,
   ): Promise<void> {
-    const logger = getChildLogger("session:init");
-    const projectPath = teamConfig.path;
+    const logger = getChildLogger(`pool:session-init:${irisConfig.path}`);
+    const projectPath = irisConfig.path;
 
     logger.info("Initializing session file", {
       sessionId,
@@ -136,10 +136,13 @@ export class ClaudeProcess extends EventEmitter {
       let debugLogPath: string | null = null;
 
       claudeProcess.on("error", (err) => {
-        logger.error({
-          err,
-          sessionId,
-        }, "Process spawn error");
+        logger.error(
+          {
+            err,
+            sessionId,
+          },
+          "Process spawn error",
+        );
         spawnError = err;
       });
 
@@ -194,29 +197,35 @@ export class ClaudeProcess extends EventEmitter {
           }
 
           if (spawnError) {
-            logger.error({
-              err: spawnError,
-              sessionId,
-              code,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-              stdout: stdoutData.substring(0, 1000),
-              stderr: stderrData.substring(0, 1000),
-            }, "Process exited with spawn error");
+            logger.error(
+              {
+                err: spawnError,
+                sessionId,
+                code,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                stdout: stdoutData.substring(0, 1000),
+                stderr: stderrData.substring(0, 1000),
+              },
+              "Process exited with spawn error",
+            );
             reject(spawnError);
           } else if (code !== 0 && code !== 143) {
             // 143 is SIGTERM which is ok
-            logger.error({
-              sessionId,
-              code,
-              command: `claude ${args.join(" ")}`,
-              cwd: projectPath,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-              stdout: stdoutData,
-              stderr: stderrData,
-              debugLogPath,
-            }, "Session initialization failed with non-zero exit code");
+            logger.error(
+              {
+                sessionId,
+                code,
+                command: `claude ${args.join(" ")}`,
+                cwd: projectPath,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                stdout: stdoutData,
+                stderr: stderrData,
+                debugLogPath,
+              },
+              "Session initialization failed with non-zero exit code",
+            );
 
             const errorMsg = [
               `Session initialization failed with exit code ${code}`,
@@ -228,17 +237,20 @@ export class ClaudeProcess extends EventEmitter {
 
             reject(new ProcessError(errorMsg, projectPath));
           } else if (!responseReceived) {
-            logger.error({
-              sessionId,
-              code,
-              command: `${claudePath} ${args.join(" ")}`,
-              cwd: projectPath,
-              stdoutLength: stdoutData.length,
-              stderrLength: stderrData.length,
-              stdout: stdoutData,
-              stderr: stderrData,
-              debugLogPath,
-            }, "Session initialization completed but no response received");
+            logger.error(
+              {
+                sessionId,
+                code,
+                command: `${claudePath} ${args.join(" ")}`,
+                cwd: projectPath,
+                stdoutLength: stdoutData.length,
+                stderrLength: stderrData.length,
+                stdout: stdoutData,
+                stderr: stderrData,
+                debugLogPath,
+              },
+              "Session initialization completed but no response received",
+            );
 
             const errorMsg = [
               "Session initialization completed but no response received",
@@ -268,18 +280,21 @@ export class ClaudeProcess extends EventEmitter {
         // Timeout after configured duration
         timeoutHandle = setTimeout(() => {
           timeoutHandle = null; // Clear reference
-          logger.error({
-            sessionId,
-            timeout: sessionInitTimeout,
-            responseReceived,
-            command: `claude ${args.join(" ")}`,
-            cwd: projectPath,
-            stdoutLength: stdoutData.length,
-            stderrLength: stderrData.length,
-            stdout: stdoutData,
-            stderr: stderrData,
-            debugLogPath,
-          }, "Session initialization timed out");
+          logger.error(
+            {
+              sessionId,
+              timeout: sessionInitTimeout,
+              responseReceived,
+              command: `claude ${args.join(" ")}`,
+              cwd: projectPath,
+              stdoutLength: stdoutData.length,
+              stderrLength: stderrData.length,
+              stdout: stdoutData,
+              stderr: stderrData,
+              debugLogPath,
+            },
+            "Session initialization timed out",
+          );
           claudeProcess.kill();
 
           const errorMsg = [
@@ -308,11 +323,17 @@ export class ClaudeProcess extends EventEmitter {
         );
       }
 
-      logger.info({ sessionId, filePath: sessionFilePath }, "Session file initialized successfully");
+      logger.info(
+        { sessionId, filePath: sessionFilePath },
+        "Session file initialized successfully",
+      );
     } catch (error) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error)),
-      }, "Failed to initialize session file");
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to initialize session file",
+      );
       throw error;
     }
   }
@@ -329,8 +350,12 @@ export class ClaudeProcess extends EventEmitter {
   /**
    * Spawn Claude process with spawn ping
    * @param spawnCacheEntry - CacheEntry with type=SPAWN, tellString='ping'
+   * @param spawnTimeout - Timeout in ms for spawn init (from config)
    */
-  async spawn(spawnCacheEntry: CacheEntry): Promise<void> {
+  async spawn(
+    spawnCacheEntry: CacheEntry,
+    spawnTimeout = 20000,
+  ): Promise<void> {
     if (this.childProcess) {
       throw new ProcessError("Process already spawned", this.teamName);
     }
@@ -367,13 +392,13 @@ export class ClaudeProcess extends EventEmitter {
       "stream-json",
     );
 
-    if (this.teamConfig.skipPermissions) {
+    if (this.irisConfig.skipPermissions) {
       args.push("--dangerously-skip-permissions");
     }
 
     // Spawn process
     this.childProcess = spawn("claude", args, {
-      cwd: this.teamConfig.path,
+      cwd: this.irisConfig.path,
       stdio: ["pipe", "pipe", "pipe"],
       env: process.env,
     });
@@ -396,7 +421,7 @@ export class ClaudeProcess extends EventEmitter {
     this.writeToStdin(spawnCacheEntry.tellString);
 
     // Wait for init message
-    await this.waitForInit();
+    await this.waitForInit(spawnTimeout);
 
     this.isReady = true;
     this.logger.info("Process ready", { teamName: this.teamName });
@@ -472,10 +497,13 @@ export class ClaudeProcess extends EventEmitter {
 
     // Error handler
     this.childProcess.on("error", (error) => {
-      this.logger.error({
-        err: error,
-        teamName: this.teamName,
-      }, "Process error");
+      this.logger.error(
+        {
+          err: error,
+          teamName: this.teamName,
+        },
+        "Process error",
+      );
 
       this.emit("process-error", {
         teamName: this.teamName,
@@ -593,15 +621,15 @@ export class ClaudeProcess extends EventEmitter {
    */
   getBasicMetrics(): BasicProcessMetrics {
     // Derive status from internal state
-    let status: 'spawning' | 'idle' | 'processing' | 'stopped';
+    let status: "spawning" | "idle" | "processing" | "stopped";
     if (!this.childProcess) {
-      status = 'stopped';
+      status = "stopped";
     } else if (!this.isReady) {
-      status = 'spawning';
+      status = "spawning";
     } else if (this.currentCacheEntry) {
-      status = 'processing';
+      status = "processing";
     } else {
-      status = 'idle';
+      status = "idle";
     }
 
     return {

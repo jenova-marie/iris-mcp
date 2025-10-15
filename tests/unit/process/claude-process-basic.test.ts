@@ -15,19 +15,19 @@ vi.mock("../../../src/utils/logger.js", () => ({
 }));
 
 import { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
-import type { TeamConfig } from "../../../src/process-pool/types.js";
+import type { IrisConfig } from "../../../src/process-pool/types.js";
 import { ProcessError } from "../../../src/utils/errors.js";
 
 describe("ClaudeProcess Unit Tests", () => {
   let claudeProcess: ClaudeProcess;
-  const testTeamConfig: TeamConfig = {
+  const testIrisConfig: IrisConfig = {
     path: process.cwd(),
     description: "Test team for unit tests",
     skipPermissions: true,
   };
 
   beforeEach(() => {
-    claudeProcess = new ClaudeProcess("team-alpha", testTeamConfig, null);
+    claudeProcess = new ClaudeProcess("team-alpha", testIrisConfig, null);
   });
 
   describe("constructor", () => {
@@ -117,8 +117,8 @@ describe("ClaudeProcess Unit Tests", () => {
 
   describe("configuration", () => {
     it("should accept different session IDs", () => {
-      const process1 = new ClaudeProcess("team1", testTeamConfig, "session-1");
-      const process2 = new ClaudeProcess("team2", testTeamConfig, "session-2");
+      const process1 = new ClaudeProcess("team1", testIrisConfig, "session-1");
+      const process2 = new ClaudeProcess("team2", testIrisConfig, "session-2");
 
       // Both should start in stopped state regardless of session
       expect(process1.getBasicMetrics().isReady).toBe(false);
@@ -126,13 +126,13 @@ describe("ClaudeProcess Unit Tests", () => {
     });
 
     it("should handle different team configurations", () => {
-      const config1: TeamConfig = {
+      const config1: IrisConfig = {
         path: "/path/1",
         description: "Team 1",
         skipPermissions: true,
       };
 
-      const config2: TeamConfig = {
+      const config2: IrisConfig = {
         path: "/path/2",
         description: "Team 2",
         skipPermissions: false,
@@ -150,25 +150,33 @@ describe("ClaudeProcess Unit Tests", () => {
   describe("error handling", () => {
     it("should handle invalid team names gracefully", () => {
       expect(() => {
-        new ClaudeProcess("", testTeamConfig, null);
+        new ClaudeProcess("", testIrisConfig, null);
       }).not.toThrow();
 
       expect(() => {
-        new ClaudeProcess("team-with-special-chars!@#", testTeamConfig, "session-1");
+        new ClaudeProcess(
+          "team-with-special-chars!@#",
+          testIrisConfig,
+          "session-1",
+        );
       }).not.toThrow();
     });
 
     it("should handle edge case session IDs", () => {
       expect(() => {
-        new ClaudeProcess("team", testTeamConfig, null);
+        new ClaudeProcess("team", testIrisConfig, null);
       }).not.toThrow();
 
       expect(() => {
-        new ClaudeProcess("team", testTeamConfig, "");
+        new ClaudeProcess("team", testIrisConfig, "");
       }).not.toThrow();
 
       expect(() => {
-        new ClaudeProcess("team", testTeamConfig, "very-long-session-id-".repeat(10));
+        new ClaudeProcess(
+          "team",
+          testIrisConfig,
+          "very-long-session-id-".repeat(10),
+        );
       }).not.toThrow();
     });
   });

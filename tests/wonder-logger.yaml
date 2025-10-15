@@ -17,7 +17,7 @@ logger:
   enabled: true
 
   # Log level for tests - use 'silent' to suppress all logs, or 'info' for debugging
-  level: ${LOG_LEVEL:-warn}
+  level: ${LOG_LEVEL:-debug}
 
   # Fields to redact from logs
   redact:
@@ -30,14 +30,14 @@ logger:
   transports:
     # Console transport for test output
     - type: console
-      pretty: false  # JSON format for tests
-      level: ${LOG_LEVEL:-warn}
+      pretty: false # JSON format for tests
+      level: ${LOG_LEVEL:-debug}
 
     # File transport (write to disk)
     - type: file
-      dir: ./tests/logs
+      dir: ./logs
       fileName: test.log
-      level: ${LOG_LEVEL:-warn}
+      level: ${LOG_LEVEL:-debug}
       mkdir: true
       sync: false
 

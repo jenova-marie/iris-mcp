@@ -69,6 +69,7 @@ describe("wake", () => {
         toTeam: "team-alpha",
         createdAt: new Date(),
       }),
+      updateProcessState: vi.fn(),
     } as unknown as SessionManager;
   });
 
@@ -90,7 +91,6 @@ describe("wake", () => {
       expect(result).toMatchObject({
         team: "team-alpha",
         status: "awake",
-        pid: 12345,
         duration: expect.any(Number),
         timestamp: expect.any(Number),
       });
@@ -144,7 +144,6 @@ describe("wake", () => {
       expect(result).toMatchObject({
         team: "team-alpha",
         status: "waking",
-        pid: 67890,
         message: "Team team-alpha is waking up and will be ready shortly",
         duration: expect.any(Number),
         timestamp: expect.any(Number),
@@ -317,7 +316,8 @@ describe("wake", () => {
         mockSessionManager,
       );
 
-      expect(result.pid).toBe(99999);
+      // Process metrics are not returned in WakeOutput (pid removed)
+      expect(result.status).toBe("awake");
     });
   });
 });

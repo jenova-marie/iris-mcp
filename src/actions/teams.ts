@@ -3,7 +3,7 @@
  * Get all currently configured teams
  */
 
-import type { TeamsConfigManager } from "../config/teams-config.js";
+import type { TeamsConfigManager } from "../config/iris-config.js";
 import { getChildLogger } from "../utils/logger.js";
 
 const logger = getChildLogger("action:teams");
@@ -48,15 +48,15 @@ export async function teams(
     const teamsList: TeamInfo[] = [];
 
     // Iterate through all configured teams
-    for (const [teamName, teamConfig] of Object.entries(config.teams)) {
+    for (const [teamName, irisConfig] of Object.entries(config.teams)) {
       const teamInfo: TeamInfo = {
         name: teamName,
         config: {
-          path: teamConfig.path,
-          description: teamConfig.description,
-          color: teamConfig.color,
-          idleTimeout: teamConfig.idleTimeout,
-          skipPermissions: teamConfig.skipPermissions,
+          path: irisConfig.path,
+          description: irisConfig.description,
+          color: irisConfig.color,
+          idleTimeout: irisConfig.idleTimeout,
+          skipPermissions: irisConfig.skipPermissions,
         },
       };
 
@@ -72,15 +72,21 @@ export async function teams(
       timestamp: Date.now(),
     };
 
-    logger.info({
-      totalTeams: output.totalTeams,
-    }, "Teams list retrieved");
+    logger.info(
+      {
+        totalTeams: output.totalTeams,
+      },
+      "Teams list retrieved",
+    );
 
     return output;
   } catch (error) {
-    logger.error({
-      err: error instanceof Error ? error : new Error(String(error))
-    }, "Failed to get teams list");
+    logger.error(
+      {
+        err: error instanceof Error ? error : new Error(String(error)),
+      },
+      "Failed to get teams list",
+    );
     throw error;
   }
 }

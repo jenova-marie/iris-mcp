@@ -1,13 +1,17 @@
 {
   "settings": {
-    "sessionInitTimeout": 60000,
-    "responseTimeout": 120000,
+    "sessionInitTimeout": 30000,
+    "spawnTimeout": 20000,
+    "responseTimeout": 45000,
     "idleTimeout": 300000,
     "maxProcesses": 10,
-    "healthCheckInterval": 30000,
+    "healthCheckInterval": 5000,
     "httpPort": 1616,
     "defaultTransport": "stdio",
     "wonderLoggerConfig": "./wonder-logger.yaml"
+  },
+  "database": {
+    "inMemory": true
   },
   "teams": {
     "team-iris": {

@@ -11,38 +11,27 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync, unlinkSync } from "fs";
 import { SessionManager } from "../../../src/session/session-manager.js";
-import { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 
 describe("Session Creation Integration", () => {
   let manager: SessionManager;
   let configManager: TeamsConfigManager;
   const testConfigPath = "./tests/config.json";
-  const testDbPath = "./tests/data/test-createSession.db";
 
   // Load config early to get timeout value
   const tempConfigManager = new TeamsConfigManager(testConfigPath);
   tempConfigManager.load();
-  const sessionInitTimeout = tempConfigManager.getConfig().settings.sessionInitTimeout;
-
-  // Helper to clean database
-  const cleanDatabase = () => {
-    [testDbPath, `${testDbPath}-shm`, `${testDbPath}-wal`].forEach((file) => {
-      if (existsSync(file)) {
-        unlinkSync(file);
-      }
-    });
-  };
+  const sessionInitTimeout =
+    tempConfigManager.getConfig().settings.sessionInitTimeout;
 
   beforeAll(async () => {
-    cleanDatabase(); // Start fresh
-
     configManager = new TeamsConfigManager(testConfigPath);
     configManager.load();
 
     const teamsConfig = configManager.getConfig();
-    manager = new SessionManager(teamsConfig, testDbPath);
+    // Use in-memory database for test isolation
+    manager = new SessionManager(teamsConfig, { inMemory: true });
 
     // Initialize manager (validates team paths, no sessions created yet)
     await manager.initialize();
@@ -52,7 +41,6 @@ describe("Session Creation Integration", () => {
     if (manager) {
       manager.close();
     }
-    cleanDatabase();
   });
 
   it(
@@ -66,7 +54,9 @@ describe("Session Creation Integration", () => {
       expect(session.fromTeam).toBe("team-iris");
       expect(session.toTeam).toBe("team-alpha");
       expect(session.sessionId).toBeTruthy();
-      expect(session.sessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i); // UUID v4
+      expect(session.sessionId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      ); // UUID v4
       expect(session.status).toBe("active");
       expect(session.processState).toBe("stopped"); // Initially stopped
       expect(session.messageCount).toBe(0);
@@ -97,10 +87,16 @@ describe("Session Creation Integration", () => {
     "should return existing session on second call (idempotency)",
     async () => {
       // First call - should return existing session from previous test
-      const session1 = await manager.getOrCreateSession("team-iris", "team-alpha");
+      const session1 = await manager.getOrCreateSession(
+        "team-iris",
+        "team-alpha",
+      );
 
       // Second call - should return SAME session
-      const session2 = await manager.getOrCreateSession("team-iris", "team-alpha");
+      const session2 = await manager.getOrCreateSession(
+        "team-iris",
+        "team-alpha",
+      );
 
       expect(session1.sessionId).toBe(session2.sessionId);
       expect(session1.fromTeam).toBe(session2.fromTeam);
@@ -109,7 +105,7 @@ describe("Session Creation Integration", () => {
       // Should still only have 1 session for this team pair in database
       const sessions = manager.listSessions({
         fromTeam: "team-iris",
-        toTeam: "team-alpha"
+        toTeam: "team-alpha",
       });
       expect(sessions.length).toBe(1);
     },

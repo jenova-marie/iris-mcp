@@ -51,16 +51,17 @@ export async function addTeam(
     const configContent = readFileSync(configPath, "utf-8");
     config = JSON.parse(configContent);
   } catch (error) {
-    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "Failed to read config file");
+    logger.error(
+      { err: error instanceof Error ? error : new Error(String(error)) },
+      "Failed to read config file",
+    );
     process.exit(1);
   }
 
   // Check if team already exists
   if (config.teams && config.teams[name]) {
     logger.error(`Team "${name}" already exists in configuration.`);
-    logger.info(
-      `Existing team path: ${config.teams[name].path}`,
-    );
+    logger.info(`Existing team path: ${config.teams[name].path}`);
     process.exit(1);
   }
 
@@ -70,26 +71,26 @@ export async function addTeam(
   }
 
   // Build team configuration
-  const teamConfig: any = {
+  const irisConfig: any = {
     path: teamPath,
     description: options.description || `Team ${name}`,
   };
 
   // Add optional fields if provided
   if (options.idleTimeout !== undefined) {
-    teamConfig.idleTimeout = options.idleTimeout;
+    irisConfig.idleTimeout = options.idleTimeout;
   }
 
   if (options.skipPermissions !== undefined) {
-    teamConfig.skipPermissions = options.skipPermissions;
+    irisConfig.skipPermissions = options.skipPermissions;
   }
 
   if (options.color) {
-    teamConfig.color = options.color;
+    irisConfig.color = options.color;
   }
 
   // Add team to config
-  config.teams[name] = teamConfig;
+  config.teams[name] = irisConfig;
 
   // Write updated config
   try {
@@ -107,7 +108,10 @@ export async function addTeam(
       );
     }
   } catch (error) {
-    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "Failed to write config file");
+    logger.error(
+      { err: error instanceof Error ? error : new Error(String(error)) },
+      "Failed to write config file",
+    );
     process.exit(1);
   }
 }

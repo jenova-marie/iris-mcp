@@ -13,19 +13,19 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
 
-import { getConfigManager } from "./config/teams-config.js";
+import { getConfigManager } from "./config/iris-config.js";
 import { ClaudeProcessPool } from "./process-pool/pool-manager.js";
 import { SessionManager } from "./session/session-manager.js";
 import { IrisOrchestrator } from "./iris.js";
 import { getChildLogger } from "./utils/logger.js";
 import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { tell } from "./actions/tell.js";
+import { quickTell } from "./actions/quick_tell.js";
 import { isAwake } from "./actions/isAwake.js";
 import { wake } from "./actions/wake.js";
 import { sleep } from "./actions/sleep.js";
 import { wakeAll } from "./actions/wake-all.js";
 import { report } from "./actions/report.js";
-import { getTeamName } from "./actions/getTeamName.js";
 import { teams } from "./actions/teams.js";
 
 const logger = getChildLogger("iris:mcp");
@@ -54,17 +54,43 @@ const TOOLS: Tool[] = [
         timeout: {
           type: "number",
           description:
-            "Optional timeout in milliseconds (default: 30000). 0 wait indefinately -1 async return immediately",
+            "Optional timeout in milliseconds (default: 30000). 0 wait indefinately -1 **quickly** (async) return immediately",
         },
         persist: {
           type: "boolean",
           description:
-            "Use persistent queue for fire-and-forget (default: false). When true, message is queued in SQLite.",
+            "Use persistent queue for  (default: false). When true, message is queued in SQLite.",
         },
         ttlDays: {
           type: "number",
           description:
             "Optional: TTL in days for persistent notifications (default: 30). Only used when persist=true.",
+        },
+      },
+      required: ["toTeam", "message", "fromTeam"],
+    },
+  },
+  {
+    name: "team_quick_tell",
+    description:
+      "Quickly send a message to a team with timeout=-1 (async). " +
+      "Returns immediately after queuing the message. " +
+      "Convenience wrapper for team_tell with hardcoded timeout=-1 to execute quicly",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toTeam: {
+          type: "string",
+          description:
+            'Name of the team to send message to (e.g., "frontend", "backend", "mobile")',
+        },
+        message: {
+          type: "string",
+          description: "The message content to send",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team sending the message",
         },
       },
       required: ["toTeam", "message", "fromTeam"],
@@ -166,37 +192,25 @@ const TOOLS: Tool[] = [
   {
     name: "team_report",
     description:
-      "View the output cache (stdout and stderr) for a team without clearing it. Returns all output since the last cache clear.",
+      "View the cached conversation for a team pair. " +
+      "Returns all cache entries (spawn + tell operations) with their messages and status. " +
+      "Shows the complete conversation history including protocol messages from Claude. " +
+      "Caching is always enabled - this is the primary means for Claude → requestor communication.",
     inputSchema: {
       type: "object",
       properties: {
         team: {
           type: "string",
-          description: "Name of the team whose output cache to view",
+          description:
+            "Name of the team whose conversation cache to view (the recipient/toTeam)",
         },
         fromTeam: {
           type: "string",
-          description: "Name of the team requesting the report",
+          description:
+            "Name of the team requesting the report (the sender/fromTeam)",
         },
       },
       required: ["team", "fromTeam"],
-    },
-  },
-  {
-    name: "team_getTeamName",
-    description:
-      "Identify the team name from a current working directory (pwd). " +
-      "Returns the team name if the path matches a configured team. " +
-      "Note: Only works with absolute paths in config.json. Relative paths in config cannot be identified.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        pwd: {
-          type: "string",
-          description: "Your current working directory to look up (use pwd)",
-        },
-      },
-      required: ["pwd"],
     },
   },
   {
@@ -289,6 +303,21 @@ export class IrisMcpServer {
             };
             break;
 
+          case "team_quick_tell":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await quickTell(args as any, this.iris),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+            break;
+
           case "team_isAwake":
             result = {
               content: [
@@ -371,22 +400,7 @@ export class IrisMcpServer {
                 {
                   type: "text",
                   text: JSON.stringify(
-                    await report(args as any, this.processPool),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-            break;
-
-          case "team_getTeamName":
-            result = {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await getTeamName(args as any, this.configManager),
+                    await report(args as any, this.iris),
                     null,
                     2,
                   ),

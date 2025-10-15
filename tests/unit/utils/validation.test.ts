@@ -58,15 +58,22 @@ describe('validateMessage', () => {
 });
 
 describe('validateTimeout', () => {
-  it('should accept valid timeouts', () => {
+  it('should accept valid positive timeouts', () => {
+    expect(() => validateTimeout(1)).not.toThrow();
     expect(() => validateTimeout(1000)).not.toThrow();
     expect(() => validateTimeout(30000)).not.toThrow();
     expect(() => validateTimeout(600000)).not.toThrow();
+    expect(() => validateTimeout(3600000)).not.toThrow(); // 1 hour max
   });
 
-  it('should reject negative timeouts', () => {
+  it('should accept special timeout values', () => {
+    expect(() => validateTimeout(-1)).not.toThrow(); // Async mode
+    expect(() => validateTimeout(0)).not.toThrow(); // Wait indefinitely
+  });
+
+  it('should reject invalid negative timeouts', () => {
+    expect(() => validateTimeout(-2)).toThrow(ValidationError);
     expect(() => validateTimeout(-1000)).toThrow(ValidationError);
-    expect(() => validateTimeout(0)).toThrow(ValidationError);
   });
 
   it('should reject non-number timeouts', () => {
@@ -74,9 +81,9 @@ describe('validateTimeout', () => {
     expect(() => validateTimeout(null as any)).toThrow(ValidationError);
   });
 
-  it('should reject timeouts exceeding 10 minutes', () => {
-    expect(() => validateTimeout(600001)).toThrow(ValidationError);
-    expect(() => validateTimeout(1000000)).toThrow(ValidationError);
+  it('should reject timeouts exceeding 1 hour', () => {
+    expect(() => validateTimeout(3600001)).toThrow(ValidationError);
+    expect(() => validateTimeout(10000000)).toThrow(ValidationError);
   });
 });
 

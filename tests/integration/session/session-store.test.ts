@@ -459,5 +459,79 @@ describe("SessionStore Integration (New Architecture)", () => {
         expect(session?.processState).toBe(state);
       }
     });
+
+    it("should reset all process states to 'stopped' on server restart", () => {
+      // Create sessions with various process states
+      const session1 = store.create("team-iris", "team-alpha", "session-1");
+      const session2 = store.create("team-iris", "team-beta", "session-2");
+      const session3 = store.create("team-iris", "team-gamma", "session-3");
+
+      // Set different process states
+      store.updateProcessState(session1.sessionId, "processing");
+      store.updateProcessState(session2.sessionId, "idle");
+      store.updateProcessState(session3.sessionId, "spawning");
+
+      // Set current cache session IDs
+      store.setCurrentCacheSessionId(session1.sessionId, "cache-1");
+      store.setCurrentCacheSessionId(session2.sessionId, "cache-2");
+
+      // Verify states are set
+      expect(store.getBySessionId(session1.sessionId)?.processState).toBe(
+        "processing",
+      );
+      expect(store.getBySessionId(session2.sessionId)?.processState).toBe("idle");
+      expect(store.getBySessionId(session3.sessionId)?.processState).toBe(
+        "spawning",
+      );
+      expect(
+        store.getBySessionId(session1.sessionId)?.currentCacheSessionId,
+      ).toBe("cache-1");
+      expect(
+        store.getBySessionId(session2.sessionId)?.currentCacheSessionId,
+      ).toBe("cache-2");
+
+      // Reset all process states (simulating server restart)
+      store.resetAllProcessStates();
+
+      // All process states should be 'stopped'
+      expect(store.getBySessionId(session1.sessionId)?.processState).toBe(
+        "stopped",
+      );
+      expect(store.getBySessionId(session2.sessionId)?.processState).toBe(
+        "stopped",
+      );
+      expect(store.getBySessionId(session3.sessionId)?.processState).toBe(
+        "stopped",
+      );
+
+      // Current cache session IDs should be cleared
+      expect(
+        store.getBySessionId(session1.sessionId)?.currentCacheSessionId,
+      ).toBeNull();
+      expect(
+        store.getBySessionId(session2.sessionId)?.currentCacheSessionId,
+      ).toBeNull();
+      expect(
+        store.getBySessionId(session3.sessionId)?.currentCacheSessionId,
+      ).toBeNull();
+    });
+
+    it("should not affect sessions already in 'stopped' state", () => {
+      // Create session already in stopped state
+      const session = store.create("team-iris", "team-alpha", "session-1");
+      expect(session.processState).toBe("stopped");
+
+      const before = store.getBySessionId(session.sessionId);
+
+      // Reset all process states
+      store.resetAllProcessStates();
+
+      const after = store.getBySessionId(session.sessionId);
+
+      // Session should be unchanged
+      expect(after?.processState).toBe("stopped");
+      expect(after?.messageCount).toBe(before?.messageCount);
+      expect(after?.status).toBe(before?.status);
+    });
   });
 });

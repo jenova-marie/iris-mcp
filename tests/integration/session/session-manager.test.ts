@@ -11,15 +11,13 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { existsSync, unlinkSync } from "fs";
 import { SessionManager } from "../../../src/session/session-manager.js";
-import { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 
 describe("SessionManager Integration (New Architecture)", () => {
   let manager: SessionManager;
   let configManager: TeamsConfigManager;
   const testConfigPath = "./tests/config.json"; // Use test teams config
-  const testDbPath = "./tests/data/test-integration-session-manager-new.db";
 
   // Load config early to get timeout value
   const tempConfigManager = new TeamsConfigManager(testConfigPath);
@@ -27,23 +25,14 @@ describe("SessionManager Integration (New Architecture)", () => {
   const sessionInitTimeout =
     tempConfigManager.getConfig().settings.sessionInitTimeout;
 
-  // Helper to clean database before tests
-  const cleanDatabase = () => {
-    [testDbPath, `${testDbPath}-shm`, `${testDbPath}-wal`].forEach((file) => {
-      if (existsSync(file)) {
-        unlinkSync(file);
-      }
-    });
-  };
-
   // Single initialization for ALL tests
   beforeAll(async () => {
-    cleanDatabase(); // Start with clean DB
     configManager = new TeamsConfigManager(testConfigPath);
     configManager.load();
 
     const teamsConfig = configManager.getConfig();
-    manager = new SessionManager(teamsConfig, testDbPath);
+    // Don't pass dbOptions - let it use inMemory config from tests/config.json
+    manager = new SessionManager(teamsConfig);
 
     // Initialize (creates sessions for each team)
     try {
@@ -65,7 +54,7 @@ describe("SessionManager Integration (New Architecture)", () => {
     if (manager) {
       manager.close();
     }
-    cleanDatabase();
+    // No need to clean database files - using in-memory database
   });
 
   describe("Initialization verification", () => {
@@ -81,7 +70,7 @@ describe("SessionManager Integration (New Architecture)", () => {
       expect(Array.isArray(sessions)).toBe(true);
 
       // All sessions should have fromTeam
-      sessions.forEach(s => {
+      sessions.forEach((s) => {
         expect(s.fromTeam).toBeDefined();
         expect(s.fromTeam).not.toBeNull();
       });
@@ -100,7 +89,7 @@ describe("SessionManager Integration (New Architecture)", () => {
       expect(sessions.length).toBe(0);
 
       // All sessions (if any exist) must have fromTeam
-      sessions.forEach(s => {
+      sessions.forEach((s) => {
         expect(s.fromTeam).toBeDefined();
         expect(s.fromTeam).not.toBeNull();
       });
@@ -196,7 +185,10 @@ describe("SessionManager Integration (New Architecture)", () => {
     });
 
     it("should return null for non-existent session", () => {
-      const session = manager.getSession("non-existent-from", "non-existent-to");
+      const session = manager.getSession(
+        "non-existent-from",
+        "non-existent-to",
+      );
       expect(session).toBeNull();
     });
 
@@ -206,7 +198,7 @@ describe("SessionManager Integration (New Architecture)", () => {
       expect(Array.isArray(sessions)).toBe(true);
 
       // All sessions must have fromTeam
-      sessions.forEach(s => {
+      sessions.forEach((s) => {
         expect(s.fromTeam).toBeDefined();
         expect(s.fromTeam).not.toBeNull();
       });
@@ -214,71 +206,111 @@ describe("SessionManager Integration (New Architecture)", () => {
   });
 
   describe("Session filtering", () => {
-    it("should filter sessions by fromTeam", async () => {
-      // Create some sessions
-      await manager.getOrCreateSession("team-iris", "team-alpha");
-      await manager.getOrCreateSession("team-iris", "team-beta");
+    it(
+      "should filter sessions by fromTeam",
+      async () => {
+        // Create some sessions
+        await manager.getOrCreateSession("team-iris", "team-alpha");
+        await manager.getOrCreateSession("team-iris", "team-beta");
 
-      const sessions = manager.listSessions({ fromTeam: "team-iris" });
+        const sessions = manager.listSessions({ fromTeam: "team-iris" });
 
-      expect(sessions.length).toBeGreaterThanOrEqual(2);
-      sessions.forEach(s => {
-        expect(s.fromTeam).toBe("team-iris");
-      });
-    }, sessionInitTimeout * 2);
+        expect(sessions.length).toBeGreaterThanOrEqual(2);
+        sessions.forEach((s) => {
+          expect(s.fromTeam).toBe("team-iris");
+        });
+      },
+      sessionInitTimeout * 2,
+    );
 
-    it("should filter sessions by toTeam", async () => {
-      await manager.getOrCreateSession("team-iris", "team-alpha");
+    it(
+      "should filter sessions by toTeam",
+      async () => {
+        await manager.getOrCreateSession("team-iris", "team-alpha");
 
-      const sessions = manager.listSessions({ toTeam: "team-alpha" });
+        const sessions = manager.listSessions({ toTeam: "team-alpha" });
 
-      expect(sessions.length).toBeGreaterThan(0);
-      sessions.forEach(s => {
-        expect(s.toTeam).toBe("team-alpha");
-      });
-    }, sessionInitTimeout);
+        expect(sessions.length).toBeGreaterThan(0);
+        sessions.forEach((s) => {
+          expect(s.toTeam).toBe("team-alpha");
+        });
+      },
+      sessionInitTimeout,
+    );
 
-    it("should filter sessions by status", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-alpha");
+    it(
+      "should filter sessions by status",
+      async () => {
+        const session = await manager.getOrCreateSession(
+          "team-iris",
+          "team-alpha",
+        );
 
-      const activeSessions = manager.listSessions({ status: "active" });
-      expect(activeSessions.length).toBeGreaterThan(0);
-      expect(activeSessions.some(s => s.sessionId === session.sessionId)).toBe(true);
-    }, sessionInitTimeout);
+        const activeSessions = manager.listSessions({ status: "active" });
+        expect(activeSessions.length).toBeGreaterThan(0);
+        expect(
+          activeSessions.some((s) => s.sessionId === session.sessionId),
+        ).toBe(true);
+      },
+      sessionInitTimeout,
+    );
   });
 
   describe("Session metadata operations", () => {
-    it("should record usage", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-alpha");
-      const originalLastUsed = session.lastUsedAt;
+    it(
+      "should record usage",
+      async () => {
+        const session = await manager.getOrCreateSession(
+          "team-iris",
+          "team-alpha",
+        );
+        const originalLastUsed = session.lastUsedAt;
 
-      // Wait a bit to ensure timestamp changes
-      await new Promise(resolve => setTimeout(resolve, 10));
+        // Wait a bit to ensure timestamp changes
+        await new Promise((resolve) => setTimeout(resolve, 10));
 
-      manager.recordUsage(session.sessionId);
+        manager.recordUsage(session.sessionId);
 
-      const updated = manager.getSessionById(session.sessionId);
-      expect(updated?.lastUsedAt.getTime()).toBeGreaterThan(originalLastUsed.getTime());
-    }, sessionInitTimeout);
+        const updated = manager.getSessionById(session.sessionId);
+        expect(updated?.lastUsedAt.getTime()).toBeGreaterThan(
+          originalLastUsed.getTime(),
+        );
+      },
+      sessionInitTimeout,
+    );
 
-    it("should increment message count", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-beta");
+    it(
+      "should increment message count",
+      async () => {
+        const session = await manager.getOrCreateSession(
+          "team-iris",
+          "team-beta",
+        );
 
-      manager.incrementMessageCount(session.sessionId);
-      manager.incrementMessageCount(session.sessionId);
+        manager.incrementMessageCount(session.sessionId);
+        manager.incrementMessageCount(session.sessionId);
 
-      const updated = manager.getSessionById(session.sessionId);
-      expect(updated?.messageCount).toBeGreaterThanOrEqual(2);
-    }, sessionInitTimeout);
+        const updated = manager.getSessionById(session.sessionId);
+        expect(updated?.messageCount).toBeGreaterThanOrEqual(2);
+      },
+      sessionInitTimeout,
+    );
 
-    it("should update process state", async () => {
-      const session = await manager.getOrCreateSession("team-iris", "team-beta");
+    it(
+      "should update process state",
+      async () => {
+        const session = await manager.getOrCreateSession(
+          "team-iris",
+          "team-beta",
+        );
 
-      manager.updateProcessState(session.sessionId, "processing");
+        manager.updateProcessState(session.sessionId, "processing");
 
-      const updated = manager.getSessionById(session.sessionId);
-      expect(updated?.processState).toBe("processing");
-    }, sessionInitTimeout);
+        const updated = manager.getSessionById(session.sessionId);
+        expect(updated?.processState).toBe("processing");
+      },
+      sessionInitTimeout,
+    );
   });
 
   describe("Session statistics", () => {

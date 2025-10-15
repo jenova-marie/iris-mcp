@@ -8,13 +8,14 @@ export interface ProcessPoolConfig {
   maxProcesses: number;
   healthCheckInterval: number;
   sessionInitTimeout: number;
+  spawnTimeout: number;
   responseTimeout: number;
   httpPort?: number;
   defaultTransport?: "stdio" | "http";
   wonderLoggerConfig?: string; // Path to wonder-logger.yaml config file
 }
 
-export interface TeamConfig {
+export interface IrisConfig {
   path: string; // Absolute path to team project directory
   description: string;
   idleTimeout?: number;
@@ -29,10 +30,16 @@ export interface DashboardConfig {
   host: string;
 }
 
+export interface DatabaseConfig {
+  path?: string; // Path to database file (relative to IRIS_HOME or absolute). Defaults to 'data/team-sessions.db'
+  inMemory?: boolean; // Use in-memory database (for testing). Defaults to false
+}
+
 export interface TeamsConfig {
   settings: ProcessPoolConfig;
   dashboard?: DashboardConfig;
-  teams: Record<string, TeamConfig>;
+  database?: DatabaseConfig;
+  teams: Record<string, IrisConfig>;
 }
 
 export interface ProcessMessage {
@@ -42,11 +49,11 @@ export interface ProcessMessage {
 }
 
 export type ProcessStatus =
-  | 'spawning'
-  | 'idle'
-  | 'processing'
-  | 'terminating'
-  | 'stopped';
+  | "spawning"
+  | "idle"
+  | "processing"
+  | "terminating"
+  | "stopped";
 
 export interface ProcessMetrics {
   pid: number | undefined;

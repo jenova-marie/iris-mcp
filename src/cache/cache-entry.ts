@@ -2,7 +2,7 @@
  * Cache Entry - Individual tell or spawn with message accumulation
  */
 
-import { Subject, Observable } from "rxjs";
+import { ReplaySubject, Observable } from "rxjs";
 import {
   CacheEntry,
   CacheMessage,
@@ -27,8 +27,14 @@ export class CacheEntryImpl implements CacheEntry {
   public createdAt: number;
   public completedAt: number | null = null;
 
-  private messagesSubject = new Subject<CacheMessage>();
+  // Use ReplaySubject to prevent race conditions where subscribers miss messages
+  // that arrived before subscription (e.g., fast Claude responses)
+  private messagesSubject = new ReplaySubject<CacheMessage>();
   public messages$: Observable<CacheMessage>;
+
+  // Debug ID for tracking instance identity
+  private static debugIdCounter = 0;
+  public __debugId = ++CacheEntryImpl.debugIdCounter;
 
   constructor(cacheEntryType: CacheEntryType, tellString: string) {
     this.cacheEntryType = cacheEntryType;
@@ -38,6 +44,7 @@ export class CacheEntryImpl implements CacheEntry {
 
     logger.debug("CacheEntry created", {
       cacheEntryType,
+      debugId: this.__debugId,
       tellStringLength: tellString.length,
       tellStringPreview: tellString.substring(0, 50),
     });
@@ -47,6 +54,14 @@ export class CacheEntryImpl implements CacheEntry {
    * Add message from Claude (called by ClaudeProcess)
    */
   addMessage(data: any): void {
+    logger.debug("addMessage called", {
+      cacheEntryType: this.cacheEntryType,
+      debugId: this.__debugId,
+      messageType: data.type,
+      currentStatus: this.status,
+      currentMessageCount: this.messages.length,
+    });
+
     if (this.status !== CacheEntryStatus.ACTIVE) {
       logger.warn("Attempted to add message to non-active entry", {
         status: this.status,
@@ -62,7 +77,22 @@ export class CacheEntryImpl implements CacheEntry {
     };
 
     this.messages.push(message);
+
+    logger.debug("About to emit message via ReplaySubject", {
+      cacheEntryType: this.cacheEntryType,
+      debugId: this.__debugId,
+      messageType: message.type,
+      totalMessages: this.messages.length,
+      subjectClosed: (this.messagesSubject as any).closed || false,
+    });
+
     this.messagesSubject.next(message);
+
+    logger.debug("Message emitted via ReplaySubject", {
+      cacheEntryType: this.cacheEntryType,
+      debugId: this.__debugId,
+      messageType: message.type,
+    });
 
     logger.debug("Message added to entry", {
       cacheEntryType: this.cacheEntryType,
@@ -89,6 +119,14 @@ export class CacheEntryImpl implements CacheEntry {
    * Mark entry as completed (called by Iris)
    */
   complete(): void {
+    logger.debug("complete() called", {
+      cacheEntryType: this.cacheEntryType,
+      debugId: this.__debugId,
+      currentStatus: this.status,
+      messageCount: this.messages.length,
+      subjectClosed: (this.messagesSubject as any).closed || false,
+    });
+
     if (this.status !== CacheEntryStatus.ACTIVE) {
       logger.warn("Attempted to complete non-active entry", {
         status: this.status,
@@ -99,7 +137,20 @@ export class CacheEntryImpl implements CacheEntry {
 
     this.status = CacheEntryStatus.COMPLETED;
     this.completedAt = Date.now();
+
+    logger.debug("About to complete ReplaySubject", {
+      cacheEntryType: this.cacheEntryType,
+      debugId: this.__debugId,
+      messageCount: this.messages.length,
+    });
+
     this.messagesSubject.complete();
+
+    logger.debug("ReplaySubject completed", {
+      cacheEntryType: this.cacheEntryType,
+      debugId: this.__debugId,
+      subjectClosed: (this.messagesSubject as any).closed || false,
+    });
 
     logger.info("CacheEntry completed", {
       cacheEntryType: this.cacheEntryType,

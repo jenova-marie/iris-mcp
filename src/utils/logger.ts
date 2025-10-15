@@ -129,8 +129,18 @@ export function initializeObservability(configPath?: string): {
  */
 export function getChildLogger(context: string): PinoLogger {
   if (!globalLogger) {
-    // Auto-initialize if not done yet
-    initializeObservability();
+    // Fallback: Use console-based logger if not initialized yet
+    // This happens when modules with module-level loggers are imported before initializeObservability()
+    const consoleFallback = {
+      trace: (...args: any[]) => console.debug(`[${context}]`, ...args),
+      debug: (...args: any[]) => console.debug(`[${context}]`, ...args),
+      info: (...args: any[]) => console.info(`[${context}]`, ...args),
+      warn: (...args: any[]) => console.warn(`[${context}]`, ...args),
+      error: (...args: any[]) => console.error(`[${context}]`, ...args),
+      fatal: (...args: any[]) => console.error(`[${context}]`, ...args),
+      child: () => consoleFallback,
+    };
+    return consoleFallback as any;
   }
 
   return globalLogger!.child({ context });
@@ -146,7 +156,17 @@ export function getChildLogger(context: string): PinoLogger {
  */
 export function getLogger(): PinoLogger {
   if (!globalLogger) {
-    initializeObservability();
+    // Fallback to console if not initialized
+    const consoleFallback = {
+      trace: console.debug,
+      debug: console.debug,
+      info: console.info,
+      warn: console.warn,
+      error: console.error,
+      fatal: console.error,
+      child: (bindings: any) => consoleFallback,
+    };
+    return consoleFallback as any;
   }
 
   return globalLogger!;

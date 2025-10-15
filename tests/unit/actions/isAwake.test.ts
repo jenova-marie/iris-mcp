@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { isAwake } from "../../../src/actions/isAwake.js";
 import type { IrisOrchestrator } from "../../../src/iris.js";
 import type { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
-import type { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import type { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import type { SessionManager } from "../../../src/session/session-manager.js";
 import type { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
 
@@ -33,7 +33,6 @@ describe("isAwake", () => {
     mockProcess = {
       getBasicMetrics: vi.fn().mockReturnValue({
         teamName: "team-alpha",
-        pid: 12345,
         sessionId: "session-123",
         messageCount: 5,
         lastActivity: Date.now(),

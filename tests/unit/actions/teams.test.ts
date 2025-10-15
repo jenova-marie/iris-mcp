@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { teams } from "../../../src/actions/teams.js";
-import type { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import type { TeamsConfigManager } from "../../../src/config/iris-config.js";
 
 // Mock the logger
 vi.mock("../../../src/utils/logger.js", () => ({

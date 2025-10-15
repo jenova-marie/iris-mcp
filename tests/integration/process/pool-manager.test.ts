@@ -9,7 +9,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
-import { TeamsConfigManager } from "../../../src/config/teams-config.js";
+import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import type { ProcessPoolConfig } from "../../../src/process-pool/types.js";
 import { unlinkSync, existsSync } from "fs";
@@ -167,7 +167,9 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
       );
 
       // Check status immediately
-      expect(["idle", "processing"]).toContain(process.getBasicMetrics().status);
+      expect(["idle", "processing"]).toContain(
+        process.getBasicMetrics().status,
+      );
       const pid = process.getBasicMetrics().pid;
       expect(pid).toBeDefined();
 
@@ -202,7 +204,9 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
           sessionAlpha.sessionId,
           "team-iris",
         );
-        expect(["idle", "processing"]).toContain(processAlpha.getBasicMetrics().status);
+        expect(["idle", "processing"]).toContain(
+          processAlpha.getBasicMetrics().status,
+        );
 
         // Give it a moment to stabilize
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -218,7 +222,9 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
           sessionBeta.sessionId,
           "team-iris",
         );
-        expect(["idle", "processing"]).toContain(processBeta.getBasicMetrics().status);
+        expect(["idle", "processing"]).toContain(
+          processBeta.getBasicMetrics().status,
+        );
         const pidBeta = processBeta.getBasicMetrics().pid;
         expect(pidBeta).toBeDefined();
 
@@ -251,8 +257,16 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
         "team-beta",
       );
 
-      await pool.getOrCreateProcess("team-alpha", sessionAlpha.sessionId, "team-iris");
-      await pool.getOrCreateProcess("team-beta", sessionBeta.sessionId, "team-iris");
+      await pool.getOrCreateProcess(
+        "team-alpha",
+        sessionAlpha.sessionId,
+        "team-iris",
+      );
+      await pool.getOrCreateProcess(
+        "team-beta",
+        sessionBeta.sessionId,
+        "team-iris",
+      );
 
       const status = pool.getStatus();
 
@@ -261,8 +275,12 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
       expect(status.maxProcesses).toBe(10); // From config.json config
       expect(status.processes).toHaveProperty("team-iris->team-alpha");
       expect(status.processes).toHaveProperty("team-iris->team-beta");
-      expect(["idle", "processing"]).toContain(status.processes["team-iris->team-alpha"].status);
-      expect(["idle", "processing"]).toContain(status.processes["team-iris->team-beta"].status);
+      expect(["idle", "processing"]).toContain(
+        status.processes["team-iris->team-alpha"].status,
+      );
+      expect(["idle", "processing"]).toContain(
+        status.processes["team-iris->team-beta"].status,
+      );
     });
 
     it("should get individual process from pool", async () => {
@@ -278,30 +296,13 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
 
   // LRU eviction tests removed - edge case testing, not core functionality
 
-  describe("message sending through pool", () => {
-    it.skip("should send message through pool and get response", async () => {
-      // SKIP: pool.sendMessage() doesn't exist - message sending is IrisOrchestrator's responsibility
-      // This test should be moved to IrisOrchestrator integration tests
-      const session = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-alpha",
-      );
-      const response = await pool.sendMessage(
-        "team-alpha",
-        session.sessionId,
-        "Test message",
-        sessionInitTimeout,
-      );
-
-      expect(response).toBeDefined();
-      expect(typeof response).toBe("string");
-    });
-
+  describe("process termination", () => {
     it.skip(
-      "should handle messages to multiple teams concurrently",
+      "should terminate specific process",
       async () => {
-        // SKIP: pool.sendMessage() doesn't exist - message sending is IrisOrchestrator's responsibility
-        // This test should be moved to IrisOrchestrator integration tests
+        // SKIP: Test has timing issues with shared pool state
+        // Event handlers don't always fire in time, needs investigation
+        // Get sessions from SessionManager
         const sessionAlpha = await sessionManager.getOrCreateSession(
           "team-iris",
           "team-alpha",
@@ -311,76 +312,37 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
           "team-beta",
         );
 
-        const [responseAlpha, responseBeta] = await Promise.all([
-          pool.sendMessage(
-            "team-alpha",
-            sessionAlpha.sessionId,
-            "Hello",
-            sessionInitTimeout,
-          ),
-          pool.sendMessage(
-            "team-beta",
-            sessionBeta.sessionId,
-            "Hi",
-            sessionInitTimeout,
-          ),
-        ]);
+        // Ensure both processes exist and are freshly spawned
+        await pool.getOrCreateProcess(
+          "team-alpha",
+          sessionAlpha.sessionId,
+          "team-iris",
+        );
+        await pool.getOrCreateProcess(
+          "team-beta",
+          sessionBeta.sessionId,
+          "team-iris",
+        );
 
-        // Both should return responses
-        expect(responseAlpha).toBeDefined();
-        expect(responseBeta).toBeDefined();
-        expect(typeof responseAlpha).toBe("string");
-        expect(typeof responseBeta).toBe("string");
+        // Verify both processes are in the pool BEFORE getting count
+        expect(pool.getProcess("team-alpha")).toBeDefined();
+        expect(pool.getProcess("team-beta")).toBeDefined();
 
-        // Both processes should exist in pool (may have others from previous tests)
+        // Get count AFTER ensuring both exist
+        const initialCount = pool.getStatus().totalProcesses;
+
+        // Terminate alpha - wait for the terminate() call to complete
+        await pool.terminateProcess("team-alpha");
+
+        // Give event handlers time to run (they're async) - increased to 1s to be safe
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        // After termination, should have one less process
         const status = pool.getStatus();
-        expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
-        expect(status.processes).toHaveProperty("team-iris->team-alpha");
-        expect(status.processes).toHaveProperty("team-iris->team-beta");
+        expect(status.totalProcesses).toBe(initialCount - 1);
+        expect(pool.getProcess("team-alpha")).toBeUndefined();
+        expect(pool.getProcess("team-beta")).toBeDefined();
       },
-      sessionInitTimeout,
-    );
-  });
-
-  describe("process termination", () => {
-    it.skip(
-      "should terminate specific process",
-      async () => {
-        // SKIP: Test has timing issues with shared pool state
-        // Event handlers don't always fire in time, needs investigation
-      // Get sessions from SessionManager
-      const sessionAlpha = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-alpha",
-      );
-      const sessionBeta = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-beta",
-      );
-
-      // Ensure both processes exist and are freshly spawned
-      await pool.getOrCreateProcess("team-alpha", sessionAlpha.sessionId, "team-iris");
-      await pool.getOrCreateProcess("team-beta", sessionBeta.sessionId, "team-iris");
-
-      // Verify both processes are in the pool BEFORE getting count
-      expect(pool.getProcess("team-alpha")).toBeDefined();
-      expect(pool.getProcess("team-beta")).toBeDefined();
-
-      // Get count AFTER ensuring both exist
-      const initialCount = pool.getStatus().totalProcesses;
-
-      // Terminate alpha - wait for the terminate() call to complete
-      await pool.terminateProcess("team-alpha");
-
-      // Give event handlers time to run (they're async) - increased to 1s to be safe
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // After termination, should have one less process
-      const status = pool.getStatus();
-      expect(status.totalProcesses).toBe(initialCount - 1);
-      expect(pool.getProcess("team-alpha")).toBeUndefined();
-      expect(pool.getProcess("team-beta")).toBeDefined();
-    },
       sessionInitTimeout,
     );
 
@@ -405,54 +367,16 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
         });
       });
 
-      await pool.getOrCreateProcess("team-alpha", session.sessionId, "team-iris");
+      await pool.getOrCreateProcess(
+        "team-alpha",
+        session.sessionId,
+        "team-iris",
+      );
       const spawnedData = await spawnedPromise;
 
       expect(spawnedData).toMatchObject({
         teamName: "team-alpha",
         pid: expect.any(Number),
-      });
-    });
-
-    it.skip("should emit message-sent and message-response events", async () => {
-      // SKIP: pool.sendMessage() doesn't exist - message sending is IrisOrchestrator's responsibility
-      // This test should be moved to IrisOrchestrator integration tests
-      const session = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-alpha",
-      );
-
-      const messageSentPromise = new Promise((resolve) => {
-        pool.once("message-sent", (data) => {
-          resolve(data);
-        });
-      });
-
-      const messageResponsePromise = new Promise((resolve) => {
-        pool.once("message-response", (data) => {
-          resolve(data);
-        });
-      });
-
-      const responsePromise = pool.sendMessage(
-        "team-alpha",
-        session.sessionId,
-        "Test message",
-        sessionInitTimeout,
-      );
-
-      const sentData = await messageSentPromise;
-      const responseData = await messageResponsePromise;
-      await responsePromise;
-
-      expect(sentData).toMatchObject({
-        teamName: "team-alpha",
-        message: expect.any(String),
-      });
-
-      expect(responseData).toMatchObject({
-        teamName: "team-alpha",
-        response: expect.any(String),
       });
     });
 
@@ -462,7 +386,11 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
         "team-iris",
         "team-alpha",
       );
-      await pool.getOrCreateProcess("team-alpha", session.sessionId, "team-iris");
+      await pool.getOrCreateProcess(
+        "team-alpha",
+        session.sessionId,
+        "team-iris",
+      );
 
       const terminatedPromise = new Promise((resolve) => {
         pool.once("process-terminated", (data) => {
@@ -529,7 +457,11 @@ describe("ClaudeProcessPool Integration (New Architecture)", () => {
         });
 
         // Create a process to ensure pool is active
-        await pool.getOrCreateProcess("team-alpha", session.sessionId, "team-iris");
+        await pool.getOrCreateProcess(
+          "team-alpha",
+          session.sessionId,
+          "team-iris",
+        );
 
         // Wait for health check interval (30s configured)
         const healthData: any = await healthCheckPromise;

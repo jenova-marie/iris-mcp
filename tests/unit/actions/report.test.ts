@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { report } from "../../../src/actions/report.js";
-import type { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
-import { ConfigurationError } from "../../../src/utils/errors.js";
+import type { IrisOrchestrator } from "../../../src/iris.js";
+import type { MessageCache } from "../../../src/cache/message-cache.js";
 
 // Mock the logger
 vi.mock("../../../src/utils/logger.js", () => ({
@@ -19,42 +19,89 @@ vi.mock("../../../src/utils/validation.js", () => ({
 }));
 
 describe("report", () => {
-  let mockProcessPool: ClaudeProcessPool;
+  let mockIris: IrisOrchestrator;
+  let mockMessageCache: MessageCache;
 
   beforeEach(() => {
-    mockProcessPool = {
-      getConfig: vi.fn().mockReturnValue({
-        teams: {
-          "team-alpha": {
-            path: "/path/to/alpha",
-            description: "Alpha team",
-          },
-          "team-beta": {
-            path: "/path/to/beta",
-            description: "Beta team",
-          },
-        },
+    mockMessageCache = {
+      sessionId: "session-123",
+      fromTeam: "team-beta",
+      toTeam: "team-alpha",
+      getAllEntries: vi.fn().mockReturnValue([]),
+      getStats: vi.fn().mockReturnValue({
+        totalEntries: 0,
+        spawnEntries: 0,
+        tellEntries: 0,
+        activeEntries: 0,
+        completedEntries: 0,
       }),
-    } as unknown as ClaudeProcessPool;
+    } as unknown as MessageCache;
+
+    mockIris = {
+      getMessageCacheForTeams: vi.fn(),
+      getSession: vi.fn(),
+      isAwake: vi.fn().mockReturnValue(false),
+    } as unknown as IrisOrchestrator;
   });
 
   afterEach(() => {
     vi.clearAllMocks();
   });
 
-  describe("caching disabled in bare-bones mode", () => {
-    it("should return empty report since caching is disabled", async () => {
+  describe("no session exists", () => {
+    it("should return empty report when no cache exists", async () => {
+      vi.mocked(mockIris.getMessageCacheForTeams).mockReturnValue(null);
+
       const result = await report(
         { team: "team-alpha", fromTeam: "team-beta" },
-        mockProcessPool,
+        mockIris,
       );
 
       expect(result).toMatchObject({
         team: "team-alpha",
-        stdout: "",
-        stderr: "",
+        fromTeam: "team-beta",
+        hasSession: false,
         hasProcess: false,
-        totalBytes: 0,
+        allComplete: true,
+        entries: [],
+        stats: {
+          totalEntries: 0,
+          spawnEntries: 0,
+          tellEntries: 0,
+          activeEntries: 0,
+          completedEntries: 0,
+        },
+        timestamp: expect.any(Number),
+      });
+    });
+  });
+
+  describe("session exists with cache", () => {
+    it("should return cache report when cache exists", async () => {
+      vi.mocked(mockIris.getMessageCacheForTeams).mockReturnValue(
+        mockMessageCache,
+      );
+
+      const result = await report(
+        { team: "team-alpha", fromTeam: "team-beta" },
+        mockIris,
+      );
+
+      expect(result).toMatchObject({
+        team: "team-alpha",
+        fromTeam: "team-beta",
+        hasSession: true,
+        hasProcess: false,
+        allComplete: true,
+        sessionId: "session-123",
+        entries: [],
+        stats: {
+          totalEntries: 0,
+          spawnEntries: 0,
+          tellEntries: 0,
+          activeEntries: 0,
+          completedEntries: 0,
+        },
         timestamp: expect.any(Number),
       });
     });
@@ -66,30 +113,22 @@ describe("report", () => {
         "../../../src/utils/validation.js"
       );
 
-      await report(
-        { team: "team-alpha", fromTeam: "team-beta" },
-        mockProcessPool,
-      );
+      vi.mocked(mockIris.getMessageCacheForTeams).mockReturnValue(null);
+
+      await report({ team: "team-alpha", fromTeam: "team-beta" }, mockIris);
 
       expect(vi.mocked(validateTeamName)).toHaveBeenCalledWith("team-alpha");
       expect(vi.mocked(validateTeamName)).toHaveBeenCalledWith("team-beta");
-    });
-
-    it("should throw ConfigurationError for unknown team", async () => {
-      await expect(
-        report(
-          { team: "unknown-team", fromTeam: "team-beta" },
-          mockProcessPool,
-        ),
-      ).rejects.toThrow(ConfigurationError);
     });
   });
 
   describe("timing", () => {
     it("should include timestamp", async () => {
+      vi.mocked(mockIris.getMessageCacheForTeams).mockReturnValue(null);
+
       const result = await report(
         { team: "team-alpha", fromTeam: "team-beta" },
-        mockProcessPool,
+        mockIris,
       );
 
       expect(result.timestamp).toBeGreaterThan(0);

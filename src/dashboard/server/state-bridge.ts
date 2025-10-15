@@ -12,7 +12,7 @@
 import { EventEmitter } from "events";
 import type { ClaudeProcessPool } from "../../process-pool/pool-manager.js";
 import type { SessionManager } from "../../session/session-manager.js";
-import type { TeamsConfigManager } from "../../config/teams-config.js";
+import type { TeamsConfigManager } from "../../config/iris-config.js";
 import type { TeamsConfig } from "../../process-pool/types.js";
 import { getChildLogger } from "../../utils/logger.js";
 
@@ -29,17 +29,17 @@ export interface SessionProcessInfo {
   sessionId: string;
 
   // Session data (from SessionManager)
-  messageCount: number;        // Total messages in session (persistent)
-  createdAt: number;           // Session creation time
-  lastUsedAt: number;          // Last activity time
-  sessionStatus: string;       // Session status (active/archived)
+  messageCount: number; // Total messages in session (persistent)
+  createdAt: number; // Session creation time
+  lastUsedAt: number; // Last activity time
+  sessionStatus: string; // Session status (active/archived)
 
   // Process data (from ProcessPool - may be null if not running)
-  processState: string;        // Process state (stopped/spawning/idle/processing)
-  pid?: number;                // Process ID (if running)
-  messagesProcessed: number;   // Messages processed by current process
-  uptime: number;              // Process uptime (0 if stopped)
-  queueLength: number;         // Process queue length (0 if stopped)
+  processState: string; // Process state (stopped/spawning/idle/processing)
+  pid?: number; // Process ID (if running)
+  messagesProcessed: number; // Messages processed by current process
+  uptime: number; // Process uptime (0 if stopped)
+  queueLength: number; // Process queue length (0 if stopped)
   lastResponseAt: number | null; // Last response timestamp
 }
 
@@ -62,14 +62,17 @@ export class DashboardStateBridge extends EventEmitter {
    */
   private setupEventForwarding(): void {
     // Forward process lifecycle events
-    this.pool.on("process-spawned", (data: { poolKey: string; pid: number }) => {
-      logger.debug(data, "Forwarding process-spawned event");
-      this.emit("ws:process-status", {
-        poolKey: data.poolKey,
-        status: "spawning",
-        pid: data.pid,
-      });
-    });
+    this.pool.on(
+      "process-spawned",
+      (data: { poolKey: string; pid: number }) => {
+        logger.debug(data, "Forwarding process-spawned event");
+        this.emit("ws:process-status", {
+          poolKey: data.poolKey,
+          status: "spawning",
+          pid: data.pid,
+        });
+      },
+    );
 
     this.pool.on("process-terminated", (data: { poolKey: string }) => {
       logger.debug(data, "Forwarding process-terminated event");
@@ -79,18 +82,21 @@ export class DashboardStateBridge extends EventEmitter {
       });
     });
 
-    this.pool.on("process-status", (data: { poolKey: string; status: string }) => {
-      logger.debug(data, "Forwarding process-status event");
+    this.pool.on(
+      "process-status",
+      (data: { poolKey: string; status: string }) => {
+        logger.debug(data, "Forwarding process-status event");
 
-      const [fromTeam, toTeam] = data.poolKey.split("->") as [string, string];
+        const [fromTeam, toTeam] = data.poolKey.split("->") as [string, string];
 
-      this.emit("ws:process-status", {
-        poolKey: data.poolKey,
-        fromTeam,
-        toTeam,
-        status: data.status,
-      });
-    });
+        this.emit("ws:process-status", {
+          poolKey: data.poolKey,
+          fromTeam,
+          toTeam,
+          status: data.status,
+        });
+      },
+    );
 
     // Forward message events
     this.pool.on("message-sent", (data: any) => {
@@ -146,7 +152,10 @@ export class DashboardStateBridge extends EventEmitter {
 
       // Skip sessions with null fromTeam (shouldn't exist in new architecture)
       if (!session.fromTeam) {
-        logger.warn({ sessionId: session.sessionId, toTeam: session.toTeam }, "Skipping session with null fromTeam");
+        logger.warn(
+          { sessionId: session.sessionId, toTeam: session.toTeam },
+          "Skipping session with null fromTeam",
+        );
         continue;
       }
 
@@ -163,7 +172,7 @@ export class DashboardStateBridge extends EventEmitter {
         sessionStatus: session.status,
 
         // Process data (from Pool - may be defaults if no process)
-        processState: session.processState || 'stopped',
+        processState: session.processState || "stopped",
         pid: processInfo?.pid,
         messagesProcessed: processInfo?.messagesProcessed || 0,
         uptime: processInfo?.uptime || 0,
@@ -179,7 +188,10 @@ export class DashboardStateBridge extends EventEmitter {
    * Get metrics for a specific session
    * Combines SessionManager (persistent) with ProcessPool (runtime)
    */
-  getSessionMetrics(fromTeam: string, toTeam: string): SessionProcessInfo | null {
+  getSessionMetrics(
+    fromTeam: string,
+    toTeam: string,
+  ): SessionProcessInfo | null {
     // Get session from SessionManager (source of truth)
     const session = this.sessionManager.getSession(fromTeam, toTeam);
 
@@ -189,7 +201,10 @@ export class DashboardStateBridge extends EventEmitter {
 
     // Skip sessions with null fromTeam (shouldn't exist in new architecture)
     if (!session.fromTeam) {
-      logger.warn({ sessionId: session.sessionId, toTeam: session.toTeam }, "Cannot get metrics for session with null fromTeam");
+      logger.warn(
+        { sessionId: session.sessionId, toTeam: session.toTeam },
+        "Cannot get metrics for session with null fromTeam",
+      );
       return null;
     }
 
@@ -212,7 +227,7 @@ export class DashboardStateBridge extends EventEmitter {
       sessionStatus: session.status,
 
       // Process data (from Pool - may be defaults if no process)
-      processState: session.processState || 'stopped',
+      processState: session.processState || "stopped",
       pid: processInfo?.pid,
       messagesProcessed: processInfo?.messagesProcessed || 0,
       uptime: processInfo?.uptime || 0,
@@ -249,7 +264,9 @@ export class DashboardStateBridge extends EventEmitter {
     configuredTeams: number;
   } {
     const sessions = this.getActiveSessions();
-    const activeCount = sessions.filter((s) => s.processState !== "stopped").length;
+    const activeCount = sessions.filter(
+      (s) => s.processState !== "stopped",
+    ).length;
     const config = this.getConfig();
 
     return {

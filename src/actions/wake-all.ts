@@ -25,9 +25,6 @@ export interface TeamWakeResult {
   /** Status after wake attempt */
   status: "awake" | "waking" | "failed";
 
-  /** Process ID if successful */
-  pid?: number | null;
-
   /** Error message if failed */
   error?: string;
 }
@@ -62,10 +59,15 @@ export async function wakeAll(
 ): Promise<WakeAllOutput> {
   const { fromTeam, parallel = false } = input;
 
-  logger.info({ fromTeam, parallel }, "🚨 Sounding the air-raid siren - waking all teams!");
+  logger.info(
+    { fromTeam, parallel },
+    "🚨 Sounding the air-raid siren - waking all teams!",
+  );
 
   if (parallel) {
-    logger.warn("⚠️  Parallel mode is UNSTABLE - spawning multiple Claude instances simultaneously causes timeouts. Consider using sequential mode (parallel=false).");
+    logger.warn(
+      "⚠️  Parallel mode is UNSTABLE - spawning multiple Claude instances simultaneously causes timeouts. Consider using sequential mode (parallel=false).",
+    );
   }
 
   const startTime = Date.now();
@@ -90,27 +92,38 @@ export async function wakeAll(
           return {
             team: teamName,
             status: "awake" as const,
-            pid: metrics.pid,
           };
         }
 
         // Wake up the team
-        const session = await sessionManager.getOrCreateSession(fromTeam, teamName);
-        const process = await processPool.getOrCreateProcess(teamName, session.sessionId, fromTeam);
+        const session = await sessionManager.getOrCreateSession(
+          fromTeam,
+          teamName,
+        );
+        const process = await processPool.getOrCreateProcess(
+          teamName,
+          session.sessionId,
+          fromTeam,
+        );
         const metrics = process.getBasicMetrics();
+
+        // Update session state to idle after spawn completes
+        sessionManager.updateProcessState(session.sessionId, "idle");
 
         woken++;
         return {
           team: teamName,
           status: "waking" as const,
-          pid: metrics.pid,
         };
       } catch (error) {
         failed++;
-        logger.error({
-          err: error instanceof Error ? error : new Error(String(error)),
-          team: teamName
-        }, "Failed to wake team");
+        logger.error(
+          {
+            err: error instanceof Error ? error : new Error(String(error)),
+            team: teamName,
+          },
+          "Failed to wake team",
+        );
         return {
           team: teamName,
           status: "failed" as const,
@@ -135,28 +148,39 @@ export async function wakeAll(
           results.push({
             team: teamName,
             status: "awake",
-            pid: metrics.pid,
           });
           continue;
         }
 
         // Wake up the team
-        const session = await sessionManager.getOrCreateSession(fromTeam, teamName);
-        const process = await processPool.getOrCreateProcess(teamName, session.sessionId, fromTeam);
+        const session = await sessionManager.getOrCreateSession(
+          fromTeam,
+          teamName,
+        );
+        const process = await processPool.getOrCreateProcess(
+          teamName,
+          session.sessionId,
+          fromTeam,
+        );
         const metrics = process.getBasicMetrics();
+
+        // Update session state to idle after spawn completes
+        sessionManager.updateProcessState(session.sessionId, "idle");
 
         woken++;
         results.push({
           team: teamName,
           status: "waking",
-          pid: metrics.pid,
         });
       } catch (error) {
         failed++;
-        logger.error({
-          err: error instanceof Error ? error : new Error(String(error)),
-          team: teamName
-        }, "Failed to wake team");
+        logger.error(
+          {
+            err: error instanceof Error ? error : new Error(String(error)),
+            team: teamName,
+          },
+          "Failed to wake team",
+        );
         results.push({
           team: teamName,
           status: "failed",
@@ -168,13 +192,16 @@ export async function wakeAll(
 
   const duration = Date.now() - startTime;
 
-  logger.info({
-    total: teams.length,
-    alreadyAwake,
-    woken,
-    failed,
-    duration
-  }, "Wake-all operation complete");
+  logger.info(
+    {
+      total: teams.length,
+      alreadyAwake,
+      woken,
+      failed,
+      duration,
+    },
+    "Wake-all operation complete",
+  );
 
   return {
     message: "🚨 Sounding the air-raid siren! All teams are being awakened!",

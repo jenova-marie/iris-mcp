@@ -359,6 +359,8 @@ export class SSHTransport extends EventEmitter implements Transport {
             this.initResolve();
             this.initResolve = null;
             this.initReject = null;
+            // Clear spawn cache entry - spawn phase is complete
+            this.currentCacheEntry = null;
           }
         }
 

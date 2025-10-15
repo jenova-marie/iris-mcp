@@ -100,7 +100,7 @@ export function ProcessMonitor() {
     staleTime: 60000, // Config doesn't change often, cache for 1 minute
   });
 
-  const terminalScriptAvailable = !!configData?.config?.dashboard?.terminalScriptPath;
+  const terminalScriptAvailable = !!configData?.config?.dashboard?.forkScriptPath;
 
   // Fetch sessions
   const { data, isLoading } = useQuery({

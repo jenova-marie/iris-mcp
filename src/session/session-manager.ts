@@ -83,12 +83,24 @@ export class SessionManager {
     // This clears stale runtime state from previous server instances
     this.store.resetAllProcessStates();
 
-    // Validate all team project paths
+    // Validate all team project paths (skip remote teams)
     for (const [teamName, irisConfig] of Object.entries(
       this.teamsConfig.teams,
     )) {
       try {
         validateTeamName(teamName);
+
+        // Skip path validation for remote teams - paths exist on remote host
+        if (irisConfig.remote) {
+          logger.debug("Skipping path validation for remote team", {
+            teamName,
+            remote: irisConfig.remote,
+            path: irisConfig.path
+          });
+          continue;
+        }
+
+        // Validate local team paths
         const projectPath = this.getProjectPath(irisConfig);
         validateSecureProjectPath(projectPath);
         logger.debug("Validated team project path", { teamName, projectPath });

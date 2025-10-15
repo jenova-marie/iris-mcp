@@ -31,6 +31,13 @@
       "description": "Iris MCP Team Beta - testing team",
       "skipPermissions": true,
       "color": "#4CAAF0"
+    },
+    "team-inanna": {
+      "remote": "ssh inanna",
+      "path": "/opt/containers",
+      "description": "Iris MCP Team Inanna - cloud dev team",
+      "skipPermissions": true,
+      "color": "#4CAAF0"
     }
   }
 }

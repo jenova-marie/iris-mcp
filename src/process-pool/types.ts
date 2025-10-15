@@ -28,6 +28,7 @@ export interface DashboardConfig {
   enabled: boolean;
   port: number;
   host: string;
+  terminalScriptPath?: string; // Path to terminal.sh/bat script (runtime detected)
 }
 
 export interface DatabaseConfig {

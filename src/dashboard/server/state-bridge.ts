@@ -276,4 +276,20 @@ export class DashboardStateBridge extends EventEmitter {
       configuredTeams: this.getTeamNames().length,
     };
   }
+
+  /**
+   * Get the absolute path for a specific team
+   */
+  getTeamPath(teamName: string): string | null {
+    const teamConfig = this.configManager.getIrisConfig(teamName);
+    return teamConfig ? teamConfig.path : null;
+  }
+
+  /**
+   * Get the terminal script path (if configured)
+   */
+  getTerminalScriptPath(): string | null {
+    const config = this.getConfig();
+    return config.dashboard?.terminalScriptPath || null;
+  }
 }

@@ -47,6 +47,10 @@ export const api = {
   getSessionCache: (sessionId: string) =>
     apiClient.get(`/processes/cache/${sessionId}`),
 
+  // Terminal
+  launchTerminal: (sessionId: string, toTeam: string) =>
+    apiClient.post('/processes/terminal/launch', { sessionId, toTeam }),
+
   // Health
   getHealth: () => apiClient.get('/health'),
 };

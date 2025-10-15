@@ -91,6 +91,29 @@ export class TeamsConfigManager {
   }
 
   /**
+   * Detect terminal script in IRIS_HOME directory
+   */
+  private detectTerminalScript(): string | undefined {
+    const configDir = dirname(resolve(this.configPath));
+
+    // Platform-specific script names
+    const scriptNames = process.platform === 'win32'
+      ? ['terminal.bat', 'terminal.ps1']
+      : ['terminal.sh'];
+
+    for (const scriptName of scriptNames) {
+      const scriptPath = resolve(configDir, scriptName);
+      if (existsSync(scriptPath)) {
+        getLogger().info({ scriptPath }, 'Terminal script detected');
+        return scriptPath;
+      }
+    }
+
+    getLogger().debug('No terminal script found - Fork feature will be disabled');
+    return undefined;
+  }
+
+  /**
    * Load configuration from file
    */
   load(): TeamsConfig {
@@ -162,7 +185,14 @@ export class TeamsConfigManager {
         }
       }
 
-      this.config = validated;
+      // Cast to TeamsConfig and detect terminal script for Fork feature
+      const config: TeamsConfig = validated as TeamsConfig;
+      const terminalScriptPath = this.detectTerminalScript();
+      if (config.dashboard && terminalScriptPath) {
+        config.dashboard.terminalScriptPath = terminalScriptPath;
+      }
+
+      this.config = config;
       getLogger().info(
         {
           teams: Object.keys(validated.teams),

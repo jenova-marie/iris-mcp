@@ -5,7 +5,7 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Loader2, Eye, X, Copy, Check } from 'lucide-react';
+import { Activity, Loader2, Eye, X, Copy, Check, Terminal } from 'lucide-react';
 import { api } from '../api/client';
 import { useWebSocket, type ProcessStatus, type CacheStreamData } from '../hooks/useWebSocket';
 
@@ -69,6 +69,7 @@ export function ProcessMonitor() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [cacheData, setCacheData] = useState<{ [sessionId: string]: string[] }>({});
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
+  const [terminalStatus, setTerminalStatus] = useState<{ [sessionId: string]: 'idle' | 'launching' | 'success' | 'copied' }>({});
 
   // Handle WebSocket updates
   const handleProcessStatus = useCallback((_data: ProcessStatus) => {
@@ -87,6 +88,18 @@ export function ProcessMonitor() {
   }, []);
 
   const { connected, streamCache } = useWebSocket(handleProcessStatus, handleCacheStream);
+
+  // Fetch config to check if terminal script is available
+  const { data: configData } = useQuery({
+    queryKey: ['config'],
+    queryFn: async () => {
+      const response = await api.getConfig();
+      return response.data;
+    },
+    staleTime: 60000, // Config doesn't change often, cache for 1 minute
+  });
+
+  const terminalScriptAvailable = !!configData?.config?.dashboard?.terminalScriptPath;
 
   // Fetch sessions
   const { data, isLoading } = useQuery({
@@ -112,6 +125,52 @@ export function ProcessMonitor() {
       setCopiedSessionId(sessionId);
       setTimeout(() => setCopiedSessionId(null), 2000);
     });
+  }, []);
+
+  const handleLaunchTerminal = useCallback(async (sessionId: string, toTeam: string) => {
+    setTerminalStatus((prev) => ({ ...prev, [sessionId]: 'launching' }));
+
+    try {
+      const response = await api.launchTerminal(sessionId, toTeam);
+
+      if (response.data.success) {
+        // Success - terminal launched
+        setTerminalStatus((prev) => ({ ...prev, [sessionId]: 'success' }));
+        setTimeout(() => {
+          setTerminalStatus((prev) => ({ ...prev, [sessionId]: 'idle' }));
+        }, 3000);
+      }
+    } catch (error: any) {
+      const status = error.response?.status;
+      const errorMsg = error.response?.data?.error || error.message;
+
+      // Handle 404 - terminal script not found
+      if (status === 404) {
+        alert(
+          '⚠️ Terminal Script Not Found\n\n' +
+          errorMsg + '\n\n' +
+          'The terminal script should be located at:\n' +
+          '  ~/.iris/terminal.sh (macOS/Linux)\n' +
+          '  ~/.iris/terminal.bat or terminal.ps1 (Windows)\n\n' +
+          'The script receives two arguments:\n' +
+          '  1. sessionId\n' +
+          '  2. teamPath'
+        );
+        setTerminalStatus((prev) => ({ ...prev, [sessionId]: 'idle' }));
+        return;
+      }
+
+      // Handle other errors
+      console.error('Failed to launch terminal:', error);
+      alert(
+        `Failed to launch terminal: ${errorMsg}\n\n` +
+        `Session ID: ${sessionId}\n` +
+        `Team: ${toTeam}\n\n` +
+        'You can manually run:\n' +
+        `claude --resume ${sessionId}`
+      );
+      setTerminalStatus((prev) => ({ ...prev, [sessionId]: 'idle' }));
+    }
   }, []);
 
   if (isLoading) {
@@ -207,13 +266,45 @@ export function ProcessMonitor() {
               </div>
 
               {session.processState !== 'stopped' && (
-                <button
-                  onClick={() => handleViewCache(session.sessionId)}
-                  className="btn-secondary w-full mt-4 flex items-center justify-center gap-2"
-                >
-                  <Eye size={16} />
-                  View Cache
-                </button>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => handleViewCache(session.sessionId)}
+                    className={`btn-secondary ${terminalScriptAvailable ? 'flex-1' : 'w-full'} flex items-center justify-center gap-2`}
+                  >
+                    <Eye size={16} />
+                    Cache
+                  </button>
+                  {terminalScriptAvailable && (
+                    <button
+                      onClick={() => handleLaunchTerminal(session.sessionId, session.toTeam)}
+                      disabled={terminalStatus[session.sessionId] === 'launching'}
+                      className="btn-primary flex-1 flex items-center justify-center gap-2"
+                      title="Fork session in new terminal"
+                    >
+                      {terminalStatus[session.sessionId] === 'launching' ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Launching...
+                        </>
+                      ) : terminalStatus[session.sessionId] === 'success' ? (
+                        <>
+                          <Check size={16} />
+                          Launched!
+                        </>
+                      ) : terminalStatus[session.sessionId] === 'copied' ? (
+                        <>
+                          <Copy size={16} />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Terminal size={16} />
+                          Fork
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           ))}

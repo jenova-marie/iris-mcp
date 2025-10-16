@@ -161,6 +161,30 @@ export async function clear(
     "Fresh new session created successfully",
   );
 
+  // Step 5: Wake the team to start the new session
+  logger.info(
+    { fromTeam, toTeam, newSessionId: newSession.sessionId },
+    "Waking team to start new session",
+  );
+
+  try {
+    await processPool.getOrCreateProcess(toTeam, newSession.sessionId, fromTeam);
+    logger.info(
+      { fromTeam, toTeam, newSessionId: newSession.sessionId },
+      "Team woken successfully with new session",
+    );
+  } catch (error) {
+    logger.warn(
+      {
+        err: error instanceof Error ? error : new Error(String(error)),
+        fromTeam,
+        toTeam,
+        newSessionId: newSession.sessionId,
+      },
+      "Failed to wake team after creating new session - session created but not started",
+    );
+  }
+
   return {
     from: fromTeam,
     to: toTeam,

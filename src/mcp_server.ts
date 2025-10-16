@@ -26,6 +26,7 @@ import { cancel } from "./actions/cancel.js";
 import { reboot } from "./actions/reboot.js";
 import { deleteSession } from "./actions/delete.js";
 import { compact } from "./actions/compact.js";
+import { fork } from "./actions/fork.js";
 import { isAwake } from "./actions/isAwake.js";
 import { wake } from "./actions/wake.js";
 import { sleep } from "./actions/sleep.js";
@@ -192,6 +193,28 @@ const TOOLS: Tool[] = [
         retries: {
           type: "number",
           description: "Optional number of retry attempts (default: 2)",
+        },
+      },
+      required: ["toTeam", "fromTeam"],
+    },
+  },
+  {
+    name: "team_fork",
+    description:
+      "Fork a session by launching a new terminal window with claude --resume --fork-session. " +
+      "This allows you to manually interact with a session in a separate terminal. " +
+      "Executes the user-configured fork script (~/.iris/fork.sh or fork.bat/ps1) to open a new terminal. " +
+      "The fork script receives: sessionId, teamPath, claudePath, and optionally sshHost and sshOptions for remote teams.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toTeam: {
+          type: "string",
+          description: "Name of the team whose session to fork",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team requesting the fork",
         },
       },
       required: ["toTeam", "fromTeam"],
@@ -525,6 +548,27 @@ export class IrisMcpServer {
                       args as any,
                       this.iris,
                       this.sessionManager,
+                      this.configManager,
+                    ),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+            break;
+
+          case "team_fork":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await fork(
+                      args as any,
+                      this.iris,
+                      this.sessionManager,
+                      this.processPool,
                       this.configManager,
                     ),
                     null,

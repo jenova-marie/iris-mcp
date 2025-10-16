@@ -4,7 +4,6 @@
  */
 
 import { Router } from "express";
-import { execSync } from "child_process";
 import type { DashboardStateBridge } from "../state-bridge.js";
 import { getChildLogger } from "../../../utils/logger.js";
 
@@ -192,117 +191,61 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
   /**
    * POST /api/processes/terminal/launch
    * Launches a terminal in the team's folder with --resume
-   * Executes the user-configured fork script (fork.sh/bat/ps1)
+   * Uses the team_fork MCP action for consistency with MCP server
    *
-   * Arguments passed to fork script:
-   * - sessionId: The session ID to resume
-   * - teamPath: The project path for the team
-   * - claudePath: Path to Claude CLI executable (from config, defaults to "claude")
-   * - sshHost: SSH host for remote teams (optional)
-   * - sshOptions: SSH options for remote teams (optional)
+   * This endpoint now delegates to the fork MCP action instead of
+   * directly executing the fork script. This ensures:
+   * - Consistent behavior between Dashboard and MCP clients
+   * - Centralized business logic in MCP actions
+   * - Easier testing and maintenance
    */
-  router.post("/terminal/launch", (req, res) => {
+  router.post("/terminal/launch", async (req, res) => {
     try {
-      const { sessionId, toTeam } = req.body;
+      const { sessionId, toTeam, fromTeam = "dashboard" } = req.body;
 
-      if (!sessionId || !toTeam) {
+      if (!toTeam) {
         return res.status(400).json({
           success: false,
-          error: "Missing required fields: sessionId and toTeam",
+          error: "Missing required field: toTeam",
         });
       }
 
-      // Check if fork script is configured
-      const forkScriptPath = bridge.getForkScriptPath();
-
-      if (!forkScriptPath) {
-        return res.status(404).json({
-          success: false,
-          error:
-            "Fork script not found. Create fork.sh (or fork.bat/ps1 on Windows) in your IRIS_HOME directory.",
-        });
-      }
-
-      // Get team path
-      const teamPath = bridge.getTeamPath(toTeam);
-
-      if (!teamPath) {
-        return res.status(404).json({
-          success: false,
-          error: `Team not found: ${toTeam}`,
-        });
-      }
-
-      // Get claudePath for the team
-      const claudePath = bridge.getTeamClaudePath(toTeam);
-
-      // Check if team is remote
-      const remoteInfo = bridge.getTeamRemoteInfo(toTeam);
-
-      let command: string;
-      if (remoteInfo) {
-        // Remote team: pass sessionId, teamPath, claudePath, sshHost, sshOptions
-        logger.info(
-          {
-            sessionId,
-            toTeam,
-            teamPath,
-            claudePath,
-            forkScriptPath,
-            remoteInfo,
-          },
-          "Launching remote fork for session",
-        );
-
-        // Build command with claudePath, SSH host and options
-        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}" "${claudePath}" "${remoteInfo.sshHost}"`;
-        if (remoteInfo.sshOptions) {
-          command += ` "${remoteInfo.sshOptions}"`;
-        }
-      } else {
-        // Local team: pass sessionId, teamPath, claudePath
-        logger.info(
-          { sessionId, toTeam, teamPath, claudePath, forkScriptPath },
-          "Launching local fork for session",
-        );
-
-        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}" "${claudePath}"`;
-      }
+      logger.info(
+        { toTeam, fromTeam, sessionId },
+        "Dashboard requesting terminal fork via MCP action",
+      );
 
       try {
-        // Execute the fork script with appropriate arguments
-        execSync(command, {
-          timeout: 5000,
-          stdio: "ignore", // Ignore output since terminal will be launched async
-        });
+        // Use the fork MCP action (same logic as MCP clients)
+        const result = await bridge.forkSession(fromTeam, toTeam);
 
         logger.info(
-          { sessionId, toTeam, remote: !!remoteInfo },
-          "Terminal fork launched successfully",
+          { toTeam, fromTeam, result },
+          "Terminal fork launched successfully via MCP action",
         );
 
         return res.json({
           success: true,
-          message: "Terminal fork launched successfully",
+          message: result.message,
+          sessionId: result.sessionId,
+          remote: result.remote,
         });
-      } catch (execError: any) {
+      } catch (forkError: any) {
         logger.error(
           {
             err:
-              execError instanceof Error
-                ? execError
-                : new Error(String(execError)),
-            sessionId,
+              forkError instanceof Error
+                ? forkError
+                : new Error(String(forkError)),
             toTeam,
-            forkScriptPath,
-            command,
+            fromTeam,
           },
-          "Failed to execute fork script",
+          "Failed to fork session via MCP action",
         );
 
         return res.status(500).json({
           success: false,
-          error: "Failed to launch terminal fork. Check fork script execution.",
+          error: forkError.message || "Failed to launch terminal fork",
         });
       }
     } catch (error: any) {

@@ -450,4 +450,19 @@ export class DashboardStateBridge extends EventEmitter {
       this.pool,
     );
   }
+
+  /**
+   * Fork a session (launch new terminal with --resume --fork-session)
+   * Delegates to the fork MCP action for consistency
+   */
+  async forkSession(fromTeam: string, toTeam: string): Promise<any> {
+    const { fork } = await import("../../actions/fork.js");
+    return await fork(
+      { fromTeam, toTeam },
+      this.iris,
+      this.sessionManager,
+      this.pool,
+      this.configManager,
+    );
+  }
 }

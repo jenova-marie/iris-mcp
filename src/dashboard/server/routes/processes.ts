@@ -90,10 +90,98 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
   });
 
   /**
+   * POST /api/processes/sleep/:fromTeam/:toTeam
+   * Put a team session to sleep (terminate the process)
+   */
+  router.post('/sleep/:fromTeam/:toTeam', async (req, res) => {
+    try {
+      const { fromTeam, toTeam } = req.params;
+      const { force = false } = req.body;
+
+      logger.info({ fromTeam, toTeam, force }, 'Putting session to sleep');
+
+      const result = await bridge.sleepSession(fromTeam, toTeam, force);
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: any) {
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to put session to sleep');
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to put session to sleep',
+      });
+    }
+  });
+
+  /**
+   * POST /api/processes/clear/:fromTeam/:toTeam
+   * Clear a session (terminate process, delete old session, create new one)
+   */
+  router.post('/clear/:fromTeam/:toTeam', async (req, res) => {
+    try {
+      const { fromTeam, toTeam } = req.params;
+
+      logger.info({ fromTeam, toTeam }, 'Clearing session');
+
+      const result = await bridge.clearSession(fromTeam, toTeam);
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: any) {
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to clear session');
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to clear session',
+      });
+    }
+  });
+
+  /**
+   * POST /api/processes/delete/:fromTeam/:toTeam
+   * Delete a session permanently (terminate and remove)
+   */
+  router.post('/delete/:fromTeam/:toTeam', async (req, res) => {
+    try {
+      const { fromTeam, toTeam } = req.params;
+
+      logger.info({ fromTeam, toTeam }, 'Deleting session');
+
+      const result = await bridge.deleteSession(fromTeam, toTeam);
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: any) {
+      logger.error({
+        err: error instanceof Error ? error : new Error(String(error))
+      }, 'Failed to delete session');
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to delete session',
+      });
+    }
+  });
+
+  /**
    * POST /api/processes/terminal/launch
    * Launches a terminal in the team's folder with --resume
    * Executes the user-configured fork script (fork.sh/bat/ps1)
-   * For remote teams, passes SSH host and options to the script
+   *
+   * Arguments passed to fork script:
+   * - sessionId: The session ID to resume
+   * - teamPath: The project path for the team
+   * - claudePath: Path to Claude CLI executable (from config, defaults to "claude")
+   * - sshHost: SSH host for remote teams (optional)
+   * - sshOptions: SSH options for remote teams (optional)
    */
   router.post('/terminal/launch', (req, res) => {
     try {
@@ -126,30 +214,33 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         });
       }
 
+      // Get claudePath for the team
+      const claudePath = bridge.getTeamClaudePath(toTeam);
+
       // Check if team is remote
       const remoteInfo = bridge.getTeamRemoteInfo(toTeam);
 
       let command: string;
       if (remoteInfo) {
-        // Remote team: pass sessionId, teamPath, sshHost, sshOptions
+        // Remote team: pass sessionId, teamPath, claudePath, sshHost, sshOptions
         logger.info(
-          { sessionId, toTeam, teamPath, forkScriptPath, remoteInfo },
+          { sessionId, toTeam, teamPath, claudePath, forkScriptPath, remoteInfo },
           'Launching remote fork for session'
         );
 
-        // Build command with SSH host and options
-        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}" "${remoteInfo.sshHost}"`;
+        // Build command with claudePath, SSH host and options
+        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}" "${claudePath}" "${remoteInfo.sshHost}"`;
         if (remoteInfo.sshOptions) {
           command += ` "${remoteInfo.sshOptions}"`;
         }
       } else {
-        // Local team: pass sessionId, teamPath only
+        // Local team: pass sessionId, teamPath, claudePath
         logger.info(
-          { sessionId, toTeam, teamPath, forkScriptPath },
+          { sessionId, toTeam, teamPath, claudePath, forkScriptPath },
           'Launching local fork for session'
         );
 
-        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}"`;
+        command = `"${forkScriptPath}" "${sessionId}" "${teamPath}" "${claudePath}"`;
       }
 
       try {

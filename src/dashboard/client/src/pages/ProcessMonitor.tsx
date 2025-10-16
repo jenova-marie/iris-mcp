@@ -3,9 +3,9 @@
  * Displays all sessions (fromTeam->toTeam pairs) with status and cache viewing
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Activity, Loader2, Eye, X, Copy, Check, Terminal } from 'lucide-react';
+import { Activity, Loader2, Eye, X, Copy, Check, Terminal, MoreVertical, Moon, RotateCcw, Trash2 } from 'lucide-react';
 import { api } from '../api/client';
 import { useWebSocket, type ProcessStatus, type CacheStreamData } from '../hooks/useWebSocket';
 
@@ -70,7 +70,9 @@ export function ProcessMonitor() {
   const [cacheData, setCacheData] = useState<{ [sessionId: string]: string[] }>({});
   const [copiedSessionId, setCopiedSessionId] = useState<string | null>(null);
   const [terminalStatus, setTerminalStatus] = useState<{ [sessionId: string]: 'idle' | 'launching' | 'success' | 'copied' }>({});
-  const [showStoppedSessions, setShowStoppedSessions] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<{ [poolKey: string]: 'idle' | 'sleeping' | 'clearing' | 'deleting' | 'success' | 'error' }>({});
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Handle WebSocket updates
   const handleProcessStatus = useCallback((_data: ProcessStatus) => {
@@ -89,6 +91,18 @@ export function ProcessMonitor() {
   }, []);
 
   const { connected } = useWebSocket(handleProcessStatus, handleCacheStream);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Fetch config to check if terminal script is available
   const { data: configData } = useQuery({
@@ -113,12 +127,8 @@ export function ProcessMonitor() {
   });
 
   const allSessions: SessionProcessInfo[] = data?.sessions || [];
+  const sessions = allSessions.filter(s => s.processState !== 'stopped');
   const poolStatus = data?.poolStatus || {};
-
-  // Filter sessions based on showStoppedSessions toggle
-  const sessions = showStoppedSessions
-    ? allSessions
-    : allSessions.filter(s => s.processState !== 'stopped');
 
   const handleViewCache = async (sessionId: string, fromTeam: string, toTeam: string) => {
     setSelectedSession(sessionId);
@@ -222,6 +232,83 @@ export function ProcessMonitor() {
     }
   }, []);
 
+  const handleSleep = useCallback(async (fromTeam: string, toTeam: string, poolKey: string) => {
+    setActionStatus((prev) => ({ ...prev, [poolKey]: 'sleeping' }));
+    setOpenDropdown(null);
+
+    try {
+      await api.sleepSession(fromTeam, toTeam);
+      setActionStatus((prev) => ({ ...prev, [poolKey]: 'success' }));
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+
+      setTimeout(() => {
+        setActionStatus((prev) => ({ ...prev, [poolKey]: 'idle' }));
+      }, 2000);
+    } catch (error: any) {
+      console.error('Failed to sleep session:', error);
+      setActionStatus((prev) => ({ ...prev, [poolKey]: 'error' }));
+      alert(`Failed to sleep session: ${error.response?.data?.error || error.message}`);
+
+      setTimeout(() => {
+        setActionStatus((prev) => ({ ...prev, [poolKey]: 'idle' }));
+      }, 2000);
+    }
+  }, [queryClient]);
+
+  const handleClear = useCallback(async (fromTeam: string, toTeam: string, poolKey: string) => {
+    if (!confirm(`Clear session ${poolKey}? This will terminate the process, delete the old session, and create a fresh new one.`)) {
+      return;
+    }
+
+    setActionStatus((prev) => ({ ...prev, [poolKey]: 'clearing' }));
+    setOpenDropdown(null);
+
+    try {
+      await api.clearSession(fromTeam, toTeam);
+      setActionStatus((prev) => ({ ...prev, [poolKey]: 'success' }));
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+
+      setTimeout(() => {
+        setActionStatus((prev) => ({ ...prev, [poolKey]: 'idle' }));
+      }, 2000);
+    } catch (error: any) {
+      console.error('Failed to clear session:', error);
+      setActionStatus((prev) => ({ ...prev, [poolKey]: 'error' }));
+      alert(`Failed to clear session: ${error.response?.data?.error || error.message}`);
+
+      setTimeout(() => {
+        setActionStatus((prev) => ({ ...prev, [poolKey]: 'idle' }));
+      }, 2000);
+    }
+  }, [queryClient]);
+
+  const handleDelete = useCallback(async (fromTeam: string, toTeam: string, poolKey: string) => {
+    if (!confirm(`Delete session ${poolKey}? This will permanently remove the session data. This cannot be undone.`)) {
+      return;
+    }
+
+    setActionStatus((prev) => ({ ...prev, [poolKey]: 'deleting' }));
+    setOpenDropdown(null);
+
+    try {
+      await api.deleteSession(fromTeam, toTeam);
+      setActionStatus((prev) => ({ ...prev, [poolKey]: 'success' }));
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+
+      setTimeout(() => {
+        setActionStatus((prev) => ({ ...prev, [poolKey]: 'idle' }));
+      }, 2000);
+    } catch (error: any) {
+      console.error('Failed to delete session:', error);
+      setActionStatus((prev) => ({ ...prev, [poolKey]: 'error' }));
+      alert(`Failed to delete session: ${error.response?.data?.error || error.message}`);
+
+      setTimeout(() => {
+        setActionStatus((prev) => ({ ...prev, [poolKey]: 'idle' }));
+      }, 2000);
+    }
+  }, [queryClient]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -240,20 +327,6 @@ export function ProcessMonitor() {
             <p className="text-text-secondary mt-2">
               Real-time status of all team sessions (fromTeam→toTeam)
             </p>
-            <div className="mt-3 flex items-center gap-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showStoppedSessions}
-                  onChange={(e) => setShowStoppedSessions(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-600 bg-bg-dark text-accent-purple focus:ring-accent-purple focus:ring-offset-0"
-                />
-                <span className="text-sm text-text-secondary">Show stopped sessions</span>
-              </label>
-              <span className="text-xs text-text-secondary">
-                ({sessions.length} of {allSessions.length})
-              </span>
-            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
@@ -302,6 +375,44 @@ export function ProcessMonitor() {
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${getStatusColor(session.processState)}`} />
                   <span className="text-sm font-medium">{getStatusLabel(session.processState)}</span>
+                  <div className="relative" ref={openDropdown === session.poolKey ? dropdownRef : null}>
+                    <button
+                      onClick={() => setOpenDropdown(openDropdown === session.poolKey ? null : session.poolKey)}
+                      className="btn-secondary px-2 py-1 flex items-center justify-center ml-2"
+                      title="More actions"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+
+                    {openDropdown === session.poolKey && (
+                      <div className="absolute right-0 mt-2 w-48 bg-bg-card border border-gray-700 rounded-lg shadow-lg z-10">
+                        <button
+                          onClick={() => handleSleep(session.fromTeam, session.toTeam, session.poolKey)}
+                          disabled={actionStatus[session.poolKey] !== 'idle' && actionStatus[session.poolKey] !== undefined}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-700 flex items-center gap-2 rounded-t-lg"
+                        >
+                          <Moon size={16} />
+                          <span>Sleep</span>
+                        </button>
+                        <button
+                          onClick={() => handleClear(session.fromTeam, session.toTeam, session.poolKey)}
+                          disabled={actionStatus[session.poolKey] !== 'idle' && actionStatus[session.poolKey] !== undefined}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-700 flex items-center gap-2"
+                        >
+                          <RotateCcw size={16} />
+                          <span>Reboot</span>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(session.fromTeam, session.toTeam, session.poolKey)}
+                          disabled={actionStatus[session.poolKey] !== 'idle' && actionStatus[session.poolKey] !== undefined}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-700 flex items-center gap-2 text-red-400 hover:text-red-300 rounded-b-lg"
+                        >
+                          <Trash2 size={16} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -332,10 +443,10 @@ export function ProcessMonitor() {
                 <div className="mt-4 flex gap-2">
                   <button
                     onClick={() => handleViewCache(session.sessionId, session.fromTeam, session.toTeam)}
-                    className={`btn-secondary ${terminalScriptAvailable ? 'flex-1' : 'w-full'} flex items-center justify-center gap-2`}
+                    className="btn-secondary flex-1 flex items-center justify-center gap-2"
                   >
                     <Eye size={16} />
-                    Cache
+                    Messages
                   </button>
                   {terminalScriptAvailable && (
                     <button
@@ -389,7 +500,7 @@ export function ProcessMonitor() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-bg-card rounded-lg border border-gray-700 w-full max-w-4xl max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-700">
-              <h2 className="text-xl font-bold">Session Cache</h2>
+              <h2 className="text-xl font-bold">Session Messages</h2>
               <button
                 onClick={() => setSelectedSession(null)}
                 className="text-text-secondary hover:text-text-primary"

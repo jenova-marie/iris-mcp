@@ -47,6 +47,14 @@ export const api = {
   getSessionCache: (fromTeam: string, toTeam: string) =>
     apiClient.get(`/processes/report/${fromTeam}/${toTeam}`),
 
+  // Session actions
+  sleepSession: (fromTeam: string, toTeam: string, force?: boolean) =>
+    apiClient.post(`/processes/sleep/${fromTeam}/${toTeam}`, { force }),
+  clearSession: (fromTeam: string, toTeam: string) =>
+    apiClient.post(`/processes/clear/${fromTeam}/${toTeam}`),
+  deleteSession: (fromTeam: string, toTeam: string) =>
+    apiClient.post(`/processes/delete/${fromTeam}/${toTeam}`),
+
   // Terminal
   launchTerminal: (sessionId: string, toTeam: string) =>
     apiClient.post('/processes/terminal/launch', { sessionId, toTeam }),

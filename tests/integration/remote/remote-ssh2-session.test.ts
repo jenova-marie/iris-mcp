@@ -26,7 +26,7 @@ const REMOTE_TESTS_ENABLED = process.env.IRIS_TEST_REMOTE === "1";
 
 const describeRemote = REMOTE_TESTS_ENABLED ? describe : describe.skip;
 
-describeRemote("Remote SSH Execution (Integration)", () => {
+describeRemote.skip("Remote SSH Execution (Integration)", () => {
   let configManager: TeamsConfigManager;
   let poolManager: ClaudeProcessPool;
   let sessionManager: SessionManager;

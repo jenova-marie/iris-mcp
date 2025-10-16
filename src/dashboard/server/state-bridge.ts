@@ -157,8 +157,8 @@ export class DashboardStateBridge extends EventEmitter {
         lastUsedAt: session.lastUsedAt.getTime(),
         sessionStatus: session.status,
 
-        // Process data (from Pool - may be defaults if no process)
-        processState: session.processState || "stopped",
+        // Process data (from Pool - runtime state takes precedence)
+        processState: processInfo?.status || "stopped",
         pid: processInfo?.pid,
         messagesProcessed: processInfo?.messagesProcessed || 0,
         uptime: processInfo?.uptime || 0,
@@ -393,5 +393,39 @@ export class DashboardStateBridge extends EventEmitter {
     const sshOptions = remoteParts.slice(0, -1).join(' ');
 
     return { sshHost, sshOptions };
+  }
+
+  /**
+   * Get the claudePath for a team (if configured)
+   * Returns the path to the Claude CLI executable
+   * Defaults to "claude" if not specified
+   */
+  getTeamClaudePath(teamName: string): string {
+    const teamConfig = this.configManager.getIrisConfig(teamName);
+    return teamConfig?.claudePath || "claude";
+  }
+
+  /**
+   * Put a session to sleep (terminate the process)
+   */
+  async sleepSession(fromTeam: string, toTeam: string, force: boolean = false): Promise<any> {
+    const { sleep } = await import("../../actions/sleep.js");
+    return await sleep({ team: toTeam, fromTeam, force }, this.pool);
+  }
+
+  /**
+   * Clear a session (terminate, delete, create new)
+   */
+  async clearSession(fromTeam: string, toTeam: string): Promise<any> {
+    const { clear } = await import("../../actions/clear.js");
+    return await clear({ fromTeam, toTeam }, this.iris, this.sessionManager, this.pool);
+  }
+
+  /**
+   * Delete a session permanently (terminate and remove)
+   */
+  async deleteSession(fromTeam: string, toTeam: string): Promise<any> {
+    const { deleteSession } = await import("../../actions/delete.js");
+    return await deleteSession({ fromTeam, toTeam }, this.iris, this.sessionManager, this.pool);
   }
 }

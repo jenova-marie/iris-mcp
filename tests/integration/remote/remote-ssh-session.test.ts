@@ -270,33 +270,32 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
           message: "What is 2+2?",
         });
 
-        // Execute a simple math question
-        const tellPromise = new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error("Tell operation timeout"));
-          }, 45000);
+        // Create CacheEntry for the tell operation
+        const { CacheEntryImpl } = await import("../../../src/cache/cache-entry.js");
+        const { CacheEntryType } = await import("../../../src/cache/types.js");
+        const { firstValueFrom, filter, timeout } = await import("rxjs");
 
-          // Listen for completion
-          poolManager.once("message-response", (data) => {
-            clearTimeout(timeout);
-            logger.info("Received remote response", {
-              teamName: data.teamName,
-              success: data.success,
-            });
-            resolve();
-          });
+        const tellEntry = new CacheEntryImpl(
+          CacheEntryType.TELL,
+          "What is 2+2? Just give me the number.",
+        );
 
-          // Send message
-          process.tell("What is 2+2? Just give me the number.");
-        });
+        // Execute tell (non-blocking)
+        process.executeTell(tellEntry);
 
-        await tellPromise;
+        // Wait for result message via RxJS observable
+        await firstValueFrom(
+          tellEntry.messages$.pipe(
+            filter((msg) => msg.type === "result"),
+            timeout(45000),
+          ),
+        );
 
         logger.info("Remote tell completed successfully");
 
         // Check metrics updated
         const metrics = process.getBasicMetrics();
-        expect(metrics.messagesProcessed).toBe(1);
+        expect(metrics.messagesProcessed).toBe(2); // spawn ping + tell
         expect(metrics.lastActivity).toBeGreaterThan(0);
       },
       TEST_TIMEOUT,
@@ -319,28 +318,33 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const messages = ["What is 1+1?", "What is 3+3?", "What is 5+5?"];
 
+        // Import required types
+        const { CacheEntryImpl } = await import("../../../src/cache/cache-entry.js");
+        const { CacheEntryType } = await import("../../../src/cache/types.js");
+        const { firstValueFrom, filter, timeout } = await import("rxjs");
+
         for (const message of messages) {
           logger.info("Sending message", { message });
 
-          const tellPromise = new Promise<void>((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              reject(new Error(`Timeout for: ${message}`));
-            }, 45000);
+          // Create CacheEntry for the tell operation
+          const tellEntry = new CacheEntryImpl(CacheEntryType.TELL, message);
 
-            poolManager.once("message-response", () => {
-              clearTimeout(timeout);
-              resolve();
-            });
+          // Execute tell (non-blocking)
+          process.executeTell(tellEntry);
 
-            process.tell(message);
-          });
+          // Wait for result message via RxJS observable
+          await firstValueFrom(
+            tellEntry.messages$.pipe(
+              filter((msg) => msg.type === "result"),
+              timeout(45000),
+            ),
+          );
 
-          await tellPromise;
           logger.info("Message completed", { message });
         }
 
         const metrics = process.getBasicMetrics();
-        expect(metrics.messagesProcessed).toBeGreaterThanOrEqual(3);
+        expect(metrics.messagesProcessed).toBeGreaterThanOrEqual(5); // spawn ping + 3 tells + previous test tell
 
         logger.info("All sequential messages completed", {
           totalMessages: metrics.messagesProcessed,
@@ -510,33 +514,38 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         expect(process.getBasicMetrics().isReady).toBe(true);
 
+        // Import required types
+        const { CacheEntryImpl } = await import("../../../src/cache/cache-entry.js");
+        const { CacheEntryType } = await import("../../../src/cache/types.js");
+        const { firstValueFrom, filter, timeout } = await import("rxjs");
+
         // Warm up (first message is slower)
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error("Warmup timeout")),
-            45000,
-          );
-          poolManager.once("message-response", () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-          process.tell("Warm up message. Reply with OK.");
-        });
+        const warmupEntry = new CacheEntryImpl(
+          CacheEntryType.TELL,
+          "Warm up message. Reply with OK.",
+        );
+        process.executeTell(warmupEntry);
+        await firstValueFrom(
+          warmupEntry.messages$.pipe(
+            filter((msg) => msg.type === "result"),
+            timeout(45000),
+          ),
+        );
 
         // Measure actual latency
         const startTime = Date.now();
 
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(
-            () => reject(new Error("Tell timeout")),
-            45000,
-          );
-          poolManager.once("message-response", () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-          process.tell("What is 7+8? Just the number please.");
-        });
+        const tellEntry = new CacheEntryImpl(
+          CacheEntryType.TELL,
+          "What is 7+8? Just the number please.",
+        );
+        process.executeTell(tellEntry);
+        await firstValueFrom(
+          tellEntry.messages$.pipe(
+            filter((msg) => msg.type === "result"),
+            timeout(45000),
+          ),
+        );
 
         const latency = Date.now() - startTime;
 

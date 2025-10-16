@@ -371,7 +371,7 @@ describe("Actions Integration Tests", () => {
 
       // Verify process is actually gone from pool
       const processAfter = processPool.getProcess("team-alpha");
-      expect(processAfter).toBeNull(); // Process should be removed from pool
+      expect(processAfter).toBeUndefined(); // Process should be removed from pool
 
       const result = await isAwake(
         { fromTeam: "team-iris", team: "team-alpha" },

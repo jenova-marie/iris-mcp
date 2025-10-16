@@ -1,5 +1,5 @@
 /**
- * Iris MCP Module: clear
+ * Iris MCP Module: reboot
  * Create a fresh new session for a team pair
  *
  * Terminates existing process, deletes old session, and creates
@@ -13,21 +13,21 @@ import type { ClaudeProcessPool } from "../process-pool/pool-manager.js";
 import { validateTeamName } from "../utils/validation.js";
 import { getChildLogger } from "../utils/logger.js";
 
-const logger = getChildLogger("action:clear");
+const logger = getChildLogger("action:reboot");
 
-export interface ClearInput {
+export interface RebootInput {
   /** Team to create fresh session for */
   toTeam: string;
 
-  /** Team requesting the clear */
+  /** Team requesting the reboot */
   fromTeam: string;
 }
 
-export interface ClearOutput {
-  /** Team that requested the clear */
+export interface RebootOutput {
+  /** Team that requested the reboot */
   from: string;
 
-  /** Team that was cleared */
+  /** Team that was rebooted */
   to: string;
 
   /** Whether a session existed before */
@@ -49,22 +49,19 @@ export interface ClearOutput {
   timestamp: number;
 }
 
-export async function clear(
-  input: ClearInput,
+export async function reboot(
+  input: RebootInput,
   iris: IrisOrchestrator,
   sessionManager: SessionManager,
   processPool: ClaudeProcessPool,
-): Promise<ClearOutput> {
+): Promise<RebootOutput> {
   const { fromTeam, toTeam } = input;
 
   // Validate inputs
   validateTeamName(toTeam);
   validateTeamName(fromTeam);
 
-  logger.info(
-    { fromTeam, toTeam },
-    "Creating fresh new session for team pair",
-  );
+  logger.info({ fromTeam, toTeam }, "Creating fresh new session for team pair");
 
   // Check if session exists
   const existingSession = sessionManager.getSession(fromTeam, toTeam);
@@ -112,7 +109,7 @@ export async function clear(
       }
     }
 
-    // Step 2: Clear message cache
+    // Step 2: Reboot message cache
     const messageCache = iris.getMessageCache(oldSessionId);
     if (messageCache) {
       logger.debug(
@@ -168,7 +165,11 @@ export async function clear(
   );
 
   try {
-    await processPool.getOrCreateProcess(toTeam, newSession.sessionId, fromTeam);
+    await processPool.getOrCreateProcess(
+      toTeam,
+      newSession.sessionId,
+      fromTeam,
+    );
     logger.info(
       { fromTeam, toTeam, newSessionId: newSession.sessionId },
       "Team woken successfully with new session",
@@ -193,7 +194,7 @@ export async function clear(
     newSessionId: newSession.sessionId,
     processTerminated,
     message: hadPreviousSession
-      ? `Fresh new session created. Old session ${oldSessionId} terminated and cleared. New session ID: ${newSession.sessionId}`
+      ? `Fresh new session created. Old session ${oldSessionId} terminated and rebooted. New session ID: ${newSession.sessionId}`
       : `First session created for ${fromTeam}->${toTeam}. Session ID: ${newSession.sessionId}`,
     timestamp: Date.now(),
   };

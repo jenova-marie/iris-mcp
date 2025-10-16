@@ -557,7 +557,7 @@ Export compact action:
 export * from "./tell.js";
 export * from "./quick_tell.js";
 export * from "./cancel.js";
-export * from "./clear.js";
+export * from "./reboot.js";
 export * from "./compact.js";  // NEW
 export * from "./report.js";
 export * from "./command.js";

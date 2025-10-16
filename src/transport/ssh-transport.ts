@@ -16,7 +16,15 @@
  */
 
 import { ChildProcess, spawn } from "child_process";
-import { BehaviorSubject, Subject, Observable } from "rxjs";
+import {
+  BehaviorSubject,
+  Subject,
+  Observable,
+  firstValueFrom,
+  filter,
+  take,
+  timeout,
+} from "rxjs";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError, TimeoutError } from "../utils/errors.js";
 import type { IrisConfig } from "../process-pool/types.js";
@@ -234,10 +242,18 @@ export class SSHTransport implements Transport {
       // Wait for init message from remote Claude
       await this.waitForInit(spawnTimeout);
 
+      // Mark transport as ready
       this.ready = true;
 
-      // Emit READY status
-      this.statusSubject.next(Status.READY);
+      // Wait for the spawn ping to complete (result message received)
+      // The handleStdoutData() will clear currentCacheEntry and emit Status.READY
+      await firstValueFrom(
+        this.status$.pipe(
+          filter((status) => status === Status.READY),
+          take(1),
+          timeout(spawnTimeout),
+        ),
+      );
 
       this.logger.info("SSH transport ready", {
         teamName: this.teamName,
@@ -423,7 +439,10 @@ export class SSHTransport implements Transport {
         line.includes("Permission denied") ||
         line.includes("Authentication failed")
       ) {
-        const error = new ProcessError("SSH authentication failed", this.teamName);
+        const error = new ProcessError(
+          "SSH authentication failed",
+          this.teamName,
+        );
         this.errorsSubject.next(error);
       }
 

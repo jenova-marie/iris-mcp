@@ -26,8 +26,7 @@ import { sleep } from "../../../src/actions/sleep.js";
 import { tell } from "../../../src/actions/tell.js";
 import { wake } from "../../../src/actions/wake.js";
 import { wakeAll } from "../../../src/actions/wake-all.js";
-import { command } from "../../../src/actions/command.js";
-import { clear } from "../../../src/actions/clear.js";
+import { reboot } from "../../../src/actions/reboot.js";
 
 describe("Actions Integration Tests", () => {
   let sessionManager: SessionManager;
@@ -274,66 +273,6 @@ describe("Actions Integration Tests", () => {
     });
   });
 
-  describe.skip("9. Test command action - compact (sync)", () => {
-    it(
-      "should send /compact command synchronously",
-      async () => {
-        const result = await command(
-          {
-            team: "team-alpha",
-            fromTeam: "team-iris",
-            command: "compact",
-            timeout: 15000,
-          },
-          iris,
-        );
-
-        expect(result).toBeDefined();
-        expect(result.team).toBe("team-alpha");
-        expect(result.command).toBe("/compact");
-        expect(result.success).toBe(true);
-        expect(result.response).toBeTruthy();
-      },
-      sessionInitTimeout,
-    );
-  });
-
-  describe.skip("10. Test command action - compact (async)", () => {
-    it("should send /compact command asynchronously", async () => {
-      const result = await command(
-        {
-          team: "team-beta",
-          fromTeam: "team-iris",
-          command: "compact",
-          timeout: -1, // Async mode: return immediately
-        },
-        iris,
-      );
-
-      expect(result).toBeDefined();
-      expect(result.team).toBe("team-beta");
-      expect(result.command).toBe("/compact");
-      expect(result.success).toBe(true);
-      expect(result.response).toBeUndefined();
-    });
-
-    // Wait a bit for async compact to process
-    it("should wait for async compact to process", async () => {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Check that team-beta is still running after compact
-      const status = await isAwake(
-        { fromTeam: "team-iris", team: "team-beta" },
-        iris,
-        processPool,
-        configManager,
-        sessionManager,
-      );
-
-      expect(status.teams[0].status).toBe("awake");
-    });
-  });
-
   describe("12. Put team-alpha to sleep", () => {
     it("should put team-alpha to sleep", async () => {
       const result = await sleep(
@@ -366,7 +305,9 @@ describe("Actions Integration Tests", () => {
           console.log("✓ Process reached STOPPED status");
         } catch (error) {
           // If process is already gone (pool cleaned up), that's also acceptable
-          console.log("Process cleanup completed (may have been removed from pool)");
+          console.log(
+            "Process cleanup completed (may have been removed from pool)",
+          );
         }
       }
 
@@ -414,10 +355,10 @@ describe("Actions Integration Tests", () => {
     );
   });
 
-  describe("15. Clear action - create fresh session", () => {
+  describe("15. Reboot action - create fresh session", () => {
     let oldSessionId: string | undefined;
 
-    it("should get current session ID before clearing", async () => {
+    it("should get current session ID before rebooting", async () => {
       const session = sessionManager.getSession("team-iris", "team-alpha");
       expect(session).toBeDefined();
       oldSessionId = session?.sessionId;
@@ -427,9 +368,9 @@ describe("Actions Integration Tests", () => {
     });
 
     it(
-      "should clear existing session and create new one",
+      "should reboot existing session and create new one",
       async () => {
-        const result = await clear(
+        const result = await reboot(
           { fromTeam: "team-iris", toTeam: "team-alpha" },
           iris,
           sessionManager,
@@ -516,7 +457,7 @@ describe("Actions Integration Tests", () => {
           {
             fromTeam: "team-iris",
             toTeam: "team-alpha",
-            message: "Testing new session after clear",
+            message: "Testing new session after reboot",
           },
           iris,
         );
@@ -530,7 +471,7 @@ describe("Actions Integration Tests", () => {
     );
   });
 
-  describe("16. Clear action - first session for new team", () => {
+  describe("16. Reboot action - first session for new team", () => {
     it(
       "should create first session when none exists",
       async () => {
@@ -541,7 +482,7 @@ describe("Actions Integration Tests", () => {
         );
         expect(existingSession).toBeNull();
 
-        const result = await clear(
+        const result = await reboot(
           { fromTeam: "team-iris", toTeam: "team-gamma" },
           iris,
           sessionManager,

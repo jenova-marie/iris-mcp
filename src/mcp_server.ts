@@ -23,7 +23,7 @@ import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { tell } from "./actions/tell.js";
 import { quickTell } from "./actions/quick_tell.js";
 import { cancel } from "./actions/cancel.js";
-import { clear } from "./actions/clear.js";
+import { reboot } from "./actions/reboot.js";
 import { deleteSession } from "./actions/delete.js";
 import { compact } from "./actions/compact.js";
 import { isAwake } from "./actions/isAwake.js";
@@ -475,13 +475,13 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_clear":
+          case "team_reboot":
             result = {
               content: [
                 {
                   type: "text",
                   text: JSON.stringify(
-                    await clear(
+                    await reboot(
                       args as any,
                       this.iris,
                       this.sessionManager,
@@ -646,11 +646,7 @@ export class IrisMcpServer {
               content: [
                 {
                   type: "text",
-                  text: JSON.stringify(
-                    await debug(args as any),
-                    null,
-                    2,
-                  ),
+                  text: JSON.stringify(await debug(args as any), null, 2),
                 },
               ],
             };

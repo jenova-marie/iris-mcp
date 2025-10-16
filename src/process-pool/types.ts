@@ -13,6 +13,18 @@ export enum PoolEvent {
   HEALTH_CHECK = "health-check",
 }
 
+/**
+ * Process Status Values
+ * Use enum to prevent typos in status checks
+ */
+export enum ProcessStatus {
+  STOPPED = "stopped",
+  SPAWNING = "spawning",
+  IDLE = "idle",
+  PROCESSING = "processing",
+  TERMINATING = "terminating",
+}
+
 export interface ProcessPoolConfig {
   idleTimeout: number;
   maxProcesses: number;
@@ -80,13 +92,6 @@ export interface ProcessMessage {
   resolve: (value: any) => void;
   reject: (error: Error) => void;
 }
-
-export type ProcessStatus =
-  | "spawning"
-  | "idle"
-  | "processing"
-  | "terminating"
-  | "stopped";
 
 export interface ProcessMetrics {
   pid: number | undefined;

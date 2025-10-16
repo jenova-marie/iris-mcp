@@ -1,0 +1,60 @@
+# Wonder Logger Configuration Example
+#
+# This file demonstrates all available configuration options for Wonder Logger.
+# Save this as 'wonder-logger.yaml' in your project root.
+#
+# Environment variables can be used with the syntax:
+#   ${VAR_NAME}          - Required variable (throws if not set)
+#   ${VAR_NAME:-default} - Optional variable with default value
+
+# =============================================================================
+# Service Metadata
+# =============================================================================
+service:
+  # Service name (required)
+  name: ${SERVICE_NAME:-iris-mcp}
+
+  # Service version
+  version: ${SERVICE_VERSION:-1.0.0}
+
+  # Deployment environment
+  environment: ${NODE_ENV:-development}
+
+# =============================================================================
+# Logger Configuration
+# =============================================================================
+logger:
+  enabled: true
+
+  # Minimum log level: trace, debug, info, warn, error, fatal, silent
+  level: ${LOG_LEVEL:-debug}
+
+  # Fields to redact from logs (useful for sensitive data)
+  redact:
+    - password
+    - token
+    - apiKey
+    - secret
+
+  # Transports define where logs are sent
+  transports:
+    # File transport
+    # NOTE: Using file instead of console to ensure MCP protocol compliance
+    # MCP uses stdout for JSON-RPC protocol, so logs MUST NOT go to stdout
+    - type: file
+      dir: ./logs
+      fileName: iris.log
+      level: ${LOG_LEVEL:-debug}
+      mkdir: true # Create directory if it doesn't exist
+      sync: false # Use async I/O for better performance
+
+    # Memory transport
+    - type: memory
+      name: ${SERVICE_NAME:-iris-mcp} # Registry name for querying (defaults to service name)
+      maxSize: 10000 # Maximum logs to store (circular buffer)
+      level: ${LOG_LEVEL:-debug}
+
+  # Plugins extend logger functionality
+  plugins:
+    # Provide Morgan-compatible stream for HTTP request logging
+    morganStream: true

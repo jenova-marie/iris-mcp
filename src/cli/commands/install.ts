@@ -3,7 +3,13 @@
  * Installs Iris MCP server to Claude's global configuration
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "fs";
+import {
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  copyFileSync,
+} from "fs";
 import { join, dirname, resolve } from "path";
 import { homedir, platform } from "os";
 import { fileURLToPath } from "url";
@@ -27,7 +33,13 @@ function getClaudeDesktopConfigPath(): string {
 
   switch (plat) {
     case "darwin":
-      return join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
+      return join(
+        homedir(),
+        "Library",
+        "Application Support",
+        "Claude",
+        "claude_desktop_config.json",
+      );
     case "linux":
       return join(homedir(), ".config", "Claude", "claude_desktop_config.json");
     case "win32":
@@ -42,16 +54,16 @@ function getClaudeDesktopConfigPath(): string {
 }
 
 /**
- * Create default Iris MCP config from config.default.json
+ * Create default Iris MCP config from default.config.json
  */
 function createDefaultIrisConfig(configPath: string): void {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
-  const defaultConfigPath = resolve(__dirname, "../../config.default.json");
+  const defaultConfigPath = resolve(__dirname, "../../default.config.json");
 
   if (!existsSync(defaultConfigPath)) {
     throw new Error(
-      `Default configuration template not found: ${defaultConfigPath}`
+      `Default configuration template not found: ${defaultConfigPath}`,
     );
   }
 
@@ -96,10 +108,13 @@ export async function install(options: InstallOptions): Promise<void> {
   //   : join(homedir(), ".claude.json");
   const claudeConfigPath = join(homedir(), ".claude.json");
 
-  const defaultUrl = options.url || `http://localhost:${options.port || 1615}/mcp`;
+  const defaultUrl =
+    options.url || `http://localhost:${options.port || 1615}/mcp`;
 
   const configType = "Claude CLI"; // DISABLED: options.desktop ? "Claude Desktop" : "Claude CLI";
-  logger.info(`\nInstalling Iris MCP to ${configType} configuration: ${claudeConfigPath}`);
+  logger.info(
+    `\nInstalling Iris MCP to ${configType} configuration: ${claudeConfigPath}`,
+  );
 
   let config: any = {};
 
@@ -110,7 +125,10 @@ export async function install(options: InstallOptions): Promise<void> {
       config = JSON.parse(content);
       logger.info(`Loaded existing ${configType} configuration`);
     } catch (error) {
-      logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, `Failed to read ${configType} configuration`);
+      logger.error(
+        { err: error instanceof Error ? error : new Error(String(error)) },
+        `Failed to read ${configType} configuration`,
+      );
       process.exit(1);
     }
   } else {
@@ -134,7 +152,9 @@ export async function install(options: InstallOptions): Promise<void> {
   // Check if iris is already installed
   if (config.mcpServers.iris && !options.force) {
     logger.warn("⚠️  Iris MCP is already installed in Claude configuration");
-    logger.info(`   Current config: ${JSON.stringify(config.mcpServers.iris, null, 2)}`);
+    logger.info(
+      `   Current config: ${JSON.stringify(config.mcpServers.iris, null, 2)}`,
+    );
     logger.info(`   Use --force to overwrite`);
     process.exit(1);
   }
@@ -149,11 +169,11 @@ export async function install(options: InstallOptions): Promise<void> {
   //     args: ["start", "--transport", "stdio"],
   //   };
   // } else {
-    // CLI format: HTTP with type and url
-    config.mcpServers.iris = {
-      type: "http",
-      url: defaultUrl,
-    };
+  // CLI format: HTTP with type and url
+  config.mcpServers.iris = {
+    type: "http",
+    url: defaultUrl,
+  };
   // }
 
   // Create backup before writing
@@ -170,8 +190,14 @@ export async function install(options: InstallOptions): Promise<void> {
 
   // Write updated config
   try {
-    writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
-    logger.info(`✅ Successfully installed Iris MCP to ${configType} configuration`);
+    writeFileSync(
+      claudeConfigPath,
+      JSON.stringify(config, null, 2) + "\n",
+      "utf-8",
+    );
+    logger.info(
+      `✅ Successfully installed Iris MCP to ${configType} configuration`,
+    );
     logger.info(`   Config file: ${claudeConfigPath}`);
     logger.info(`   MCP URL: ${defaultUrl}`);
 
@@ -193,7 +219,10 @@ export async function install(options: InstallOptions): Promise<void> {
       logger.info(`   3. Verify the connection with: claude mcp list`);
     }
   } catch (error) {
-    logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, `Failed to write ${configType} configuration`);
+    logger.error(
+      { err: error instanceof Error ? error : new Error(String(error)) },
+      `Failed to write ${configType} configuration`,
+    );
     process.exit(1);
   }
 }

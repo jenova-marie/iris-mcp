@@ -43,11 +43,15 @@
       "description": "Infrastructure and deployment - custom color for UI",
       "color": "#FF5733"
     },
-    "team-testing": {
-      "path": "/Users/jenova/projects/myapp/e2e-tests",
-      "description": "End-to-end testing suite - all optional fields configured",
+    "team-remote": {
+      "remote": "ssh <host>",
+      "claudePath": "~/.local/bin/claude",
+      "path": "/Users/<user>/projects/myapp/e2e-tests",
+      "description": "Remote end-to-end testing suite - all optional fields configured",
       "idleTimeout": 1800000,
-      "skipPermissions": true,
+      "skipPermissions": false,
+      "forwardPermissions": true,
+      "remoteForwardingPort": 1615,
       "color": "#4CAF50"
     }
   }

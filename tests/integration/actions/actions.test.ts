@@ -27,6 +27,7 @@ import { tell } from "../../../src/actions/tell.js";
 import { wake } from "../../../src/actions/wake.js";
 import { wakeAll } from "../../../src/actions/wake-all.js";
 import { command } from "../../../src/actions/command.js";
+import { clear } from "../../../src/actions/clear.js";
 
 describe("Actions Integration Tests", () => {
   let sessionManager: SessionManager;
@@ -413,7 +414,164 @@ describe("Actions Integration Tests", () => {
     );
   });
 
-  describe("15. Final status check", () => {
+  describe("15. Clear action - create fresh session", () => {
+    let oldSessionId: string | undefined;
+
+    it("should get current session ID before clearing", async () => {
+      const session = sessionManager.getSession("team-iris", "team-alpha");
+      expect(session).toBeDefined();
+      oldSessionId = session?.sessionId;
+      expect(oldSessionId).toBeTruthy();
+
+      console.log(`Current session ID: ${oldSessionId}`);
+    });
+
+    it(
+      "should clear existing session and create new one",
+      async () => {
+        const result = await clear(
+          { fromTeam: "team-iris", toTeam: "team-alpha" },
+          iris,
+          sessionManager,
+          processPool,
+        );
+
+        expect(result).toBeDefined();
+        expect(result.from).toBe("team-iris");
+        expect(result.to).toBe("team-alpha");
+        expect(result.hadPreviousSession).toBe(true);
+        expect(result.oldSessionId).toBe(oldSessionId);
+        expect(result.newSessionId).toBeTruthy();
+        expect(result.newSessionId).not.toBe(oldSessionId);
+        expect(result.processTerminated).toBe(true); // Should terminate running process
+        expect(result.message).toContain("Fresh new session created");
+        expect(result.timestamp).toBeGreaterThan(0);
+
+        console.log(`Old session: ${result.oldSessionId}`);
+        console.log(`New session: ${result.newSessionId}`);
+      },
+      sessionInitTimeout,
+    );
+
+    it("should verify old session is gone", () => {
+      const session = sessionManager.getSession("team-iris", "team-alpha");
+      expect(session).toBeDefined();
+      expect(session?.sessionId).not.toBe(oldSessionId);
+    });
+
+    it("should verify process was terminated", () => {
+      // Process should be removed from pool after termination
+      const process = processPool.getProcess("team-alpha");
+      expect(process).toBeUndefined();
+    });
+
+    it("should verify team-alpha shows as asleep", async () => {
+      const result = await isAwake(
+        { fromTeam: "team-iris", team: "team-alpha" },
+        iris,
+        processPool,
+        configManager,
+        sessionManager,
+      );
+
+      expect(result.teams[0].name).toBe("team-alpha");
+      expect(result.teams[0].status).toBe("asleep");
+    });
+
+    it(
+      "should be able to wake team-alpha with new session",
+      async () => {
+        const result = await wake(
+          { team: "team-alpha", fromTeam: "team-iris" },
+          iris,
+          processPool,
+          sessionManager,
+        );
+
+        expect(result.team).toBe("team-alpha");
+        expect(result.status).toMatch(/awake|waking/);
+        expect(result.sessionId).toBeTruthy();
+
+        // Wait for process to be idle
+        const process = processPool.getProcess("team-alpha");
+        if (process) {
+          await firstValueFrom(
+            process.status$.pipe(
+              filter((status) => status === ProcessStatus.IDLE),
+              take(1),
+              timeout(30000),
+            ),
+          );
+        }
+
+        console.log(`New session active: ${result.sessionId}`);
+      },
+      sessionInitTimeout,
+    );
+
+    it(
+      "should send message to verify new session works",
+      async () => {
+        const result = await tell(
+          {
+            fromTeam: "team-iris",
+            toTeam: "team-alpha",
+            message: "Testing new session after clear",
+          },
+          iris,
+        );
+
+        expect(result.to).toBe("team-alpha");
+        expect(result.response).toBeTruthy();
+
+        console.log("Message sent successfully to new session");
+      },
+      sessionInitTimeout,
+    );
+  });
+
+  describe("16. Clear action - first session for new team", () => {
+    it(
+      "should create first session when none exists",
+      async () => {
+        // team-gamma should have no session yet
+        const existingSession = sessionManager.getSession(
+          "team-iris",
+          "team-gamma",
+        );
+        expect(existingSession).toBeNull();
+
+        const result = await clear(
+          { fromTeam: "team-iris", toTeam: "team-gamma" },
+          iris,
+          sessionManager,
+          processPool,
+        );
+
+        expect(result).toBeDefined();
+        expect(result.from).toBe("team-iris");
+        expect(result.to).toBe("team-gamma");
+        expect(result.hadPreviousSession).toBe(false);
+        expect(result.oldSessionId).toBeUndefined();
+        expect(result.newSessionId).toBeTruthy();
+        expect(result.processTerminated).toBe(false); // No process to terminate
+        expect(result.message).toContain("First session created");
+
+        console.log(`First session created: ${result.newSessionId}`);
+      },
+      sessionInitTimeout,
+    );
+
+    it("should verify new session was created", () => {
+      const session = sessionManager.getSession("team-iris", "team-gamma");
+      expect(session).toBeDefined();
+      expect(session?.fromTeam).toBe("team-iris");
+      expect(session?.toTeam).toBe("team-gamma");
+      expect(session?.status).toBe("active");
+    });
+  });
+
+  describe("17. Final status check", () => {
     it("should show final state of all teams", async () => {
       const result = await isAwake(
         { fromTeam: "team-iris" },

@@ -155,7 +155,7 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Return existing process if available
     const existing = this.processes.get(poolKey);
-    if (existing && existing.getBasicMetrics().status !== "stopped") {
+    if (existing && existing.getBasicMetrics().status !== ProcessStatus.STOPPED) {
       this.logger.debug("Using existing process", { poolKey, sessionId });
       return existing;
     }
@@ -420,7 +420,7 @@ export class ClaudeProcessPool extends EventEmitter {
       const teamName = this.accessOrder[i];
       const process = this.processes.get(teamName);
 
-      if (process && process.getBasicMetrics().status === "idle") {
+      if (process && process.getBasicMetrics().status === ProcessStatus.IDLE) {
         victimIndex = i;
         break;
       }
@@ -486,7 +486,7 @@ export class ClaudeProcessPool extends EventEmitter {
       const metrics = process.getBasicMetrics();
 
       // Remove stopped processes
-      if (metrics.status === "stopped") {
+      if (metrics.status === ProcessStatus.STOPPED) {
         processesToRemove.push(teamName);
         continue;
       }

@@ -45,10 +45,11 @@ describe("LocalTransport", () => {
       });
     });
 
-    it("should be an EventEmitter", () => {
-      expect(transport.on).toBeDefined();
-      expect(transport.emit).toBeDefined();
-      expect(transport.removeListener).toBeDefined();
+    it("should have RxJS observables", () => {
+      expect(transport.status$).toBeDefined();
+      expect(transport.errors$).toBeDefined();
+      expect(typeof transport.status$.subscribe).toBe("function");
+      expect(typeof transport.errors$.subscribe).toBe("function");
     });
   });
 
@@ -99,18 +100,29 @@ describe("LocalTransport", () => {
     });
   });
 
-  describe("event emission", () => {
-    it("should support adding listeners", () => {
-      const listener = vi.fn();
-      transport.on("process-spawned", listener);
-      expect(transport.listenerCount("process-spawned")).toBe(1);
+  describe("observable subscriptions", () => {
+    it("should support subscribing to status$", () => {
+      const statusValues: any[] = [];
+      const subscription = transport.status$.subscribe((status) => {
+        statusValues.push(status);
+      });
+
+      // Should get initial value (STOPPED) immediately from BehaviorSubject
+      expect(statusValues.length).toBeGreaterThan(0);
+
+      subscription.unsubscribe();
     });
 
-    it("should support removing listeners", () => {
-      const listener = vi.fn();
-      transport.on("process-error", listener);
-      transport.removeListener("process-error", listener);
-      expect(transport.listenerCount("process-error")).toBe(0);
+    it("should support subscribing to errors$", () => {
+      const errors: any[] = [];
+      const subscription = transport.errors$.subscribe((error) => {
+        errors.push(error);
+      });
+
+      // errors$ is a Subject (no initial value)
+      expect(errors.length).toBe(0);
+
+      subscription.unsubscribe();
     });
   });
 

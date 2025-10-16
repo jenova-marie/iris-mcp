@@ -170,30 +170,9 @@ describe("Dashboard Cache with Tell Messages", () => {
 
       console.log("Wake result:", wakeResult.status);
 
-      // Wait for process to be idle from wake ping
-      const maxWaitTime = 30000;
-      const pollInterval = 500;
-      const startTime = Date.now();
-
-      let isIdle = false;
-      while (Date.now() - startTime < maxWaitTime) {
-        const process = processPool.getProcess("team-alpha");
-        if (process) {
-          const metrics = process.getBasicMetrics();
-          console.log(`Process status: ${metrics.status}, busy: ${metrics.isBusy}`);
-          if (metrics.status === "idle" && !metrics.isBusy) {
-            isIdle = true;
-            break;
-          }
-        } else {
-          console.log("Process not found, might need to wait for spawn");
-        }
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-      }
-
-      if (!isIdle) {
-        console.log("Process never became idle, attempting send anyway");
-      }
+      // Wait for process to become idle after wake (wake sends a ping message)
+      // Use a simple timeout approach - wait for wake ping to complete
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       const result = await tell(
         {
@@ -218,69 +197,82 @@ describe("Dashboard Cache with Tell Messages", () => {
     }, 60000);
 
     it("should show cache entries after sending message", async () => {
-      // Debug: let's check what caches exist
-      const cacheManager = (iris as any).cacheManager;
-      const allCaches = cacheManager.getAllCaches();
-      console.log("All caches:", allCaches.map((c: any) => ({
-        sessionId: c.sessionId,
-        fromTeam: c.fromTeam,
-        toTeam: c.toTeam,
-        entryCount: c.getAllEntries().length
-      })));
+      // Get the message cache directly
+      const messageCache = iris.getMessageCacheForTeams("team-iris", "team-alpha");
+      expect(messageCache).toBeDefined();
 
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      if (!messageCache) {
+        throw new Error("Message cache not found after tell");
+      }
 
-      console.log("Cache report after tell:", JSON.stringify(report, null, 2));
+      // Wait for the cache entry to complete using status$ observable
+      const entries = messageCache.getAllEntries();
+      const tellEntry = entries.find(e => e.tellString === "Test message for cache viewing");
 
-      // If no session found, it might be the cache isn't linked properly
-      if (!report.hasSession) {
-        console.log("No session found in report, but cache might exist");
-        // Try getting cache directly
-        const messageCache = iris.getMessageCacheForTeams("team-iris", "team-alpha");
-        if (messageCache) {
-          console.log("Direct cache lookup found:", {
-            sessionId: messageCache.sessionId,
-            fromTeam: messageCache.fromTeam,
-            toTeam: messageCache.toTeam,
-            entries: messageCache.getAllEntries().length
-          });
-        } else {
-          console.log("Direct cache lookup also returned null");
+      expect(tellEntry).toBeDefined();
+
+      if (tellEntry && tellEntry.status !== CacheEntryStatus.COMPLETED) {
+        // Wait for completion using the observable
+        const completionPromise = firstValueFrom(
+          tellEntry.status$.pipe(
+            filter(status =>
+              status === CacheEntryStatus.COMPLETED ||
+              status === CacheEntryStatus.TERMINATED
+            )
+          )
+        );
+
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout waiting for completion")), 10000)
+        );
+
+        try {
+          await Promise.race([completionPromise, timeoutPromise]);
+        } catch (error) {
+          console.log("Entry did not complete within timeout, checking current state");
         }
       }
 
+      // Now verify via the dashboard report
+      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+
       expect(report.hasSession).toBe(true);
-      // Process might still be busy or stopped
       expect(report.entries.length).toBeGreaterThan(0);
 
-      // Find the tell entry
-      const tellEntry = report.entries.find(e => e.type === "tell");
-      expect(tellEntry).toBeDefined();
-      expect(tellEntry?.tellString).toBe("Test message for cache viewing");
-
-      // Entry might be active or completed depending on timing
-      expect(["active", "completed"]).toContain(tellEntry?.status);
+      // Find the tell entry in report
+      const reportTellEntry = report.entries.find(e => e.type === "tell" && e.tellString === "Test message for cache viewing");
+      expect(reportTellEntry).toBeDefined();
 
       // Check messages within the entry
-      expect(tellEntry?.messages.length).toBeGreaterThan(0);
+      expect(reportTellEntry?.messages.length).toBeGreaterThan(0);
 
-      // Should have assistant message with Claude's response (even if partial)
-      const assistantMessage = tellEntry?.messages.find(m => m.type === "assistant" && m.content);
+      // Should have assistant message with Claude's response
+      const assistantMessage = reportTellEntry?.messages.find(m => m.type === "assistant" && m.content);
       expect(assistantMessage).toBeDefined();
       expect(assistantMessage?.content).toBeTruthy();
 
       // Check stats
       expect(report.stats.totalEntries).toBeGreaterThan(0);
       expect(report.stats.tellEntries).toBeGreaterThan(0);
-      // completedEntries might be 0 if still active
-      expect(report.stats.completedEntries).toBeGreaterThanOrEqual(0);
     });
   });
 
   describe("Send async message", () => {
     it("should send async message and show it as active", async () => {
-      // Wait a bit to ensure previous message is done processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait for process to be idle before sending async message
+      const process = processPool.getProcess("team-alpha");
+      if (process) {
+        const transport = (process as any).transport;
+        if (transport && transport.isBusy()) {
+          const idlePromise = firstValueFrom(
+            process.status$.pipe(filter(status => status === ProcessStatus.IDLE))
+          );
+          await Promise.race([
+            idlePromise,
+            new Promise(resolve => setTimeout(resolve, 5000))
+          ]);
+        }
+      }
 
       const result = await tell(
         {
@@ -303,21 +295,29 @@ describe("Dashboard Cache with Tell Messages", () => {
     });
 
     it("should show async message in cache while processing", async () => {
-      // Get cache report immediately
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      // Get the message cache to access observables
+      const messageCache = iris.getMessageCacheForTeams("team-iris", "team-alpha");
 
-      // Find the async tell entry
-      const asyncEntry = report.entries.find(
-        e => e.type === "tell" && e.tellString === "Async message test"
-      );
+      if (!messageCache) {
+        console.log("No message cache found, async message might not have been sent");
+        return;
+      }
+
+      // Find the async cache entry
+      const entries = messageCache.getAllEntries();
+      const asyncEntry = entries.find(e => e.tellString === "Async message test");
 
       if (asyncEntry) {
-        console.log("Async entry status:", asyncEntry.status);
+        // Subscribe to status$ to observe current status
+        const currentStatus = await firstValueFrom(asyncEntry.status$);
+        console.log("Async entry status via observable:", currentStatus);
 
         // It might be active or already completed depending on timing
-        expect(["active", "completed"]).toContain(asyncEntry.status);
+        expect([CacheEntryStatus.ACTIVE, CacheEntryStatus.COMPLETED]).toContain(currentStatus);
 
-        if (asyncEntry.status === "active") {
+        if (currentStatus === CacheEntryStatus.ACTIVE) {
+          // Verify via dashboard report too
+          const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
           expect(report.allComplete).toBe(false);
         }
       }
@@ -446,7 +446,7 @@ describe("Dashboard Cache with Tell Messages", () => {
       for (const msg of messages) {
         const entry = tellEntries.find(e => e.tellString === msg);
         expect(entry).toBeDefined();
-        expect(entry?.status).toBe("completed");
+        expect(entry?.status).toBe(CacheEntryStatus.COMPLETED);
       }
 
       expect(report.stats.tellEntries).toBeGreaterThanOrEqual(messages.length);
@@ -475,7 +475,7 @@ describe("Dashboard Cache with Tell Messages", () => {
       );
 
       expect(result.team).toBe("team-alpha");
-      expect(result.status).toBe("sleeping");
+      expect(result.status).toBe("sleeping"); // sleep action returns string status, not enum
 
       // Wait for process to actually stop (with timeout)
       const timeoutPromise = new Promise<never>((_, reject) =>
@@ -501,7 +501,7 @@ describe("Dashboard Cache with Tell Messages", () => {
       expect(report.hasProcess).toBe(false); // Process is stopped
       // Note: processState might be "idle" because Iris doesn't listen to process-terminated events yet
       // This will be fixed when Iris fully migrates to observables
-      expect(["idle", "stopped"]).toContain(report.processState);
+      expect([ProcessStatus.IDLE, ProcessStatus.STOPPED]).toContain(report.processState);
 
       // Cache entries should still be there
       expect(report.entries.length).toBeGreaterThan(0);
@@ -511,7 +511,7 @@ describe("Dashboard Cache with Tell Messages", () => {
       expect(tellEntries.length).toBeGreaterThan(0);
 
       for (const entry of tellEntries) {
-        expect(entry.status).toBe("completed");
+        expect(entry.status).toBe(CacheEntryStatus.COMPLETED);
         expect(entry.isComplete).toBe(true);
       }
 

@@ -9,9 +9,11 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
+import { ProcessStatus } from "../../../src/process-pool/claude-process.js";
 import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import type { ProcessPoolConfig } from "../../../src/process-pool/types.js";
+import { PoolEvent } from "../../../src/process-pool/types.js";
 import { unlinkSync, existsSync } from "fs";
 
 describe("ClaudeProcessPool Integration", () => {
@@ -115,8 +117,8 @@ describe("ClaudeProcessPool Integration", () => {
 
         expect(process).toBeDefined();
         const metrics = process.getBasicMetrics();
-        // Process might be "processing" (waiting for result) or "idle" (result arrived)
-        expect(["idle", "processing"]).toContain(metrics.status);
+        // Process might be PROCESSING (waiting for result) or IDLE (result arrived)
+        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(metrics.status);
         expect(metrics.pid).toBeDefined();
       },
       sessionInitTimeout,
@@ -167,7 +169,7 @@ describe("ClaudeProcessPool Integration", () => {
       );
 
       // Check status immediately
-      expect(["idle", "processing"]).toContain(
+      expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
         process.getBasicMetrics().status,
       );
       const pid = process.getBasicMetrics().pid;
@@ -177,7 +179,7 @@ describe("ClaudeProcessPool Integration", () => {
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // Check status again - should still be idle
-      expect(process.getBasicMetrics().status).toBe("idle");
+      expect(process.getBasicMetrics().status).toBe(ProcessStatus.IDLE);
       expect(process.getBasicMetrics().pid).toBe(pid);
 
       // Pool should have processes from all previous tests
@@ -204,7 +206,7 @@ describe("ClaudeProcessPool Integration", () => {
           sessionAlpha.sessionId,
           "team-iris",
         );
-        expect(["idle", "processing"]).toContain(
+        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
           processAlpha.getBasicMetrics().status,
         );
 
@@ -212,7 +214,7 @@ describe("ClaudeProcessPool Integration", () => {
         await new Promise((resolve) => setTimeout(resolve, 2000));
 
         // Verify alpha is still healthy
-        expect(processAlpha.getBasicMetrics().status).toBe("idle");
+        expect(processAlpha.getBasicMetrics().status).toBe(ProcessStatus.IDLE);
         const pidAlpha = processAlpha.getBasicMetrics().pid;
         expect(pidAlpha).toBeDefined();
 
@@ -222,7 +224,7 @@ describe("ClaudeProcessPool Integration", () => {
           sessionBeta.sessionId,
           "team-iris",
         );
-        expect(["idle", "processing"]).toContain(
+        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
           processBeta.getBasicMetrics().status,
         );
         const pidBeta = processBeta.getBasicMetrics().pid;
@@ -275,10 +277,10 @@ describe("ClaudeProcessPool Integration", () => {
       expect(status.maxProcesses).toBe(10); // From config.json config
       expect(status.processes).toHaveProperty("team-iris->team-alpha");
       expect(status.processes).toHaveProperty("team-iris->team-beta");
-      expect(["idle", "processing"]).toContain(
+      expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
         status.processes["team-iris->team-alpha"].status,
       );
-      expect(["idle", "processing"]).toContain(
+      expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
         status.processes["team-iris->team-beta"].status,
       );
     });
@@ -287,7 +289,7 @@ describe("ClaudeProcessPool Integration", () => {
       // Process from earlier test should still be in pool
       const process = pool.getProcess("team-alpha");
       expect(process).toBeDefined();
-      expect(process?.getBasicMetrics().status).toBe("idle");
+      expect(process?.getBasicMetrics().status).toBe(ProcessStatus.IDLE);
 
       const nonExistent = pool.getProcess("unknown-team");
       expect(nonExistent).toBeUndefined();
@@ -354,34 +356,16 @@ describe("ClaudeProcessPool Integration", () => {
   });
 
   describe("event emission", () => {
-    it.skip("should emit process-spawned event", async () => {
-      // SKIP: Test times out with shared pool state - needs longer timeout or isolation
-      const session = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-alpha",
-      );
-
-      const spawnedPromise = new Promise((resolve) => {
-        pool.once("process-spawned", (data) => {
-          resolve(data);
-        });
-      });
-
-      await pool.getOrCreateProcess(
-        "team-alpha",
-        session.sessionId,
-        "team-iris",
-      );
-      const spawnedData = await spawnedPromise;
-
-      expect(spawnedData).toMatchObject({
-        teamName: "team-alpha",
-        pid: expect.any(Number),
-      });
-    });
+    // NOTE: ProcessPool does NOT emit "process-spawned" events
+    // Per OBSERVABILITY.md, ProcessPool only emits:
+    // - PoolEvent.PROCESS_TERMINATED (when process stops)
+    // - PoolEvent.PROCESS_ERROR (when process errors)
+    // - PoolEvent.HEALTH_CHECK (periodic health checks)
 
     it.skip("should emit process-terminated event", async () => {
-      // SKIP: Test times out with shared pool state - needs longer timeout or isolation
+      // SKIP: Test has timing issues with shared pool state
+      // The status$ observable triggers cleanup asynchronously
+      // TODO: Use firstValueFrom(pool.processTerminated$) when pool migrates to full RxJS
       const session = await sessionManager.getOrCreateSession(
         "team-iris",
         "team-alpha",
@@ -393,7 +377,7 @@ describe("ClaudeProcessPool Integration", () => {
       );
 
       const terminatedPromise = new Promise((resolve) => {
-        pool.once("process-terminated", (data) => {
+        pool.once(PoolEvent.PROCESS_TERMINATED, (data) => {
           resolve(data);
         });
       });
@@ -451,7 +435,7 @@ describe("ClaudeProcessPool Integration", () => {
 
         // Set up listener BEFORE creating process to ensure we catch the event
         const healthCheckPromise = new Promise((resolve) => {
-          pool.once("health-check", (status) => {
+          pool.once(PoolEvent.HEALTH_CHECK, (status) => {
             resolve(status);
           });
         });

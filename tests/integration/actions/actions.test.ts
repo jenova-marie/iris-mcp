@@ -12,10 +12,12 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { existsSync, unlinkSync } from "fs";
+import { firstValueFrom, filter, take, timeout } from "rxjs";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
 import { IrisOrchestrator } from "../../../src/iris.js";
+import { ProcessStatus } from "../../../src/process-pool/types.js";
 
 // Import all actions
 import { isAwake } from "../../../src/actions/isAwake.js";
@@ -143,26 +145,21 @@ describe("Actions Integration Tests", () => {
 
   describe("3. Verify team-alpha is awake", () => {
     it("should confirm team-alpha is now awake", async () => {
-      // Poll until process is truly idle (not just spawned)
+      // Use RxJS observable to wait for IDLE status
       // The wake operation sends an initial ping, so we need to wait for it to complete
-      const maxWaitTime = 30000; // 30 seconds max
-      const pollInterval = 500; // Check every 500ms
-      const startTime = Date.now();
+      const process = processPool.getProcess("team-alpha");
+      expect(process).toBeDefined();
 
-      let isIdle = false;
-      while (Date.now() - startTime < maxWaitTime) {
-        const process = processPool.getProcess("team-alpha");
-        if (process) {
-          const metrics = process.getBasicMetrics();
-          if (metrics.status === "idle") {
-            isIdle = true;
-            break;
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      if (process) {
+        // Subscribe to status$ observable and wait for IDLE status
+        await firstValueFrom(
+          process.status$.pipe(
+            filter((status) => status === ProcessStatus.IDLE),
+            take(1),
+            timeout(30000), // 30 second timeout
+          ),
+        );
       }
-
-      expect(isIdle).toBe(true); // Process should be idle by now
 
       const result = await isAwake(
         { fromTeam: "team-iris", team: "team-alpha" },
@@ -245,25 +242,20 @@ describe("Actions Integration Tests", () => {
 
   describe("8. Send async message", () => {
     it("should send async message to team-beta", async () => {
-      // Wait for team-beta to be idle (it was just woken up in test 6)
-      const maxWaitTime = 30000; // 30 seconds max
-      const pollInterval = 500; // Check every 500ms
-      const startTime = Date.now();
+      // Use RxJS observable to wait for team-beta to be idle (it was just woken up in test 6)
+      const process = processPool.getProcess("team-beta");
+      expect(process).toBeDefined();
 
-      let isIdle = false;
-      while (Date.now() - startTime < maxWaitTime) {
-        const process = processPool.getProcess("team-beta");
-        if (process) {
-          const metrics = process.getBasicMetrics();
-          if (metrics.status === "idle") {
-            isIdle = true;
-            break;
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+      if (process) {
+        // Subscribe to status$ observable and wait for IDLE status
+        await firstValueFrom(
+          process.status$.pipe(
+            filter((status) => status === ProcessStatus.IDLE),
+            take(1),
+            timeout(30000), // 30 second timeout
+          ),
+        );
       }
-
-      expect(isIdle).toBe(true); // Process should be idle before we send async message
 
       const result = await tell(
         {
@@ -356,48 +348,30 @@ describe("Actions Integration Tests", () => {
 
   describe("13. Verify team-alpha is asleep", () => {
     it("should confirm team-alpha is now asleep", async () => {
-      // Poll until process is truly terminated (event handlers may take time)
-      const maxWaitTime = 30000; // 30 seconds max (increased for process cleanup)
-      const pollInterval = 1000; // Check every second
-      const startTime = Date.now();
+      // Use RxJS observable to wait for STOPPED status
+      // According to OBSERVABILITY.md, ProcessPool cleans up when status becomes STOPPED
+      const process = processPool.getProcess("team-alpha");
 
-      let isAsleep = false;
-      let attempts = 0;
-      while (Date.now() - startTime < maxWaitTime) {
-        const process = processPool.getProcess("team-alpha");
-        attempts++;
-
-        if (!process) {
-          console.log(
-            `✓ Process disappeared after ${attempts} attempts (${Date.now() - startTime}ms)`,
+      if (process) {
+        // Subscribe to status$ observable and wait for STOPPED status
+        try {
+          await firstValueFrom(
+            process.status$.pipe(
+              filter((status) => status === ProcessStatus.STOPPED),
+              take(1),
+              timeout(30000), // 30 second timeout
+            ),
           );
-          isAsleep = true;
-          break;
-        }
-
-        // Log process state every 5 attempts
-        if (attempts % 5 === 0) {
-          const metrics = process.getBasicMetrics();
-          console.log(
-            `Still waiting for process to disappear - attempt ${attempts}, status: ${metrics.status}`,
-          );
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, pollInterval));
-      }
-
-      if (!isAsleep) {
-        const process = processPool.getProcess("team-alpha");
-        if (process) {
-          const metrics = process.getBasicMetrics();
-          console.log(`Process still exists after ${maxWaitTime}ms:`, {
-            status: metrics.status,
-            sessionId: metrics.sessionId,
-          });
+          console.log("✓ Process reached STOPPED status");
+        } catch (error) {
+          // If process is already gone (pool cleaned up), that's also acceptable
+          console.log("Process cleanup completed (may have been removed from pool)");
         }
       }
 
-      expect(isAsleep).toBe(true); // Process should be gone by now
+      // Verify process is actually gone from pool
+      const processAfter = processPool.getProcess("team-alpha");
+      expect(processAfter).toBeNull(); // Process should be removed from pool
 
       const result = await isAwake(
         { fromTeam: "team-iris", team: "team-alpha" },

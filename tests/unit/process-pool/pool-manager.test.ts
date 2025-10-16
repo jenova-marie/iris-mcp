@@ -24,9 +24,10 @@ import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
 import { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
 import type { TeamsConfig } from "../../../src/process-pool/types.js";
 
-// Mock ClaudeProcess with proper EventEmitter interface
+// Mock ClaudeProcess with proper EventEmitter interface and RxJS observables
 vi.mock("../../../src/process-pool/claude-process.js", () => {
   const { EventEmitter } = require("events");
+  const { BehaviorSubject, Subject } = require("rxjs");
 
   class MockClaudeProcess extends EventEmitter {
     teamName: string;
@@ -35,16 +36,31 @@ vi.mock("../../../src/process-pool/claude-process.js", () => {
     terminate = vi.fn();
     getBasicMetrics = vi.fn();
 
+    // RxJS observables (required by pool-manager)
+    status$: any;
+    errors$: any;
+    private statusSubject: any;
+    private errorsSubject: any;
+
     constructor(teamName: string, config: any, sessionId: string) {
       super();
       this.teamName = teamName;
       this.sessionId = sessionId;
 
-      // Setup spawn to resolve immediately
-      this.spawn.mockResolvedValue(undefined);
+      // Setup RxJS observables
+      this.statusSubject = new BehaviorSubject("stopped");
+      this.errorsSubject = new Subject();
+      this.status$ = this.statusSubject.asObservable();
+      this.errors$ = this.errorsSubject.asObservable();
 
-      // Setup terminate to emit "terminated" event and resolve
+      // Setup spawn to resolve immediately and update status
+      this.spawn.mockImplementation(async () => {
+        this.statusSubject.next("idle");
+      });
+
+      // Setup terminate to emit "terminated" event, update status, and resolve
       this.terminate.mockImplementation(async () => {
+        this.statusSubject.next("stopped");
         this.emit("terminated", {
           teamName: this.teamName,
           sessionId: this.sessionId,
@@ -69,6 +85,12 @@ vi.mock("../../../src/process-pool/claude-process.js", () => {
 
   return {
     ClaudeProcess: MockClaudeProcess,
+    ProcessStatus: {
+      STOPPED: "stopped",
+      SPAWNING: "spawning",
+      IDLE: "idle",
+      PROCESSING: "processing",
+    },
   };
 });
 

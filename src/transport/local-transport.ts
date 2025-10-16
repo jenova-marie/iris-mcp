@@ -141,6 +141,9 @@ export class LocalTransport implements Transport {
     // Wait for init message
     await this.waitForInit(spawnTimeout);
 
+    // Mark transport as ready
+    this.ready = true;
+
     // Wait for the spawn ping to complete (result message received)
     // The handleStdoutData() will clear currentCacheEntry and emit Status.READY
     await firstValueFrom(
@@ -150,9 +153,6 @@ export class LocalTransport implements Transport {
         timeout(spawnTimeout),
       ),
     );
-
-    // Mark transport as ready
-    this.ready = true;
 
     this.logger.info("Local transport ready", { teamName: this.teamName });
   }

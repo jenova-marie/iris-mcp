@@ -3,12 +3,12 @@
  * Session-based process monitoring (fromTeam->toTeam)
  */
 
-import { Router } from 'express';
-import { execSync } from 'child_process';
-import type { DashboardStateBridge } from '../state-bridge.js';
-import { getChildLogger } from '../../../utils/logger.js';
+import { Router } from "express";
+import { execSync } from "child_process";
+import type { DashboardStateBridge } from "../state-bridge.js";
+import { getChildLogger } from "../../../utils/logger.js";
 
-const logger = getChildLogger('dashboard:routes:processes');
+const logger = getChildLogger("dashboard:routes:processes");
 const router = Router();
 
 export function createProcessesRouter(bridge: DashboardStateBridge): Router {
@@ -16,7 +16,7 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
    * GET /api/processes
    * Returns all active sessions (fromTeam->toTeam pairs)
    */
-  router.get('/', (req, res) => {
+  router.get("/", (req, res) => {
     try {
       const sessions = bridge.getActiveSessions();
       const poolStatus = bridge.getPoolStatus();
@@ -27,12 +27,15 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         poolStatus,
       });
     } catch (error: any) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to get sessions');
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to get sessions",
+      );
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to retrieve sessions',
+        error: error.message || "Failed to retrieve sessions",
       });
     }
   });
@@ -41,7 +44,7 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
    * GET /api/processes/:fromTeam/:toTeam
    * Returns detailed metrics for a specific session
    */
-  router.get('/:fromTeam/:toTeam', (req, res) => {
+  router.get("/:fromTeam/:toTeam", (req, res) => {
     try {
       const { fromTeam, toTeam } = req.params;
       const metrics = bridge.getSessionMetrics(fromTeam, toTeam);
@@ -58,12 +61,15 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         metrics,
       });
     } catch (error: any) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to get session metrics');
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to get session metrics",
+      );
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to retrieve session metrics',
+        error: error.message || "Failed to retrieve session metrics",
       });
     }
   });
@@ -72,19 +78,22 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
    * GET /api/processes/report/:fromTeam/:toTeam
    * Returns cache report for a team pair
    */
-  router.get('/report/:fromTeam/:toTeam', async (req, res) => {
+  router.get("/report/:fromTeam/:toTeam", async (req, res) => {
     try {
       const { fromTeam, toTeam } = req.params;
       const report = await bridge.getSessionReport(fromTeam, toTeam);
 
       res.json(report);
     } catch (error: any) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to get session report');
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to get session report",
+      );
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to retrieve session report',
+        error: error.message || "Failed to retrieve session report",
       });
     }
   });
@@ -93,12 +102,12 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
    * POST /api/processes/sleep/:fromTeam/:toTeam
    * Put a team session to sleep (terminate the process)
    */
-  router.post('/sleep/:fromTeam/:toTeam', async (req, res) => {
+  router.post("/sleep/:fromTeam/:toTeam", async (req, res) => {
     try {
       const { fromTeam, toTeam } = req.params;
       const { force = false } = req.body;
 
-      logger.info({ fromTeam, toTeam, force }, 'Putting session to sleep');
+      logger.info({ fromTeam, toTeam, force }, "Putting session to sleep");
 
       const result = await bridge.sleepSession(fromTeam, toTeam, force);
 
@@ -107,39 +116,45 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         ...result,
       });
     } catch (error: any) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to put session to sleep');
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to put session to sleep",
+      );
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to put session to sleep',
+        error: error.message || "Failed to put session to sleep",
       });
     }
   });
 
   /**
-   * POST /api/processes/clear/:fromTeam/:toTeam
-   * Clear a session (terminate process, delete old session, create new one)
+   * POST /api/processes/reboot/:fromTeam/:toTeam
+   * Reboot a session (terminate process, delete old session, create new one)
    */
-  router.post('/clear/:fromTeam/:toTeam', async (req, res) => {
+  router.post("/reboot/:fromTeam/:toTeam", async (req, res) => {
     try {
       const { fromTeam, toTeam } = req.params;
 
-      logger.info({ fromTeam, toTeam }, 'Clearing session');
+      logger.info({ fromTeam, toTeam }, "Rebooting session");
 
-      const result = await bridge.clearSession(fromTeam, toTeam);
+      const result = await bridge.rebootSession(fromTeam, toTeam);
 
       res.json({
         success: true,
         ...result,
       });
     } catch (error: any) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to clear session');
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to clear session",
+      );
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to clear session',
+        error: error.message || "Failed to clear session",
       });
     }
   });
@@ -148,11 +163,11 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
    * POST /api/processes/delete/:fromTeam/:toTeam
    * Delete a session permanently (terminate and remove)
    */
-  router.post('/delete/:fromTeam/:toTeam', async (req, res) => {
+  router.post("/delete/:fromTeam/:toTeam", async (req, res) => {
     try {
       const { fromTeam, toTeam } = req.params;
 
-      logger.info({ fromTeam, toTeam }, 'Deleting session');
+      logger.info({ fromTeam, toTeam }, "Deleting session");
 
       const result = await bridge.deleteSession(fromTeam, toTeam);
 
@@ -161,12 +176,15 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         ...result,
       });
     } catch (error: any) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to delete session');
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to delete session",
+      );
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to delete session',
+        error: error.message || "Failed to delete session",
       });
     }
   });
@@ -183,14 +201,14 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
    * - sshHost: SSH host for remote teams (optional)
    * - sshOptions: SSH options for remote teams (optional)
    */
-  router.post('/terminal/launch', (req, res) => {
+  router.post("/terminal/launch", (req, res) => {
     try {
       const { sessionId, toTeam } = req.body;
 
       if (!sessionId || !toTeam) {
         return res.status(400).json({
           success: false,
-          error: 'Missing required fields: sessionId and toTeam',
+          error: "Missing required fields: sessionId and toTeam",
         });
       }
 
@@ -200,7 +218,8 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
       if (!forkScriptPath) {
         return res.status(404).json({
           success: false,
-          error: 'Fork script not found. Create fork.sh (or fork.bat/ps1 on Windows) in your IRIS_HOME directory.',
+          error:
+            "Fork script not found. Create fork.sh (or fork.bat/ps1 on Windows) in your IRIS_HOME directory.",
         });
       }
 
@@ -224,8 +243,15 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
       if (remoteInfo) {
         // Remote team: pass sessionId, teamPath, claudePath, sshHost, sshOptions
         logger.info(
-          { sessionId, toTeam, teamPath, claudePath, forkScriptPath, remoteInfo },
-          'Launching remote fork for session'
+          {
+            sessionId,
+            toTeam,
+            teamPath,
+            claudePath,
+            forkScriptPath,
+            remoteInfo,
+          },
+          "Launching remote fork for session",
         );
 
         // Build command with claudePath, SSH host and options
@@ -237,7 +263,7 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         // Local team: pass sessionId, teamPath, claudePath
         logger.info(
           { sessionId, toTeam, teamPath, claudePath, forkScriptPath },
-          'Launching local fork for session'
+          "Launching local fork for session",
         );
 
         command = `"${forkScriptPath}" "${sessionId}" "${teamPath}" "${claudePath}"`;
@@ -247,37 +273,49 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
         // Execute the fork script with appropriate arguments
         execSync(command, {
           timeout: 5000,
-          stdio: 'ignore' // Ignore output since terminal will be launched async
+          stdio: "ignore", // Ignore output since terminal will be launched async
         });
 
-        logger.info({ sessionId, toTeam, remote: !!remoteInfo }, 'Terminal fork launched successfully');
+        logger.info(
+          { sessionId, toTeam, remote: !!remoteInfo },
+          "Terminal fork launched successfully",
+        );
 
         return res.json({
           success: true,
-          message: 'Terminal fork launched successfully',
+          message: "Terminal fork launched successfully",
         });
       } catch (execError: any) {
-        logger.error({
-          err: execError instanceof Error ? execError : new Error(String(execError)),
-          sessionId,
-          toTeam,
-          forkScriptPath,
-          command
-        }, 'Failed to execute fork script');
+        logger.error(
+          {
+            err:
+              execError instanceof Error
+                ? execError
+                : new Error(String(execError)),
+            sessionId,
+            toTeam,
+            forkScriptPath,
+            command,
+          },
+          "Failed to execute fork script",
+        );
 
         return res.status(500).json({
           success: false,
-          error: 'Failed to launch terminal fork. Check fork script execution.',
+          error: "Failed to launch terminal fork. Check fork script execution.",
         });
       }
     } catch (error: any) {
-      logger.error({
-        err: error instanceof Error ? error : new Error(String(error))
-      }, 'Failed to launch terminal');
+      logger.error(
+        {
+          err: error instanceof Error ? error : new Error(String(error)),
+        },
+        "Failed to launch terminal",
+      );
 
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to launch terminal',
+        error: error.message || "Failed to launch terminal",
       });
     }
   });

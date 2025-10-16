@@ -3,14 +3,14 @@
  * Session-based API (fromTeam->toTeam)
  */
 
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || "/api";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
@@ -22,26 +22,26 @@ apiClient.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
+  },
 );
 
 // Response interceptor for error handling
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('[API Error]', error.response?.data || error.message);
+    console.error("[API Error]", error.response?.data || error.message);
     return Promise.reject(error);
-  }
+  },
 );
 
 // API endpoints
 export const api = {
   // Config
-  getConfig: () => apiClient.get('/config'),
-  saveConfig: (config: any) => apiClient.put('/config', config),
+  getConfig: () => apiClient.get("/config"),
+  saveConfig: (config: any) => apiClient.put("/config", config),
 
   // Sessions (fromTeam->toTeam pairs)
-  getSessions: () => apiClient.get('/processes'),
+  getSessions: () => apiClient.get("/processes"),
   getSessionMetrics: (fromTeam: string, toTeam: string) =>
     apiClient.get(`/processes/${fromTeam}/${toTeam}`),
   getSessionCache: (fromTeam: string, toTeam: string) =>
@@ -50,15 +50,15 @@ export const api = {
   // Session actions
   sleepSession: (fromTeam: string, toTeam: string, force?: boolean) =>
     apiClient.post(`/processes/sleep/${fromTeam}/${toTeam}`, { force }),
-  clearSession: (fromTeam: string, toTeam: string) =>
-    apiClient.post(`/processes/clear/${fromTeam}/${toTeam}`),
+  rebootSession: (fromTeam: string, toTeam: string) =>
+    apiClient.post(`/processes/reboot/${fromTeam}/${toTeam}`),
   deleteSession: (fromTeam: string, toTeam: string) =>
     apiClient.post(`/processes/delete/${fromTeam}/${toTeam}`),
 
   // Terminal
   launchTerminal: (sessionId: string, toTeam: string) =>
-    apiClient.post('/processes/terminal/launch', { sessionId, toTeam }),
+    apiClient.post("/processes/terminal/launch", { sessionId, toTeam }),
 
   // Health
-  getHealth: () => apiClient.get('/health'),
+  getHealth: () => apiClient.get("/health"),
 };

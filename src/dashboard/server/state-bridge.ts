@@ -87,13 +87,16 @@ export class DashboardStateBridge extends EventEmitter {
       });
     });
 
-    this.pool.on(PoolEvent.PROCESS_ERROR, (data: { teamName: string; error: Error }) => {
-      logger.debug(data, "Forwarding process-error event");
-      this.emit("ws:process-error", {
-        teamName: data.teamName,
-        error: data.error.message,
-      });
-    });
+    this.pool.on(
+      PoolEvent.PROCESS_ERROR,
+      (data: { teamName: string; error: Error }) => {
+        logger.debug(data, "Forwarding process-error event");
+        this.emit("ws:process-error", {
+          teamName: data.teamName,
+          error: data.error.message,
+        });
+      },
+    );
 
     logger.info("Event forwarding initialized");
   }
@@ -230,7 +233,10 @@ export class DashboardStateBridge extends EventEmitter {
     const messageCache = this.iris.getMessageCacheForTeams(fromTeam, toTeam);
 
     if (!messageCache) {
-      logger.info({ fromTeam, toTeam }, "No message cache found (no session yet)");
+      logger.info(
+        { fromTeam, toTeam },
+        "No message cache found (no session yet)",
+      );
 
       return {
         team: toTeam,
@@ -367,7 +373,9 @@ export class DashboardStateBridge extends EventEmitter {
    * Get remote connection info for a team (if configured)
    * Parses the remote string to extract SSH host and options
    */
-  getTeamRemoteInfo(teamName: string): { sshHost: string; sshOptions: string } | null {
+  getTeamRemoteInfo(
+    teamName: string,
+  ): { sshHost: string; sshOptions: string } | null {
     const teamConfig = this.configManager.getIrisConfig(teamName);
 
     if (!teamConfig || !teamConfig.remote) {
@@ -378,7 +386,7 @@ export class DashboardStateBridge extends EventEmitter {
     const remoteParts = teamConfig.remote.split(/\s+/);
 
     // Skip "ssh" command
-    if (remoteParts[0] === 'ssh') {
+    if (remoteParts[0] === "ssh") {
       remoteParts.shift();
     }
 
@@ -390,7 +398,7 @@ export class DashboardStateBridge extends EventEmitter {
     const sshHost = remoteParts[remoteParts.length - 1];
 
     // Everything else is options
-    const sshOptions = remoteParts.slice(0, -1).join(' ');
+    const sshOptions = remoteParts.slice(0, -1).join(" ");
 
     return { sshHost, sshOptions };
   }
@@ -408,17 +416,26 @@ export class DashboardStateBridge extends EventEmitter {
   /**
    * Put a session to sleep (terminate the process)
    */
-  async sleepSession(fromTeam: string, toTeam: string, force: boolean = false): Promise<any> {
+  async sleepSession(
+    fromTeam: string,
+    toTeam: string,
+    force: boolean = false,
+  ): Promise<any> {
     const { sleep } = await import("../../actions/sleep.js");
     return await sleep({ team: toTeam, fromTeam, force }, this.pool);
   }
 
   /**
-   * Clear a session (terminate, delete, create new)
+   * Reboot a session (terminate, delete, create new)
    */
-  async clearSession(fromTeam: string, toTeam: string): Promise<any> {
-    const { clear } = await import("../../actions/clear.js");
-    return await clear({ fromTeam, toTeam }, this.iris, this.sessionManager, this.pool);
+  async rebootSession(fromTeam: string, toTeam: string): Promise<any> {
+    const { reboot } = await import("../../actions/reboot.js");
+    return await reboot(
+      { fromTeam, toTeam },
+      this.iris,
+      this.sessionManager,
+      this.pool,
+    );
   }
 
   /**
@@ -426,6 +443,11 @@ export class DashboardStateBridge extends EventEmitter {
    */
   async deleteSession(fromTeam: string, toTeam: string): Promise<any> {
     const { deleteSession } = await import("../../actions/delete.js");
-    return await deleteSession({ fromTeam, toTeam }, this.iris, this.sessionManager, this.pool);
+    return await deleteSession(
+      { fromTeam, toTeam },
+      this.iris,
+      this.sessionManager,
+      this.pool,
+    );
   }
 }

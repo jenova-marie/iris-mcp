@@ -24,6 +24,8 @@ import { tell } from "./actions/tell.js";
 import { quickTell } from "./actions/quick_tell.js";
 import { cancel } from "./actions/cancel.js";
 import { clear } from "./actions/clear.js";
+import { deleteSession } from "./actions/delete.js";
+import { compact } from "./actions/compact.js";
 import { isAwake } from "./actions/isAwake.js";
 import { wake } from "./actions/wake.js";
 import { sleep } from "./actions/sleep.js";
@@ -139,6 +141,57 @@ const TOOLS: Tool[] = [
         fromTeam: {
           type: "string",
           description: "Name of the team requesting the clear/reset",
+        },
+      },
+      required: ["toTeam", "fromTeam"],
+    },
+  },
+  {
+    name: "team_delete",
+    description:
+      "Delete a team session permanently. Terminates the process and removes the session data completely. " +
+      "Unlike clear which creates a new session, delete just removes the session without replacement. " +
+      "Use this when you want to completely remove a session and don't need a fresh one.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toTeam: {
+          type: "string",
+          description: "Name of the team to delete session for",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team requesting the delete",
+        },
+      },
+      required: ["toTeam", "fromTeam"],
+    },
+  },
+  {
+    name: "team_compact",
+    description:
+      "Compact a team's session to reduce context size. Uses claude --print /compact to compress " +
+      "the session history while preserving important context. This is useful when a session has grown " +
+      "large and needs optimization without completely clearing the history. The session remains active " +
+      "after compacting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toTeam: {
+          type: "string",
+          description: "Name of the team whose session to compact",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team requesting the compact",
+        },
+        timeout: {
+          type: "number",
+          description: "Optional timeout in milliseconds (default: 30000)",
+        },
+        retries: {
+          type: "number",
+          description: "Optional number of retry attempts (default: 2)",
         },
       },
       required: ["toTeam", "fromTeam"],
@@ -442,6 +495,46 @@ export class IrisMcpServer {
             };
             break;
 
+          case "team_delete":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await deleteSession(
+                      args as any,
+                      this.iris,
+                      this.sessionManager,
+                      this.processPool,
+                    ),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+            break;
+
+          case "team_compact":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await compact(
+                      args as any,
+                      this.iris,
+                      this.sessionManager,
+                      this.configManager,
+                    ),
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+            break;
+
           case "team_isAwake":
             result = {
               content: [
@@ -730,6 +823,14 @@ export class IrisMcpServer {
     // Graceful shutdown
     process.on("SIGINT", () => this.shutdown());
     process.on("SIGTERM", () => this.shutdown());
+  }
+
+  /**
+   * Get the IrisOrchestrator instance
+   * This allows sharing the same orchestrator (with its CacheManager) with other components like the web dashboard
+   */
+  getIris(): IrisOrchestrator {
+    return this.iris;
   }
 
   private async shutdown(): Promise<void> {

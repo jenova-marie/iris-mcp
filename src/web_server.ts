@@ -7,6 +7,7 @@
 import type { ClaudeProcessPool } from "./process-pool/pool-manager.js";
 import type { SessionManager } from "./session/session-manager.js";
 import type { TeamsConfigManager } from "./config/iris-config.js";
+import type { IrisOrchestrator } from "./iris.js";
 import type { DashboardConfig } from "./process-pool/types.js";
 import { DashboardStateBridge } from "./dashboard/server/state-bridge.js";
 import { startDashboardServer } from "./dashboard/server/index.js";
@@ -21,12 +22,15 @@ export class IrisWebServer {
     private processPool: ClaudeProcessPool,
     private sessionManager: SessionManager,
     private configManager: TeamsConfigManager,
+    iris?: IrisOrchestrator,
   ) {
     // Create the bridge between MCP components and dashboard
+    // Pass iris instance to share the same CacheManager
     this.bridge = new DashboardStateBridge(
       this.processPool,
       this.sessionManager,
       this.configManager,
+      iris,
     );
 
     logger.info("Iris Web Server initialized");

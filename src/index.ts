@@ -133,6 +133,7 @@ program
             processPool,
             sessionManager,
             configManager,
+            mcpServer.getIris(), // Share the same IrisOrchestrator instance
           );
           await webServer.start(config.dashboard);
         } catch (error) {
@@ -303,6 +304,7 @@ if (process.argv.length === 2) {
             processPool,
             sessionManager,
             configManager,
+            mcpServer.getIris(), // Share the same IrisOrchestrator instance
           );
           await webServer.start(config.dashboard);
         } catch (error) {

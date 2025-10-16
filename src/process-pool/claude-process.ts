@@ -104,26 +104,6 @@ export class ClaudeProcess extends EventEmitter {
     // Subscribe to transport observables (replaces event forwarding)
     this.setupTransportSubscriptions();
 
-    // Forward transport events to ClaudeProcess events (backward compatibility during migration)
-    // TODO: Remove this once all consumers use observables
-    const transportEmitter = this.transport as unknown as EventEmitter;
-
-    transportEmitter.on("process-spawned", (data) => {
-      this.emit("process-spawned", data);
-    });
-
-    transportEmitter.on("process-exited", (data) => {
-      this.emit("process-exited", data);
-    });
-
-    transportEmitter.on("process-error", (data) => {
-      this.emit("process-error", data);
-    });
-
-    transportEmitter.on("process-terminated", (data) => {
-      this.emit("process-terminated", data);
-    });
-
     this.logger.debug("ClaudeProcess created with transport", {
       teamName,
       transportType: this.transport.constructor.name,
@@ -438,12 +418,15 @@ export class ClaudeProcess extends EventEmitter {
       transportType: this.transport.constructor.name,
     });
 
-    // Unsubscribe from transport observables
+    // Delegate to transport (status updates happen via transport.status$ subscription)
+    await this.transport.terminate();
+
+    // Unsubscribe from transport observables (AFTER terminate completes)
     this.subscriptions.forEach(sub => sub.unsubscribe());
     this.subscriptions = [];
 
-    // Delegate to transport (status updates happen via transport.status$ subscription)
-    await this.transport.terminate();
+    // Emit STOPPED status to trigger pool cleanup
+    this.statusSubject.next(ProcessStatus.STOPPED);
 
     // Complete observables (no more emissions after termination)
     this.statusSubject.complete();

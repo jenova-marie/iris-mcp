@@ -14,6 +14,7 @@ export default defineConfig({
     env: {
       NODE_ENV: "test",
       IRIS_HOME: resolve(__dirname, "tests"),
+      IRIS_TEST_REMOTE: 1,
     },
     testTimeout: 30000, // 20 seconds default (enough for single Claude spawn + response)
     hookTimeout: 15000, // 15 seconds for beforeEach/afterEach (session manager init)

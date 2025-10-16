@@ -27,7 +27,7 @@ The Configuration subsystem provides **validated, hot-reloadable settings** usin
 - **Zod Validation:** Type-safe runtime validation with clear error messages
 - **Hot-Reload:** Automatic reload on file changes (1s poll interval)
 - **Path Resolution:** Relative paths resolved relative to config file
-- **Default Config:** Built-in `config.default.json` template
+- **Default Config:** Built-in `default.config.json` template
 
 ---
 
@@ -114,7 +114,7 @@ The Configuration subsystem provides **validated, hot-reloadable settings** usin
 iris install
 
 # Or manually copy
-cp src/config.default.json ~/.iris/config.json
+cp src/default.config.json ~/.iris/config.json
 ```
 
 ---
@@ -429,7 +429,7 @@ iris install
 
 **Actions:**
 1. Create `~/.iris/` directory
-2. Copy `src/config.default.json` to `~/.iris/config.json`
+2. Copy `src/default.config.json` to `~/.iris/config.json`
 3. Register Iris with Claude CLI config (`~/.claude/config.json`)
 
 ### Add Team Command

@@ -1,53 +1,66 @@
+Reference
+CLI reference
 
-iris-mcp on  main [⇡✘!?] via ⬢ v22.16.0 took 5m 25.5s
-➜ claude --help
-Usage: claude [options] [command] [prompt]
+Copy page
 
-Claude Code - starts an interactive session by default, use -p/--print for non-interactive output
+Complete reference for Claude Code command-line interface, including commands and flags.
 
-Arguments:
-  prompt                                            Your prompt
+​
+CLI commands
+Command	Description	Example
+claude	Start interactive REPL	claude
+claude "query"	Start REPL with initial prompt	claude "explain this project"
+claude -p "query"	Query via SDK, then exit	claude -p "explain this function"
+cat file | claude -p "query"	Process piped content	cat logs.txt | claude -p "explain"
+claude -c	Continue most recent conversation	claude -c
+claude -c -p "query"	Continue via SDK	claude -c -p "Check for type errors"
+claude -r "<session-id>" "query"	Resume session by ID	claude -r "abc123" "Finish this PR"
+claude update	Update to latest version	claude update
+claude mcp	Configure Model Context Protocol (MCP) servers	See the Claude Code MCP documentation.
+​
+CLI flags
+Customize Claude Code’s behavior with these command-line flags:
+Flag	Description	Example
+--add-dir	Add additional working directories for Claude to access (validates each path exists as a directory)	claude --add-dir ../apps ../lib
+--agents	Define custom subagents dynamically via JSON (see below for format)	claude --agents '{"reviewer":{"description":"Reviews code","prompt":"You are a code reviewer"}}'
+--allowedTools	A list of tools that should be allowed without prompting the user for permission, in addition to settings.json files	"Bash(git log:*)" "Bash(git diff:*)" "Read"
+--disallowedTools	A list of tools that should be disallowed without prompting the user for permission, in addition to settings.json files	"Bash(git log:*)" "Bash(git diff:*)" "Edit"
+--print, -p	Print response without interactive mode (see SDK documentation for programmatic usage details)	claude -p "query"
+--append-system-prompt	Append to system prompt (only with --print)	claude --append-system-prompt "Custom instruction"
+--output-format	Specify output format for print mode (options: text, json, stream-json)	claude -p "query" --output-format json
+--input-format	Specify input format for print mode (options: text, stream-json)	claude -p --output-format json --input-format stream-json
+--include-partial-messages	Include partial streaming events in output (requires --print and --output-format=stream-json)	claude -p --output-format stream-json --include-partial-messages "query"
+--verbose	Enable verbose logging, shows full turn-by-turn output (helpful for debugging in both print and interactive modes)	claude --verbose
+--max-turns	Limit the number of agentic turns in non-interactive mode	claude -p --max-turns 3 "query"
+--model	Sets the model for the current session with an alias for the latest model (sonnet or opus) or a model’s full name	claude --model claude-sonnet-4-5-20250929
+--permission-mode	Begin in a specified permission mode	claude --permission-mode plan
+--permission-prompt-tool	Specify an MCP tool to handle permission prompts in non-interactive mode	claude -p --permission-prompt-tool mcp_auth_tool "query"
+--resume	Resume a specific session by ID, or by choosing in interactive mode	claude --resume abc123 "query"
+--continue	Load the most recent conversation in the current directory	claude --continue
+--dangerously-skip-permissions	Skip permission prompts (use with caution)	claude --dangerously-skip-permissions
+The --output-format json flag is particularly useful for scripting and automation, allowing you to parse Claude’s responses programmatically.
+​
+Agents flag format
+The --agents flag accepts a JSON object that defines one or more custom subagents. Each subagent requires a unique name (as the key) and a definition object with the following fields:
+Field	Required	Description
+description	Yes	Natural language description of when the subagent should be invoked
+prompt	Yes	The system prompt that guides the subagent’s behavior
+tools	No	Array of specific tools the subagent can use (e.g., ["Read", "Edit", "Bash"]). If omitted, inherits all tools
+model	No	Model alias to use: sonnet, opus, or haiku. If omitted, uses the default subagent model
+Example:
 
-Options:
-  -d, --debug [filter]                              Enable debug mode with optional category filtering (e.g., "api,hooks" or "!statsig,!file")
-  --verbose                                         Override verbose mode setting from config
-  -p, --print                                       Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag
-                                                    in directories you trust.
-  --output-format <format>                          Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming) (choices: "text",
-                                                    "json", "stream-json")
-  --include-partial-messages                        Include partial message chunks as they arrive (only works with --print and --output-format=stream-json)
-  --input-format <format>                           Input format (only works with --print): "text" (default), or "stream-json" (realtime streaming input) (choices: "text", "stream-json")
-  --mcp-debug                                       [DEPRECATED. Use --debug instead] Enable MCP debug mode (shows MCP server errors)
-  --dangerously-skip-permissions                    Bypass all permission checks. Recommended only for sandboxes with no internet access.
-  --replay-user-messages                            Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)
-  --allowedTools, --allowed-tools <tools...>        Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")
-  --disallowedTools, --disallowed-tools <tools...>  Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")
-  --mcp-config <configs...>                         Load MCP servers from JSON files or strings (space-separated)
-  --append-system-prompt <prompt>                   Append a system prompt to the default system prompt
-  --permission-mode <mode>                          Permission mode to use for the session (choices: "acceptEdits", "bypassPermissions", "default", "plan")
-  -c, --continue                                    Continue the most recent conversation
-  -r, --resume [sessionId]                          Resume a conversation - provide a session ID or interactively select a conversation to resume
-  --fork-session                                    When resuming, create a new session ID instead of reusing the original (use with --resume or --continue)
-  --model <model>                                   Model for the current session. Provide an alias for the latest model (e.g. 'sonnet' or 'opus') or a model's full name (e.g.
-                                                    'claude-sonnet-4-5-20250929').
-  --fallback-model <model>                          Enable automatic fallback to specified model when default model is overloaded (only works with --print)
-  --settings <file-or-json>                         Path to a settings JSON file or a JSON string to load additional settings from
-  --add-dir <directories...>                        Additional directories to allow tool access to
-  --ide                                             Automatically connect to IDE on startup if exactly one valid IDE is available
-  --strict-mcp-config                               Only use MCP servers from --mcp-config, ignoring all other MCP configurations
-  --session-id <uuid>                               Use a specific session ID for the conversation (must be a valid UUID)
-  --agents <json>                                   JSON object defining custom agents (e.g. '{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}')
-  --setting-sources <sources>                       Comma-separated list of setting sources to load (user, project, local).
-  -v, --version                                     Output the version number
-  -h, --help                                        Display help for command
-
-Commands:
-  mcp                                               Configure and manage MCP servers
-  migrate-installer                                 Migrate from global npm installation to local installation
-  setup-token                                       Set up a long-lived authentication token (requires Claude subscription)
-  doctor                                            Check the health of your Claude Code auto-updater
-  update                                            Check for updates and install if available
-  install [options] [target]                        Install Claude Code native build. Use [target] to specify version (stable, latest, or specific version)
-
-iris-mcp on  main [⇡✘!?] via ⬢ v22.16.0 took 2.6s
-➜
+Copy
+claude --agents '{
+  "code-reviewer": {
+    "description": "Expert code reviewer. Use proactively after code changes.",
+    "prompt": "You are a senior code reviewer. Focus on code quality, security, and best practices.",
+    "tools": ["Read", "Grep", "Glob", "Bash"],
+    "model": "sonnet"
+  },
+  "debugger": {
+    "description": "Debugging specialist for errors and test failures.",
+    "prompt": "You are an expert debugger. Analyze errors, identify root causes, and provide fixes."
+  }
+}'
+For more details on creating and using subagents, see the subagents documentation.
+For detailed information about print mode (-p) including output formats, streaming, verbose logging, and programmatic usage, see the SDK documentation.

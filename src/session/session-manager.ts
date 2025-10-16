@@ -354,6 +354,9 @@ export class SessionManager {
     // Delete from database
     this.store.delete(sessionId);
 
+    // Invalidate cache for this session
+    this.invalidateCache(session.fromTeam, session.toTeam);
+
     // Optionally delete session file
     if (deleteFile) {
       const irisConfig = this.teamsConfig.teams[session.toTeam];

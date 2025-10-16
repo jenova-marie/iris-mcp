@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
 import { firstValueFrom } from "rxjs";
-import { filter } from "rxjs/operators";
+import { filter, take, timeout } from "rxjs/operators";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
@@ -129,9 +129,6 @@ describe("Dashboard Cache with Tell Messages", () => {
           // Session might already exist, which is fine for our test
         }
       }
-
-      // Wait for process to be ready
-      await new Promise(resolve => setTimeout(resolve, 2000));
     }, 60000);
 
     it("should show session exists but cache is still empty after wake", async () => {
@@ -169,10 +166,6 @@ describe("Dashboard Cache with Tell Messages", () => {
       );
 
       console.log("Wake result:", wakeResult.status);
-
-      // Wait for process to become idle after wake (wake sends a ping message)
-      // Use a simple timeout approach - wait for wake ping to complete
-      await new Promise(resolve => setTimeout(resolve, 3000));
 
       const result = await tell(
         {

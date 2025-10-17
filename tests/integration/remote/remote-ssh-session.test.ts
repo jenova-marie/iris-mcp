@@ -141,10 +141,10 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
       expect(teamConfig?.description).toContain("cloud dev team");
     });
 
-    it("should detect team as remote (not using ssh2)", () => {
+    it("should detect team as remote (using OpenSSH client)", () => {
       const teamConfig = configManager.getIrisConfig(REMOTE_TEAM);
       expect(teamConfig?.remote).toBeDefined();
-      expect(teamConfig?.ssh2).toBeUndefined(); // Default to OpenSSH client
+      expect(teamConfig?.path).toBe("/opt/containers");
     });
 
     it("should verify SSH connection to remote host", async () => {
@@ -589,7 +589,6 @@ if (!REMOTE_TESTS_ENABLED) {
   console.log("  - SSH keys configured (no password prompts - use ssh-agent)");
   console.log("  - Remote host alias: inanna (in ~/.ssh/config)");
   console.log("  - Remote path: /opt/containers");
-  console.log("\nThis test suite validates SSHTransport (default).");
-  console.log("For ssh2 library tests, set ssh2: true in team config.");
+  console.log("\nThis test suite validates SSHTransport (OpenSSH client).");
   console.log("=".repeat(70) + "\n");
 }

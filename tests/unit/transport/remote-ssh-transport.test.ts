@@ -1,10 +1,15 @@
 /**
- * Unit tests for SSH2Transport
+ * Unit tests for SSHTransport (OpenSSH Client)
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SSH2Transport } from "../../../src/transport/ssh2-transport.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { SSHTransport } from "../../../src/transport/ssh-transport.js";
 import type { IrisConfig } from "../../../src/process-pool/types.js";
+import type { CommandInfo } from "../../../src/transport/transport.interface.js";
+import { CacheEntryImpl } from "../../../src/cache/cache-entry.js";
+import { CacheEntryType } from "../../../src/cache/types.js";
+import { TransportStatus } from "../../../src/transport/transport.interface.js";
+import { EventEmitter } from "events";
 
 // Mock logger
 vi.mock("../../../src/utils/logger.js", () => ({
@@ -16,25 +21,34 @@ vi.mock("../../../src/utils/logger.js", () => ({
   })),
 }));
 
-// Mock ssh2 to avoid actual SSH connections
-const mockSSHClient = {
-  on: vi.fn(),
-  connect: vi.fn(),
-  exec: vi.fn(),
-  end: vi.fn(),
-  destroy: vi.fn(),
-  once: vi.fn(),
-};
+// Mock child_process to avoid actual SSH connections
+let mockChildProcess: any;
 
-vi.mock("ssh2", () => ({
-  Client: vi.fn(() => mockSSHClient),
-}));
+vi.mock("child_process", () => {
+  const EventEmitter = require("events");
 
-describe("SSH2Transport", () => {
+  return {
+    spawn: vi.fn(() => {
+      mockChildProcess = new EventEmitter();
+      mockChildProcess.pid = 12345;
+      mockChildProcess.stdout = new EventEmitter();
+      mockChildProcess.stderr = new EventEmitter();
+      mockChildProcess.stdin = {
+        write: vi.fn(),
+        end: vi.fn(),
+        destroyed: false,
+      };
+      mockChildProcess.kill = vi.fn();
+      return mockChildProcess;
+    }),
+  };
+});
+
+describe("SSHTransport", () => {
   const testConfig: IrisConfig = {
     path: "/remote/project",
     description: "Remote test team",
-    remote: "user@remote-host",
+    remote: "ssh remote-host",
     skipPermissions: true,
     remoteOptions: {
       port: 2222,
@@ -42,11 +56,32 @@ describe("SSH2Transport", () => {
     },
   };
 
-  let transport: SSH2Transport;
+  const testCommandInfo: CommandInfo = {
+    executable: "claude",
+    args: [
+      "--resume",
+      "session-123",
+      "--print",
+      "--verbose",
+      "--input-format",
+      "stream-json",
+      "--output-format",
+      "stream-json",
+      "--mcp-config",
+      '{"mcpServers":{"iris":{"type":"http","url":"http://localhost:1615/mcp/session-123"}}}',
+    ],
+    cwd: "/remote/project",
+  };
+
+  let transport: SSHTransport;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    transport = new SSH2Transport("team-test", testConfig, "session-123");
+    transport = new SSHTransport("team-test", testConfig, "session-123");
+  });
+
+  afterEach(() => {
+    mockChildProcess = null;
   });
 
   describe("constructor", () => {
@@ -72,15 +107,26 @@ describe("SSH2Transport", () => {
       expect(typeof transport.errors$.subscribe).toBe("function");
     });
 
-    it("should throw error if remote host not specified", () => {
+    it("should throw error if remote configuration not provided", () => {
       const configWithoutRemote: IrisConfig = {
         path: "/path",
         description: "No remote",
       };
 
       expect(() => {
-        new SSH2Transport("team-no-remote", configWithoutRemote, "s1");
-      }).toThrow(/Remote host not specified/);
+        new SSHTransport("team-no-remote", configWithoutRemote, "s1");
+      }).toThrow(/SSHTransport requires remote configuration/);
+    });
+
+    it("should emit initial STOPPED status", async () => {
+      const newTransport = new SSHTransport("team-test", testConfig, "s1");
+
+      return new Promise<void>((resolve) => {
+        newTransport.status$.subscribe((status) => {
+          expect(status).toBe(TransportStatus.STOPPED);
+          resolve();
+        });
+      });
     });
   });
 
@@ -165,8 +211,8 @@ describe("SSH2Transport", () => {
 
   describe("configuration handling", () => {
     it("should accept different team names", () => {
-      const transport1 = new SSH2Transport("team-a", testConfig, "s1");
-      const transport2 = new SSH2Transport("team-b", testConfig, "s2");
+      const transport1 = new SSHTransport("team-a", testConfig, "s1");
+      const transport2 = new SSHTransport("team-b", testConfig, "s2");
 
       expect(transport1.isReady()).toBe(false);
       expect(transport2.isReady()).toBe(false);
@@ -176,20 +222,18 @@ describe("SSH2Transport", () => {
       const configWithOptions: IrisConfig = {
         path: "/remote/path",
         description: "Test",
-        remote: "user@host",
+        remote: "ssh user@host",
         remoteOptions: {
           port: 2222,
           identity: "/key",
           strictHostKeyChecking: false,
           connectTimeout: 10000,
-          serverAliveInterval: 30000,
-          serverAliveCountMax: 3,
           compression: true,
           forwardAgent: false,
         },
       };
 
-      const transport = new SSH2Transport(
+      const transport = new SSHTransport(
         "team-opts",
         configWithOptions,
         "session",
@@ -198,13 +242,11 @@ describe("SSH2Transport", () => {
     });
 
     it("should handle different session IDs", () => {
-      const t1 = new SSH2Transport("team", testConfig, "session-1");
-      const t2 = new SSH2Transport("team", testConfig, "session-2");
-      const t3 = new SSH2Transport("team", testConfig, null as any);
+      const t1 = new SSHTransport("team", testConfig, "session-1");
+      const t2 = new SSHTransport("team", testConfig, "session-2");
 
       expect(t1.getMetrics().uptime).toBe(0);
       expect(t2.getMetrics().uptime).toBe(0);
-      expect(t3.getMetrics().uptime).toBe(0);
     });
   });
 
@@ -231,36 +273,47 @@ describe("SSH2Transport", () => {
   });
 
   describe("remote host parsing", () => {
-    it("should handle user@host format", () => {
+    it("should handle ssh user@host format", () => {
       const config: IrisConfig = {
         path: "/path",
         description: "Test",
-        remote: "jenova@example.com",
+        remote: "ssh jenova@example.com",
       };
 
-      const transport = new SSH2Transport("team", config, "session");
+      const transport = new SSHTransport("team", config, "session");
       expect(transport).toBeDefined();
     });
 
-    it("should handle host-only format", () => {
+    it("should handle ssh host-only format", () => {
       const config: IrisConfig = {
         path: "/path",
         description: "Test",
-        remote: "example.com",
+        remote: "ssh example.com",
       };
 
-      const transport = new SSH2Transport("team", config, "session");
+      const transport = new SSHTransport("team", config, "session");
       expect(transport).toBeDefined();
     });
 
-    it("should handle IP addresses", () => {
+    it("should handle ssh with IP addresses", () => {
       const config: IrisConfig = {
         path: "/path",
         description: "Test",
-        remote: "user@192.168.1.100",
+        remote: "ssh user@192.168.1.100",
       };
 
-      const transport = new SSH2Transport("team", config, "session");
+      const transport = new SSHTransport("team", config, "session");
+      expect(transport).toBeDefined();
+    });
+
+    it("should handle ssh with ProxyJump", () => {
+      const config: IrisConfig = {
+        path: "/path",
+        description: "Test",
+        remote: "ssh -J bastion user@host",
+      };
+
+      const transport = new SSHTransport("team", config, "session");
       expect(transport).toBeDefined();
     });
   });
@@ -270,10 +323,10 @@ describe("SSH2Transport", () => {
       const config: IrisConfig = {
         path: "/path/with spaces/project",
         description: "Test",
-        remote: "user@host",
+        remote: "ssh user@host",
       };
 
-      const transport = new SSH2Transport("team", config, "session");
+      const transport = new SSHTransport("team", config, "session");
       expect(transport).toBeDefined();
     });
 
@@ -281,11 +334,144 @@ describe("SSH2Transport", () => {
       const config: IrisConfig = {
         path: "/path/with'quotes/project",
         description: "Test",
-        remote: "user@host",
+        remote: "ssh user@host",
       };
 
-      const transport = new SSH2Transport("team", config, "session");
+      const transport = new SSHTransport("team", config, "session");
       expect(transport).toBeDefined();
+    });
+  });
+
+  describe("spawn()", () => {
+    it("should spawn SSH process with correct command", async () => {
+      const { spawn } = await import("child_process");
+      const cacheEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
+
+      // Trigger spawn (will timeout, but we just want to check the spawn call)
+      const spawnPromise = transport.spawn(cacheEntry, testCommandInfo, 100);
+
+      // Simulate init message
+      setTimeout(() => {
+        mockChildProcess.stdout.emit(
+          "data",
+          Buffer.from('{"type":"system","subtype":"init"}\n'),
+        );
+        mockChildProcess.stdout.emit(
+          "data",
+          Buffer.from('{"type":"result"}\n'),
+        );
+      }, 10);
+
+      await spawnPromise;
+
+      // Verify spawn was called with ssh command
+      expect(spawn).toHaveBeenCalledWith(
+        "ssh",
+        expect.arrayContaining([
+          "-T",
+          "-o",
+          "ServerAliveInterval=30",
+          "-p",
+          "2222",
+          "-i",
+          "/path/to/key",
+          "remote-host",
+          expect.stringContaining("cd '/remote/project' && claude"),
+        ]),
+        expect.objectContaining({
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: false,
+        }),
+      );
+    });
+
+    it("should build remote command with CommandInfo", async () => {
+      const { spawn } = await import("child_process");
+      const cacheEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
+
+      transport.spawn(cacheEntry, testCommandInfo, 100).catch(() => {});
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Verify the remote command includes executable and args
+      const spawnCall = (spawn as any).mock.calls[0];
+      const remoteCommand = spawnCall[1][spawnCall[1].length - 1];
+
+      expect(remoteCommand).toContain("cd '/remote/project'");
+      expect(remoteCommand).toContain("claude");
+      expect(remoteCommand).toContain("--resume session-123");
+      expect(remoteCommand).toContain("--print");
+      expect(remoteCommand).toContain("--verbose");
+    });
+
+    it("should add reverse MCP tunnel if configured", async () => {
+      const { spawn } = await import("child_process");
+      const configWithReverseMcp: IrisConfig = {
+        ...testConfig,
+        enableReverseMcp: true,
+        reverseMcpPort: 3000,
+      };
+
+      const transportWithMcp = new SSHTransport(
+        "team-mcp",
+        configWithReverseMcp,
+        "s1",
+      );
+      const cacheEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
+
+      transportWithMcp.spawn(cacheEntry, testCommandInfo, 100).catch(() => {});
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const spawnCall = (spawn as any).mock.calls[0];
+      expect(spawnCall[1]).toContain("-R");
+      expect(spawnCall[1]).toContain("3000:localhost:1615");
+    });
+  });
+
+  describe("executeTell()", () => {
+    it("should write message to stdin after spawn", async () => {
+      const spawnEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
+
+      // Spawn first
+      const spawnPromise = transport.spawn(spawnEntry, testCommandInfo, 1000);
+      setTimeout(() => {
+        mockChildProcess.stdout.emit(
+          "data",
+          Buffer.from('{"type":"system","subtype":"init"}\n{"type":"result"}\n'),
+        );
+      }, 10);
+      await spawnPromise;
+
+      // Execute tell
+      const tellEntry = new CacheEntryImpl(CacheEntryType.TELL, "test message");
+      transport.executeTell(tellEntry);
+
+      expect(mockChildProcess.stdin.write).toHaveBeenCalled();
+      const writeCall = (mockChildProcess.stdin.write as any).mock.calls[1]; // Second call (first is spawn)
+      const written = JSON.parse(writeCall[0].replace("\n", ""));
+      expect(written.message.content[0].text).toBe("test message");
+    });
+  });
+
+  describe("getPid()", () => {
+    it("should return null before spawn", () => {
+      expect(transport.getPid()).toBeNull();
+    });
+
+    it("should return PID after spawn", async () => {
+      const cacheEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
+
+      const spawnPromise = transport.spawn(cacheEntry, testCommandInfo, 1000);
+      setTimeout(() => {
+        mockChildProcess.stdout.emit(
+          "data",
+          Buffer.from('{"type":"system","subtype":"init"}\n{"type":"result"}\n'),
+        );
+      }, 10);
+      await spawnPromise;
+
+      expect(transport.getPid()).toBe(12345);
     });
   });
 });

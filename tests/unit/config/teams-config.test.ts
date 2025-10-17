@@ -231,7 +231,7 @@ describe("TeamsConfigManager", () => {
       expect(config.teams["team-alpha"].path).toBe("/nonexistent/path");
     });
 
-    it("should apply default grantPermission value of 'yes'", async () => {
+    it("should apply default grantPermission value of 'ask'", async () => {
       const { readFileSync, existsSync } = await import("fs");
 
       const validConfig = {
@@ -257,7 +257,7 @@ describe("TeamsConfigManager", () => {
       manager = new TeamsConfigManager("/test/config.yaml");
       const config = manager.load();
 
-      // Default value should be applied by Zod schema
+      // Default value should be applied by Zod schema (changed from 'yes' to 'ask')
       expect(config.teams["team-alpha"].grantPermission).toBe("ask");
     });
 

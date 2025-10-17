@@ -70,6 +70,8 @@ describe("SessionStore", () => {
       expect(session.status).toBe("active");
       expect(session.createdAt).toBeInstanceOf(Date);
       expect(session.lastUsedAt).toBeInstanceOf(Date);
+      expect(session.launchCommand).toBeNull();
+      expect(session.teamConfigSnapshot).toBeNull();
     });
 
     it("should create session with team-beta fromTeam", () => {
@@ -79,6 +81,23 @@ describe("SessionStore", () => {
       expect(session.fromTeam).toBe("team-beta");
       expect(session.toTeam).toBe("backend");
       expect(session.sessionId).toBe(sessionId);
+    });
+
+    it("should create session with launch command and config snapshot", () => {
+      const sessionId = "uuid-with-debug-info";
+      const launchCommand = "claude --resume session-123 --print --verbose";
+      const teamConfigSnapshot = JSON.stringify({ path: "/test", description: "Test" });
+
+      const session = store.create(
+        "frontend",
+        "backend",
+        sessionId,
+        launchCommand,
+        teamConfigSnapshot,
+      );
+
+      expect(session.launchCommand).toBe(launchCommand);
+      expect(session.teamConfigSnapshot).toBe(teamConfigSnapshot);
     });
 
     it("should enforce unique sessionId constraint", () => {
@@ -290,6 +309,54 @@ describe("SessionStore", () => {
 
       session = store.getBySessionId("session-status");
       expect(session?.status).toBe("archived");
+    });
+  });
+
+  describe("updateDebugInfo", () => {
+    it("should update launch command and team config snapshot", () => {
+      const sessionId = "session-debug";
+      store.create("team-alpha", "team-beta", sessionId);
+
+      const launchCommand = "claude --resume session-debug --print --verbose --mcp-config {...}";
+      const teamConfigSnapshot = JSON.stringify({
+        path: "/project/path",
+        description: "Test team",
+        idleTimeout: 300000,
+      });
+
+      store.updateDebugInfo(sessionId, launchCommand, teamConfigSnapshot);
+
+      const session = store.getBySessionId(sessionId);
+      expect(session?.launchCommand).toBe(launchCommand);
+      expect(session?.teamConfigSnapshot).toBe(teamConfigSnapshot);
+    });
+
+    it("should overwrite existing debug info", () => {
+      const sessionId = "session-overwrite";
+      store.create("team-alpha", "team-beta", sessionId, "old command", "old config");
+
+      const newCommand = "new command";
+      const newConfig = "new config";
+
+      store.updateDebugInfo(sessionId, newCommand, newConfig);
+
+      const session = store.getBySessionId(sessionId);
+      expect(session?.launchCommand).toBe(newCommand);
+      expect(session?.teamConfigSnapshot).toBe(newConfig);
+    });
+
+    it("should handle long command strings", () => {
+      const sessionId = "session-long-command";
+      store.create("team-alpha", "team-beta", sessionId);
+
+      const longCommand = "claude " + "--flag ".repeat(100) + "--last-flag";
+      const longConfig = JSON.stringify({ data: "x".repeat(1000) });
+
+      store.updateDebugInfo(sessionId, longCommand, longConfig);
+
+      const session = store.getBySessionId(sessionId);
+      expect(session?.launchCommand).toBe(longCommand);
+      expect(session?.teamConfigSnapshot).toBe(longConfig);
     });
   });
 

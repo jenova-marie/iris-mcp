@@ -6,7 +6,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { TransportFactory } from "../../../src/transport/transport-factory.js";
 import { LocalTransport } from "../../../src/transport/local-transport.js";
 import { SSHTransport } from "../../../src/transport/ssh-transport.js";
-import { SSH2Transport } from "../../../src/transport/ssh2-transport.js";
 import type { IrisConfig } from "../../../src/process-pool/types.js";
 
 // Mock logger
@@ -16,16 +15,6 @@ vi.mock("../../../src/utils/logger.js", () => ({
     error: vi.fn(),
     debug: vi.fn(),
     warn: vi.fn(),
-  })),
-}));
-
-// Mock ssh2 to avoid actual SSH connections in tests
-vi.mock("ssh2", () => ({
-  Client: vi.fn(() => ({
-    on: vi.fn(),
-    connect: vi.fn(),
-    end: vi.fn(),
-    destroy: vi.fn(),
   })),
 }));
 
@@ -39,6 +28,7 @@ describe("TransportFactory", () => {
     path: "/path/to/project",
     description: "Remote team",
     remote: "user@remote-host",
+    claudePath: "/usr/bin/claude", // Required for remote
     remoteOptions: {
       port: 2222,
       identity: "/path/to/key",
@@ -56,7 +46,7 @@ describe("TransportFactory", () => {
       expect(transport).toBeInstanceOf(LocalTransport);
     });
 
-    it("should create SSHTransport for remote config by default (OpenSSH client)", () => {
+    it("should create SSHTransport for remote config (OpenSSH client)", () => {
       const transport = TransportFactory.create(
         "team-remote",
         remoteConfig,
@@ -66,27 +56,12 @@ describe("TransportFactory", () => {
       expect(transport).toBeInstanceOf(SSHTransport);
     });
 
-    it("should create SSH2Transport when ssh2 flag is true", () => {
-      const configWithSsh2: IrisConfig = {
-        ...remoteConfig,
-        ssh2: true,
-      };
-
-      const transport = TransportFactory.create(
-        "team-remote",
-        configWithSsh2,
-        "session-789",
-      );
-
-      expect(transport).toBeDefined();
-      expect(transport).toBeInstanceOf(SSH2Transport);
-    });
-
-    it("should handle remote config with various remoteOptions (default SSHTransport)", () => {
+    it("should handle remote config with various remoteOptions", () => {
       const configWithOptions: IrisConfig = {
         path: "/path/to/project",
         description: "Remote with options",
         remote: "user@host.example.com",
+        claudePath: "/usr/bin/claude",
         remoteOptions: {
           port: 2222,
           identity: "/path/to/key",

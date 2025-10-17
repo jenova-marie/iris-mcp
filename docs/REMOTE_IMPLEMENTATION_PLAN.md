@@ -1798,20 +1798,15 @@ ssh dev@remote-host.example.com
 
 Edit `~/.iris/config.yaml`:
 
-```json
-{
-  "teams": {
-    "team-backend": {
-      "remote": "ssh dev@remote-host.example.com",
-      "path": "/home/dev/projects/backend",
-      "description": "Backend team on cloud server",
-      "remoteOptions": {
-        "identity": "~/.ssh/cloud_key",
-        "serverAliveInterval": 30000
-      }
-    }
-  }
-}
+```yaml
+teams:
+  team-backend:
+    remote: ssh dev@remote-host.example.com
+    path: /home/dev/projects/backend
+    description: Backend team on cloud server
+    remoteOptions:
+      identity: ~/.ssh/cloud_key
+      serverAliveInterval: 30000
 ```
 
 ### 3. Wake Remote Team
@@ -1838,28 +1833,23 @@ await team_tell({
 
 ### Basic Remote Config
 
-```json
-{
-  "remote": "ssh user@host.com",
-  "path": "/path/on/remote/host"
-}
+```yaml
+remote: ssh user@host.com
+path: /path/on/remote/host
 ```
 
 ### Advanced Remote Config
 
-```json
-{
-  "remote": "ssh user@host.com",
-  "path": "/path/on/remote/host",
-  "remoteOptions": {
-    "identity": "~/.ssh/private_key",
-    "port": 2222,
-    "strictHostKeyChecking": true,
-    "connectTimeout": 10000,
-    "serverAliveInterval": 30000,
-    "serverAliveCountMax": 3
-  }
-}
+```yaml
+remote: ssh user@host.com
+path: /path/on/remote/host
+remoteOptions:
+  identity: ~/.ssh/private_key
+  port: 2222
+  strictHostKeyChecking: true
+  connectTimeout: 10000
+  serverAliveInterval: 30000
+  serverAliveCountMax: 3
 ```
 
 ## Connection States
@@ -1918,36 +1908,28 @@ curl -fsSL https://claude.com/install.sh | sh
 
 ### GitHub Codespace
 
-```json
-{
-  "remote": "ssh -o StrictHostKeyChecking=no codespace-abc@123.github.dev",
-  "path": "/workspaces/backend"
-}
+```yaml
+remote: ssh -o StrictHostKeyChecking=no codespace-abc@123.github.dev
+path: /workspaces/backend
 ```
 
 ### AWS Cloud9
 
-```json
-{
-  "remote": "ssh ec2-user@ec2-54-123-45-67.compute-1.amazonaws.com",
-  "path": "/home/ec2-user/environment/backend",
-  "remoteOptions": {
-    "identity": "~/.ssh/aws-cloud9.pem"
-  }
-}
+```yaml
+remote: ssh ec2-user@ec2-54-123-45-67.compute-1.amazonaws.com
+path: /home/ec2-user/environment/backend
+remoteOptions:
+  identity: ~/.ssh/aws-cloud9.pem
 ```
 
 ### GPU Cluster
 
-```json
-{
-  "remote": "ssh ml@gpu-cluster.company.com",
-  "path": "/mnt/shared/ml-models",
-  "remoteOptions": {
-    "identity": "~/.ssh/gpu_cluster_rsa",
-    "serverAliveInterval": 60000
-  }
-}
+```yaml
+remote: ssh ml@gpu-cluster.company.com
+path: /mnt/shared/ml-models
+remoteOptions:
+  identity: ~/.ssh/gpu_cluster_rsa
+  serverAliveInterval: 60000
 ```
 ```
 
@@ -1973,16 +1955,12 @@ Iris supports remote team execution via SSH, enabling distributed AI orchestrati
 
 ### Quick Example
 
-```json
-{
-  "teams": {
-    "team-backend": {
-      "remote": "ssh dev@cloud.example.com",
-      "path": "/home/dev/backend",
-      "description": "Backend team on cloud server"
-    }
-  }
-}
+```yaml
+teams:
+  team-backend:
+    remote: ssh dev@cloud.example.com
+    path: /home/dev/backend
+    description: Backend team on cloud server
 ```
 
 See [Remote Execution Documentation](docs/future/REMOTE.md) for full details.

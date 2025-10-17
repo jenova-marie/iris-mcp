@@ -211,32 +211,25 @@ const IrisConfigSchema = z.object({
 
 **File**: `examples/config.yaml`
 
-```json
-{
-  "settings": {
-    "maxProcesses": 10,
-    "idleTimeout": 300000,
-    "defaultTransport": "http",
-    "httpPort": 1615
-  },
-  "teams": {
-    "team-alpha": {
-      "path": "/Users/jenova/projects/frontend",
-      "description": "Frontend team - local execution"
-    },
-    "team-inanna": {
-      "remote": "ssh inanna",
-      "path": "/opt/containers",
-      "description": "Remote team with reverse MCP enabled",
-      "enableReverseMcp": true,
-      "reverseMcpPort": 1615,
-      "remoteOptions": {
-        "serverAliveInterval": 30000,
-        "serverAliveCountMax": 3
-      }
-    }
-  }
-}
+```yaml
+settings:
+  maxProcesses: 10
+  idleTimeout: 300000
+  defaultTransport: http
+  httpPort: 1615
+teams:
+  team-alpha:
+    path: /Users/jenova/projects/frontend
+    description: Frontend team - local execution
+  team-inanna:
+    remote: ssh inanna
+    path: /opt/containers
+    description: Remote team with reverse MCP enabled
+    enableReverseMcp: true
+    reverseMcpPort: 1615
+    remoteOptions:
+      serverAliveInterval: 30000
+      serverAliveCountMax: 3
 ```
 
 **Estimated Time**: Human: 30 minutes | Claude: 2 seconds
@@ -655,31 +648,24 @@ iris start --transport http --port 1615
 
 Or in your config:
 
-```json
-{
-  "settings": {
-    "defaultTransport": "http",
-    "httpPort": 1615
-  }
-}
+```yaml
+settings:
+  defaultTransport: http
+  httpPort: 1615
 ```
 
 ### 2. Configure Remote Team with Reverse MCP
 
 Edit `~/.iris/config.yaml`:
 
-```json
-{
-  "teams": {
-    "team-cloud": {
-      "remote": "ssh dev@cloud-server.com",
-      "path": "/home/dev/backend",
-      "description": "Cloud team with reverse MCP",
-      "enableReverseMcp": true,
-      "reverseMcpPort": 1615
-    }
-  }
-}
+```yaml
+teams:
+  team-cloud:
+    remote: ssh dev@cloud-server.com
+    path: /home/dev/backend
+    description: Cloud team with reverse MCP
+    enableReverseMcp: true
+    reverseMcpPort: 1615
 ```
 
 ### 3. Wake Remote Team
@@ -776,29 +762,22 @@ SSH keepalive interval. Recommended for long-running sessions.
 
 ### GitHub Codespace
 
-```json
-{
-  "team-codespace": {
-    "remote": "ssh codespace-abc123",
-    "path": "/workspaces/backend",
-    "enableReverseMcp": true
-  }
-}
+```yaml
+team-codespace:
+  remote: ssh codespace-abc123
+  path: /workspaces/backend
+  enableReverseMcp: true
 ```
 
 ### AWS EC2
 
-```json
-{
-  "team-ec2": {
-    "remote": "ssh ec2-user@ec2-54-123-45-67.compute-1.amazonaws.com",
-    "path": "/home/ec2-user/app",
-    "enableReverseMcp": true,
-    "remoteOptions": {
-      "identity": "~/.ssh/aws-key.pem"
-    }
-  }
-}
+```yaml
+team-ec2:
+  remote: ssh ec2-user@ec2-54-123-45-67.compute-1.amazonaws.com
+  path: /home/ec2-user/app
+  enableReverseMcp: true
+  remoteOptions:
+    identity: ~/.ssh/aws-key.pem
 ```
 
 ## Advanced Use Cases
@@ -848,16 +827,12 @@ Iris supports **reverse MCP tunneling** via SSH, enabling remote Claude instance
 
 ### Example
 
-```json
-{
-  "teams": {
-    "team-cloud": {
-      "remote": "ssh dev@cloud-server.com",
-      "path": "/home/dev/backend",
-      "enableReverseMcp": true
-    }
-  }
-}
+```yaml
+teams:
+  team-cloud:
+    remote: ssh dev@cloud-server.com
+    path: /home/dev/backend
+    enableReverseMcp: true
 ```
 
 Now team-cloud can orchestrate your local teams! See [Reverse MCP Guide](docs/USER_GUIDE_REVERSE_MCP.md).

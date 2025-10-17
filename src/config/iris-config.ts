@@ -55,6 +55,8 @@ const IrisConfigSchema = z.object({
   enableReverseMcp: z.boolean().optional(), // Enable reverse MCP tunnel for this team
   reverseMcpPort: z.number().int().min(1).max(65535).optional(), // Port to tunnel (default: 1615)
   allowHttp: z.boolean().optional(), // Allow HTTP for reverse MCP (dev only, default: false)
+  // Permission approval mode
+  grantPermission: z.enum(["yes", "no", "ask", "forward"]).optional().default("yes"), // How to handle permission requests
 }).refine(
   (data) => {
     // If remote is specified, claudePath is required

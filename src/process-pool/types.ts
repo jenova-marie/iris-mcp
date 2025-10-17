@@ -66,6 +66,8 @@ export interface IrisConfig {
   enableReverseMcp?: boolean; // Enable reverse MCP tunnel for this team
   reverseMcpPort?: number; // Port to tunnel (default: 1615)
   allowHttp?: boolean; // Allow HTTP for reverse MCP (dev only, default: false)
+  // Permission approval mode
+  grantPermission?: "yes" | "no" | "ask" | "forward"; // How to handle permission requests (default: "yes" for auto-approve)
 }
 
 export interface DashboardConfig {

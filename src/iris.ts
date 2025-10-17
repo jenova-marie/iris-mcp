@@ -22,6 +22,7 @@ import { getChildLogger } from "./utils/logger.js";
 import { filter, tap } from "rxjs/operators";
 import type { Subscription } from "rxjs";
 import type { TeamsConfig } from "./process-pool/types.js";
+import type { PendingPermissionsManager } from "./permissions/pending-manager.js";
 
 const logger = getChildLogger("iris:core");
 
@@ -61,13 +62,16 @@ export class IrisOrchestrator {
   private cacheManager: CacheManager;
   private responseTimeouts = new Map<string, NodeJS.Timeout>();
   private responseSubscriptions = new Map<string, Subscription>();
+  private pendingPermissions?: PendingPermissionsManager;
 
   constructor(
     private sessionManager: SessionManager,
     private processPool: ClaudeProcessPool,
     private config: TeamsConfig,
+    pendingPermissions?: PendingPermissionsManager,
   ) {
     this.cacheManager = new CacheManager();
+    this.pendingPermissions = pendingPermissions;
   }
 
   /**
@@ -149,6 +153,37 @@ export class IrisOrchestrator {
       session.sessionId,
       fromTeam,
     );
+
+    // Step 4.5: Update session with debug info (if available from transport)
+    const launchCommand = process.getLaunchCommand?.();
+    const teamConfigSnapshot = process.getTeamConfigSnapshot?.();
+
+    logger.debug("Checking debug info from process", {
+      sessionId: session.sessionId,
+      hasGetLaunchCommand: typeof process.getLaunchCommand === 'function',
+      hasGetTeamConfigSnapshot: typeof process.getTeamConfigSnapshot === 'function',
+      launchCommandValue: launchCommand ? `${launchCommand.length} chars` : 'NULL',
+      teamConfigValue: teamConfigSnapshot ? `${teamConfigSnapshot.length} chars` : 'NULL',
+    });
+
+    if (launchCommand && teamConfigSnapshot) {
+      this.sessionManager.updateDebugInfo(
+        session.sessionId,
+        launchCommand,
+        teamConfigSnapshot,
+      );
+      logger.info("Updated session debug info", {
+        sessionId: session.sessionId,
+        commandLength: launchCommand.length,
+        configLength: teamConfigSnapshot.length,
+      });
+    } else {
+      logger.warn("Debug info not available from transport", {
+        sessionId: session.sessionId,
+        hasLaunchCommand: !!launchCommand,
+        hasTeamConfig: !!teamConfigSnapshot,
+      });
+    }
 
     // Step 5: Create CacheEntry for this tell
     const tellEntry = messageCache.createEntry(CacheEntryType.TELL, message);
@@ -649,8 +684,8 @@ export class IrisOrchestrator {
       };
     }
 
-    // Get permission mode (default: "yes")
-    const mode = teamConfig.grantPermission || "yes";
+    // Get permission mode (default: "ask")
+    const mode = teamConfig.grantPermission || "ask";
 
     logger.info({
       teamName,
@@ -680,15 +715,55 @@ export class IrisOrchestrator {
         };
 
       case "ask":
-        // TODO: Emit event to dashboard for manual approval
-        // For now, deny with message explaining feature not yet implemented
-        logger.warn({ teamName, toolName }, "Ask mode not yet implemented, denying");
-        return {
-          allow: false,
-          message: `Permission denied: Interactive approval (grantPermission: ask) not yet implemented for team '${teamName}'`,
-          teamName,
-          mode,
-        };
+        // Broadcast to dashboard for manual approval
+        if (!this.pendingPermissions) {
+          logger.warn({ teamName, toolName }, "Ask mode not available - no permissions manager");
+          return {
+            allow: false,
+            message: `Permission denied: Dashboard not available for approval`,
+            teamName,
+            mode,
+          };
+        }
+
+        logger.info({ teamName, toolName }, "Creating pending permission request for dashboard approval");
+
+        try {
+          // Create pending permission - this will be broadcasted to dashboard via events
+          const response = await this.pendingPermissions.createPendingPermission(
+            sessionId,
+            teamName,
+            toolName,
+            toolInput,
+            reason,
+          );
+
+          logger.info({
+            teamName,
+            toolName,
+            approved: response.approved,
+          }, "Permission request resolved by dashboard");
+
+          return {
+            allow: response.approved,
+            message: response.reason || (response.approved ? undefined : "Permission denied by user"),
+            teamName,
+            mode,
+          };
+        } catch (error) {
+          logger.error({
+            err: error instanceof Error ? error : new Error(String(error)),
+            teamName,
+            toolName,
+          }, "Error creating pending permission");
+
+          return {
+            allow: false,
+            message: `Permission denied: Error requesting approval - ${error instanceof Error ? error.message : String(error)}`,
+            teamName,
+            mode,
+          };
+        }
 
       case "forward":
         // TODO: Forward permission request to parent team

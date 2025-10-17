@@ -104,6 +104,29 @@ export async function wake(
       );
       const metrics = process.getBasicMetrics();
 
+      // Update session with debug info (if available from transport)
+      const launchCommand = process.getLaunchCommand?.();
+      const teamConfigSnapshot = process.getTeamConfigSnapshot?.();
+
+      if (launchCommand && teamConfigSnapshot) {
+        sessionManager.updateDebugInfo(
+          session.sessionId,
+          launchCommand,
+          teamConfigSnapshot,
+        );
+        logger.info("Updated session debug info after wake", {
+          sessionId: session.sessionId,
+          commandLength: launchCommand.length,
+          configLength: teamConfigSnapshot.length,
+        });
+      } else {
+        logger.warn("Debug info not available from transport after wake", {
+          sessionId: session.sessionId,
+          hasLaunchCommand: !!launchCommand,
+          hasTeamConfig: !!teamConfigSnapshot,
+        });
+      }
+
       // Update session state to idle after spawn completes
       // This ensures the session is ready to accept messages
       sessionManager.updateProcessState(session.sessionId, "idle");

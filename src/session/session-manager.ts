@@ -326,6 +326,31 @@ export class SessionManager {
   }
 
   /**
+   * Update launch command and team config snapshot for a session
+   * Called by Transport layer after process is spawned
+   */
+  updateDebugInfo(
+    sessionId: string,
+    launchCommand: string,
+    teamConfigSnapshot: string,
+  ): void {
+    this.ensureInitialized();
+    this.store.updateDebugInfo(sessionId, launchCommand, teamConfigSnapshot);
+
+    // Invalidate cache for this session
+    const session = this.store.getBySessionId(sessionId);
+    if (session) {
+      this.invalidateCache(session.fromTeam, session.toTeam);
+    }
+
+    logger.debug("Updated session debug info", {
+      sessionId,
+      commandLength: launchCommand.length,
+      configLength: teamConfigSnapshot.length,
+    });
+  }
+
+  /**
    * Increment message count for session
    */
   incrementMessageCount(sessionId: string, count = 1): void {

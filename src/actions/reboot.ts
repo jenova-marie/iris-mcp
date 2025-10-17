@@ -165,11 +165,29 @@ export async function reboot(
   );
 
   try {
-    await processPool.getOrCreateProcess(
+    const process = await processPool.getOrCreateProcess(
       toTeam,
       newSession.sessionId,
       fromTeam,
     );
+
+    // Update session with debug info (if available from transport)
+    const launchCommand = process.getLaunchCommand?.();
+    const teamConfigSnapshot = process.getTeamConfigSnapshot?.();
+
+    if (launchCommand && teamConfigSnapshot) {
+      sessionManager.updateDebugInfo(
+        newSession.sessionId,
+        launchCommand,
+        teamConfigSnapshot,
+      );
+      logger.info("Updated session debug info after reboot", {
+        sessionId: newSession.sessionId,
+        commandLength: launchCommand.length,
+        configLength: teamConfigSnapshot.length,
+      });
+    }
+
     logger.info(
       { fromTeam, toTeam, newSessionId: newSession.sessionId },
       "Team woken successfully with new session",

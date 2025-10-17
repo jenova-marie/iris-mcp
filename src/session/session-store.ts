@@ -105,6 +105,8 @@ export class SessionStore {
         process_state TEXT NOT NULL DEFAULT 'stopped',
         current_cache_session_id TEXT,
         last_response_at INTEGER,
+        launch_command TEXT,
+        team_config_snapshot TEXT,
         UNIQUE(from_team, to_team)
       );
 
@@ -137,23 +139,39 @@ export class SessionStore {
       processState: row.process_state,
       currentCacheSessionId: row.current_cache_session_id ?? null,
       lastResponseAt: row.last_response_at ?? null,
+      launchCommand: row.launch_command ?? null,
+      teamConfigSnapshot: row.team_config_snapshot ?? null,
     };
   }
 
   /**
    * Create a new session record
    */
-  create(fromTeam: string, toTeam: string, sessionId: string): SessionInfo {
+  create(
+    fromTeam: string,
+    toTeam: string,
+    sessionId: string,
+    launchCommand?: string,
+    teamConfigSnapshot?: string,
+  ): SessionInfo {
     const now = Date.now();
 
     const stmt = this.db.prepare(`
       INSERT INTO team_sessions (
         from_team, to_team, session_id, created_at, last_used_at, message_count, status,
-        process_state, current_cache_session_id, last_response_at
-      ) VALUES (?, ?, ?, ?, ?, 0, 'active', 'stopped', NULL, NULL)
+        process_state, current_cache_session_id, last_response_at, launch_command, team_config_snapshot
+      ) VALUES (?, ?, ?, ?, ?, 0, 'active', 'stopped', NULL, NULL, ?, ?)
     `);
 
-    const result = stmt.run(fromTeam, toTeam, sessionId, now, now);
+    const result = stmt.run(
+      fromTeam,
+      toTeam,
+      sessionId,
+      now,
+      now,
+      launchCommand ?? null,
+      teamConfigSnapshot ?? null,
+    );
 
     logger.info("Session created", {
       fromTeam,
@@ -174,6 +192,8 @@ export class SessionStore {
       process_state: "stopped",
       current_cache_session_id: null,
       last_response_at: null,
+      launch_command: launchCommand ?? null,
+      team_config_snapshot: teamConfigSnapshot ?? null,
     });
   }
 
@@ -479,6 +499,25 @@ export class SessionStore {
     stmt.run(timestamp, sessionId);
 
     logger.debug("Updated last response timestamp", { sessionId, timestamp });
+  }
+
+  /**
+   * Update launch command and team config snapshot for debugging
+   */
+  updateDebugInfo(
+    sessionId: string,
+    launchCommand: string,
+    teamConfigSnapshot: string,
+  ): void {
+    const stmt = this.db.prepare(`
+      UPDATE team_sessions
+      SET launch_command = ?, team_config_snapshot = ?
+      WHERE session_id = ?
+    `);
+
+    stmt.run(launchCommand, teamConfigSnapshot, sessionId);
+
+    logger.debug("Updated debug info", { sessionId });
   }
 
   /**

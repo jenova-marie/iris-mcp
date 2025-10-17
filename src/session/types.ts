@@ -63,6 +63,12 @@ export interface SessionInfo {
 
   /** Timestamp of last response from Claude */
   lastResponseAt: number | null;
+
+  /** Full command used to spawn this session (for debugging) */
+  launchCommand: string | null;
+
+  /** Snapshot of server-side team config at session creation (for debugging) */
+  teamConfigSnapshot: string | null; // JSON string of relevant config values
 }
 
 /**
@@ -80,6 +86,8 @@ export interface SessionRow {
   process_state: ProcessState;
   current_cache_session_id: string | null;
   last_response_at: number | null;
+  launch_command: string | null;
+  team_config_snapshot: string | null;
 }
 
 /**

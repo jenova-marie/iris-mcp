@@ -238,31 +238,25 @@ Active route highlighted with purple accent.
 
 Dashboard configuration is part of the main `config.yaml`:
 
-```json
-{
-  "settings": {
-    "maxProcesses": 10,
-    "idleTimeout": 300000,
-    "healthCheckInterval": 30000
-  },
-  "dashboard": {
-    "enabled": true,
-    "host": "localhost",
-    "http": 3100,
-    "https": 3101,
-    "selfsigned": true,
-    "certPath": "/path/to/cert.pem",
-    "keyPath": "/path/to/key.pem",
-    "forkScriptPath": "~/.iris/fork.sh"
-  },
-  "teams": {
-    "backend": {
-      "path": "/absolute/path/to/backend",
-      "description": "Backend API team",
-      "color": "#8B5CF6"
-    }
-  }
-}
+```yaml
+settings:
+  maxProcesses: 10
+  idleTimeout: 300000
+  healthCheckInterval: 30000
+dashboard:
+  enabled: true
+  host: localhost
+  http: 3100
+  https: 3101
+  selfsigned: true
+  certPath: /path/to/cert.pem
+  keyPath: /path/to/key.pem
+  forkScriptPath: ~/.iris/fork.sh
+teams:
+  backend:
+    path: /absolute/path/to/backend
+    description: Backend API team
+    color: "#8B5CF6"
 ```
 
 ### Dashboard Options
@@ -283,26 +277,26 @@ Dashboard configuration is part of the main `config.yaml`:
 The dashboard supports three HTTPS modes:
 
 1. **Self-Signed Certificate** (default):
-   ```json
-   { "https": 3101, "selfsigned": true }
+   ```yaml
+   https: 3101
+   selfsigned: true
    ```
    - Auto-generates certificate on startup
    - Valid for 365 days
    - Includes localhost + 127.0.0.1 in SAN
 
 2. **Custom Certificate**:
-   ```json
-   {
-     "https": 3101,
-     "selfsigned": false,
-     "certPath": "/path/to/cert.pem",
-     "keyPath": "/path/to/key.pem"
-   }
+   ```yaml
+   https: 3101
+   selfsigned: false
+   certPath: /path/to/cert.pem
+   keyPath: /path/to/key.pem
    ```
 
 3. **HTTP Only**:
-   ```json
-   { "http": 3100, "https": 0 }
+   ```yaml
+   http: 3100
+   https: 0
    ```
 
 ### Fork Script
@@ -1027,12 +1021,9 @@ server {
 **Cause**: `dashboard.forkScriptPath` not configured
 
 - Add to `config.yaml`:
-  ```json
-  {
-    "dashboard": {
-      "forkScriptPath": "~/.iris/fork.sh"
-    }
-  }
+  ```yaml
+  dashboard:
+    forkScriptPath: ~/.iris/fork.sh
   ```
 - Create fork script (see [Fork Script](#fork-script))
 

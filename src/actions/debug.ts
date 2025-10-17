@@ -3,7 +3,12 @@
  * Query in-memory logs from Wonder Logger memory transport
  */
 
-import { getMemoryLogs, getAllMemoryStoreNames, type ParsedLogEntry, type RawLogEntry } from "@recoverysky/wonder-logger";
+import {
+  getMemoryLogs,
+  getAllMemoryStoreNames,
+  type ParsedLogEntry,
+  type RawLogEntry,
+} from "@jenova-marie/wonder-logger";
 import { getChildLogger } from "../utils/logger.js";
 import { ValidationError } from "../utils/errors.js";
 

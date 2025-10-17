@@ -14,8 +14,8 @@ import {
   createLoggerFromConfig,
   createTelemetryFromConfig,
   loadConfig,
-  type TelemetrySDK
-} from '@recoverysky/wonder-logger';
+  type TelemetrySDK,
+} from "@jenova-marie/wonder-logger";
 
 // Pino Logger type - will be available once wonder-logger is initialized
 type PinoLogger = any;
@@ -55,13 +55,13 @@ export function initializeObservability(configPath?: string): {
   try {
     // Load config first to check if OTEL is enabled
     const config = loadConfig({
-      configPath: configPath || './wonder-logger.yaml',
-      required: true
+      configPath: configPath || "./wonder-logger.yaml",
+      required: true,
     });
 
     // Initialize logger from config
     globalLogger = createLoggerFromConfig({
-      configPath: configPath || './wonder-logger.yaml',
+      configPath: configPath || "./wonder-logger.yaml",
       required: true,
     });
 
@@ -69,31 +69,37 @@ export function initializeObservability(configPath?: string): {
     if (config?.otel?.enabled) {
       try {
         globalTelemetry = createTelemetryFromConfig({
-          configPath: configPath || './wonder-logger.yaml',
+          configPath: configPath || "./wonder-logger.yaml",
           required: false, // OTEL is optional
         });
 
         globalLogger.info({
-          message: 'Observability initialized successfully',
-          otelEnabled: true
+          message: "Observability initialized successfully",
+          otelEnabled: true,
         });
       } catch (otelError) {
         // OTEL initialization failed, but logger works
-        globalLogger.warn({
-          err: otelError instanceof Error ? otelError : new Error(String(otelError))
-        }, 'OpenTelemetry initialization failed, continuing with logging only');
+        globalLogger.warn(
+          {
+            err:
+              otelError instanceof Error
+                ? otelError
+                : new Error(String(otelError)),
+          },
+          "OpenTelemetry initialization failed, continuing with logging only",
+        );
         globalTelemetry = null;
       }
     } else {
       // OTEL is disabled in config
-      globalLogger.info('OpenTelemetry disabled in configuration');
+      globalLogger.info("OpenTelemetry disabled in configuration");
       globalTelemetry = null;
     }
 
     return { logger: globalLogger, telemetry: globalTelemetry };
   } catch (error) {
     // Fallback to console.error if logger initialization completely fails
-    console.error('FATAL: Failed to initialize Wonder Logger:', error);
+    console.error("FATAL: Failed to initialize Wonder Logger:", error);
     throw error;
   }
 }
@@ -211,7 +217,7 @@ export async function shutdownObservability(): Promise<void> {
   const logger = globalLogger;
 
   if (logger) {
-    logger.info('Shutting down observability stack');
+    logger.info("Shutting down observability stack");
   }
 
   // Shutdown OTEL first (flushes traces/metrics)
@@ -219,12 +225,14 @@ export async function shutdownObservability(): Promise<void> {
     try {
       await globalTelemetry.shutdown();
       if (logger) {
-        logger.info('OpenTelemetry shutdown complete');
+        logger.info("OpenTelemetry shutdown complete");
       }
     } catch (error) {
       if (logger) {
-        logger.error({ err: error instanceof Error ? error : new Error(String(error)) },
-          'Failed to shutdown OpenTelemetry');
+        logger.error(
+          { err: error instanceof Error ? error : new Error(String(error)) },
+          "Failed to shutdown OpenTelemetry",
+        );
       }
     }
   }
@@ -232,7 +240,7 @@ export async function shutdownObservability(): Promise<void> {
   // Flush logger (writes pending logs)
   if (logger) {
     // Pino doesn't have an async flush, but calling final() helps
-    logger.info('Logger shutdown complete');
+    logger.info("Logger shutdown complete");
   }
 
   globalLogger = null;
@@ -246,4 +254,11 @@ export async function shutdownObservability(): Promise<void> {
 /**
  * Pino log level type
  */
-export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
+export type LogLevel =
+  | "trace"
+  | "debug"
+  | "info"
+  | "warn"
+  | "error"
+  | "fatal"
+  | "silent";

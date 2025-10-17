@@ -1,23 +1,23 @@
 /**
  * Configuration Editor Page
- * Allows editing config.json with validation
+ * Allows editing config.yaml with validation
  * Shows restart banner after saving
  */
 
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save, AlertTriangle, Loader2 } from 'lucide-react';
-import { api } from '../api/client';
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Save, AlertTriangle, Loader2 } from "lucide-react";
+import { api } from "../api/client";
 
 export function ConfigEditor() {
   const queryClient = useQueryClient();
   const [showRestartBanner, setShowRestartBanner] = useState(false);
-  const [configText, setConfigText] = useState('');
+  const [configText, setConfigText] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // Fetch config
   const { isLoading, isError } = useQuery({
-    queryKey: ['config'],
+    queryKey: ["config"],
     queryFn: async () => {
       const response = await api.getConfig();
       const config = response.data.config;
@@ -35,14 +35,16 @@ export function ConfigEditor() {
     onSuccess: () => {
       setShowRestartBanner(true);
       setError(null);
-      queryClient.invalidateQueries({ queryKey: ['config'] });
+      queryClient.invalidateQueries({ queryKey: ["config"] });
     },
     onError: (err: any) => {
       const errorMessage = err.response?.data?.error || err.message;
       const details = err.response?.data?.details;
 
       if (details) {
-        const formattedDetails = details.map((d: any) => `  - ${d.path}: ${d.message}`).join('\n');
+        const formattedDetails = details
+          .map((d: any) => `  - ${d.path}: ${d.message}`)
+          .join("\n");
         setError(`${errorMessage}\n\n${formattedDetails}`);
       } else {
         setError(errorMessage);
@@ -73,7 +75,9 @@ export function ConfigEditor() {
       <div className="flex items-center justify-center h-full">
         <div className="card max-w-md">
           <AlertTriangle className="text-status-error mb-4" size={48} />
-          <h2 className="text-xl font-bold mb-2">Failed to load configuration</h2>
+          <h2 className="text-xl font-bold mb-2">
+            Failed to load configuration
+          </h2>
           <p className="text-text-secondary">Check console for details</p>
         </div>
       </div>
@@ -86,7 +90,8 @@ export function ConfigEditor() {
       <div className="border-b border-gray-700 bg-bg-card p-6">
         <h1 className="text-3xl font-bold">Configuration</h1>
         <p className="text-text-secondary mt-2">
-          Edit Iris MCP configuration ({process.env.IRIS_CONFIG_PATH || '$IRIS_HOME/config.json'})
+          Edit Iris MCP configuration (
+          {process.env.IRIS_CONFIG_PATH || "$IRIS_HOME/config.yaml"})
         </p>
       </div>
 
@@ -94,9 +99,14 @@ export function ConfigEditor() {
       {showRestartBanner && (
         <div className="bg-accent-purple/20 border-b border-accent-purple/30 p-4">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="text-accent-purple flex-shrink-0" size={24} />
+            <AlertTriangle
+              className="text-accent-purple flex-shrink-0"
+              size={24}
+            />
             <div>
-              <p className="font-medium text-accent-purple">Configuration saved successfully</p>
+              <p className="font-medium text-accent-purple">
+                Configuration saved successfully
+              </p>
               <p className="text-sm text-text-secondary mt-1">
                 Restart Iris MCP to apply changes
               </p>
@@ -109,7 +119,10 @@ export function ConfigEditor() {
       {error && (
         <div className="bg-status-error/20 border-b border-status-error/30 p-4">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="text-status-error flex-shrink-0" size={24} />
+            <AlertTriangle
+              className="text-status-error flex-shrink-0"
+              size={24}
+            />
             <div className="flex-1">
               <p className="font-medium text-status-error">Validation Error</p>
               <pre className="text-sm text-text-secondary mt-2 whitespace-pre-wrap font-mono">
@@ -125,7 +138,7 @@ export function ConfigEditor() {
         <div className="max-w-4xl">
           <div className="mb-4 flex justify-between items-center">
             <label className="block text-sm font-medium text-text-secondary">
-              config.json
+              config.yaml
             </label>
             <button
               onClick={handleSave}
@@ -158,8 +171,13 @@ export function ConfigEditor() {
           />
 
           <div className="mt-4 text-sm text-text-secondary space-y-2">
-            <p><strong>Tip:</strong> Configuration is validated before saving.</p>
-            <p><strong>Note:</strong> Changes require a server restart to take effect.</p>
+            <p>
+              <strong>Tip:</strong> Configuration is validated before saving.
+            </p>
+            <p>
+              <strong>Note:</strong> Changes require a server restart to take
+              effect.
+            </p>
           </div>
         </div>
       </div>

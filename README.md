@@ -1,22 +1,9 @@
 <div align="center">
   <img src="resources/iris-mcp.png" alt="Iris MCP Logo" width="200" height="200">
 
-  <svg width="400" height="60" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <linearGradient id="rainbow" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" style="stop-color:#ff0000;stop-opacity:1" />
-        <stop offset="16%" style="stop-color:#ff7f00;stop-opacity:1" />
-        <stop offset="33%" style="stop-color:#ffff00;stop-opacity:1" />
-        <stop offset="50%" style="stop-color:#00ff00;stop-opacity:1" />
-        <stop offset="66%" style="stop-color:#0000ff;stop-opacity:1" />
-        <stop offset="83%" style="stop-color:#4b0082;stop-opacity:1" />
-        <stop offset="100%" style="stop-color:#9400d3;stop-opacity:1" />
-      </linearGradient>
-    </defs>
-    <text x="50%" y="50%" font-family="monospace" font-size="48" font-weight="bold" fill="url(#rainbow)" text-anchor="middle" dominant-baseline="middle">Iris MCP</text>
-  </svg>
+  <br/>
 
-  # Iris MCP
+  <img src="resources/iris-mcp-title.svg" alt="Iris MCP" width="500">
 
   **Model Context Protocol server for cross-project Claude Code coordination**
 

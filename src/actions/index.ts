@@ -15,3 +15,4 @@ export * from "./isAwake.js";
 export * from "./wake-all.js";
 export * from "./teams.js";
 export * from "./fork.js";
+export * from "./date.js";

@@ -150,6 +150,8 @@ curl -fsSL https://raw.githubusercontent.com/jenova-marie/iris-mcp/main/setup.sh
 iwr -useb https://raw.githubusercontent.com/jenova-marie/iris-mcp/main/setup.ps1 | iex
 ```
 
+> **Note**: The PowerShell script is untested on real Windows systems. If you encounter errors, please [open an issue](https://github.com/jenova-marie/iris-mcp/issues) with error details or submit a PR with fixes. We appreciate your help! 🙏
+
 These interactive scripts will:
 - ✓ Check prerequisites (Node.js 18+)
 - ✓ Install Iris MCP globally

@@ -136,84 +136,50 @@ From GitHub Issue [#2929](https://github.com/anthropics/claude-code/issues/2929)
 
 ## 🚀 Quick Start
 
-### Installation
+**New to Iris?** Check out **[GETTING_STARTED.md](./GETTING_STARTED.md)** for a complete setup guide!
+
+### One-Command Installation
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/jenova-marie/iris-mcp/main/setup.sh | bash
+```
+
+**Windows (PowerShell):**
+```powershell
+iwr -useb https://raw.githubusercontent.com/jenova-marie/iris-mcp/main/setup.ps1 | iex
+```
+
+These interactive scripts will:
+- ✓ Check prerequisites (Node.js 18+)
+- ✓ Install Iris MCP globally
+- ✓ Guide you through team configuration
+- ✓ Connect to Claude Code
+- ✓ Start the server
+
+**That's it!** You'll be coordinating AI teams in under 5 minutes. 🚀
+
+### Manual Installation
 
 ```bash
 # Install globally from npm
-npm install -g @iris-mcp/server
+npm install -g @jenova-marie/iris-mcp
 
-# Or install locally in your project
-npm install @iris-mcp/server
+# Verify installation
+iris-mcp --version
 
-# Or clone and build from source
-git clone https://github.com/jenova-marie/iris-mcp
-cd iris-mcp
-pnpm install
-pnpm build
+# Add your projects as teams
+iris-mcp add-team frontend ~/code/my-frontend
+iris-mcp add-team backend ~/code/my-backend
+
+# Connect to Claude Code
+iris-mcp install
+
+# Start the server
+iris-mcp
 ```
 
-### Configuration
-
-Create a `teams.json` file (copy from `src/config/teams.example.json`):
-
-```json
-{
-  "settings": {
-    "idleTimeout": 300000,
-    "maxProcesses": 10,
-    "healthCheckInterval": 30000
-  },
-  "teams": {
-    "frontend": {
-      "path": "/Users/you/projects/acme-frontend",
-      "description": "React TypeScript frontend with Tailwind",
-      "skipPermissions": true,
-      "color": "#61dafb"
-    },
-    "backend": {
-      "path": "/Users/you/projects/acme-backend",
-      "description": "Node.js Express REST API",
-      "skipPermissions": true,
-      "color": "#68a063"
-    },
-    "mobile": {
-      "path": "/Users/you/projects/acme-mobile",
-      "description": "React Native mobile app",
-      "skipPermissions": true,
-      "color": "#0088cc"
-    }
-  }
-}
-```
-
-### Add to Claude Desktop
-
-Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "iris": {
-      "command": "node",
-      "args": ["/path/to/iris-mcp/dist/index.js"]
-    }
-  }
-}
-```
-
-### Start Using
-
-Restart Claude Desktop. **First startup will take 60-90 seconds** as Iris pre-initializes sessions for all teams (eager initialization).
-
-Then start a conversation:
-
-```
-> "Ask the backend team what database they use"
-```
-
-Claude will automatically use Iris MCP to coordinate!
-
-**Note**: First request to each team pair takes ~8-14 seconds (cold start). Subsequent requests are much faster (~2-3 seconds) thanks to process pooling.
+See **[GETTING_STARTED.md](./GETTING_STARTED.md)** for detailed usage examples and troubleshooting.
 
 ---
 

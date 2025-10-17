@@ -204,11 +204,15 @@ export class SSHTransport implements Transport {
       const mcpPort = this.irisConfig.reverseMcpPort || 1615;
       // Use HTTP if explicitly allowed (dev mode), otherwise HTTPS
       const protocol = this.irisConfig.allowHttp ? "http" : "https";
+
+      // Use sessionId as the unique path identifier
+      const mcpUrl = `${protocol}://localhost:${mcpPort}/mcp/${this.sessionId}`;
+
       const mcpConfig = {
         mcpServers: {
           iris: {
             type: "http",
-            url: `${protocol}://localhost:${mcpPort}/mcp`,
+            url: mcpUrl,
           },
         },
       };
@@ -218,9 +222,10 @@ export class SSHTransport implements Transport {
 
       this.logger.debug("Adding MCP config to remote Claude command", {
         teamName: this.teamName,
+        sessionId: this.sessionId,
         mcpPort,
         protocol,
-        mcpUrl: `${protocol}://localhost:${mcpPort}/mcp`,
+        mcpUrl,
       });
     }
 

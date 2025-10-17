@@ -170,6 +170,8 @@ export class ClaudeProcessPool extends EventEmitter {
       poolKey,
       teamName,
       sessionId,
+      fromTeam,
+      toTeam: teamName,
     });
 
     const process = new ClaudeProcess(teamName, irisConfig, sessionId);

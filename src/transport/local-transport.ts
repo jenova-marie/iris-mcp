@@ -6,6 +6,9 @@
  */
 
 import { spawn, type ChildProcess } from "child_process";
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import { BehaviorSubject, Subject, Observable, firstValueFrom } from "rxjs";
 import { filter, take, timeout } from "rxjs/operators";
 import type { CacheEntry } from "../cache/types.js";
@@ -26,6 +29,24 @@ export class ProcessBusyError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProcessBusyError";
+  }
+}
+
+/**
+ * Load and render team identity prompt template
+ */
+function loadTeamIdentityPrompt(teamName: string): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const templatePath = join(__dirname, "..", "team-identity-prompt.txt");
+    const template = readFileSync(templatePath, "utf8");
+
+    // Simple template rendering: replace {{teamName}} with actual team name
+    return template.replace(/\{\{teamName\}\}/g, teamName);
+  } catch (error) {
+    // Fallback if template file not found
+    return `# Iris MCP ${teamName}\n\nThis is the **${teamName}** team configured in the Iris MCP server for cross-project Claude coordination.`;
   }
 }
 
@@ -116,6 +137,44 @@ export class LocalTransport implements Transport {
     if (this.irisConfig.skipPermissions) {
       args.push("--dangerously-skip-permissions");
     }
+
+    if (this.irisConfig.allowedTools) {
+      args.push("--allowed-tools", this.irisConfig.allowedTools);
+    }
+
+    if (this.irisConfig.disallowedTools) {
+      args.push("--disallowed-tools", this.irisConfig.disallowedTools);
+    }
+
+    // Build system prompt: team identity + custom append
+    const teamIdentity = loadTeamIdentityPrompt(this.teamName);
+    const systemPrompt = this.irisConfig.appendSystemPrompt
+      ? `${teamIdentity}\n\n${this.irisConfig.appendSystemPrompt}`
+      : teamIdentity;
+
+    args.push("--append-system-prompt", systemPrompt);
+
+    // Add MCP config to override global config with session-specific path
+    // This enables permission detection via sessionId
+    const mcpPort = 1615; // TODO: Get from config
+    const mcpUrl = `http://localhost:${mcpPort}/mcp/${this.sessionId}`;
+
+    const mcpConfig = {
+      mcpServers: {
+        iris: {
+          type: "http",
+          url: mcpUrl,
+        },
+      },
+    };
+
+    args.push("--mcp-config", JSON.stringify(mcpConfig));
+
+    this.logger.debug("Added MCP config to local Claude command", {
+      teamName: this.teamName,
+      sessionId: this.sessionId,
+      mcpUrl,
+    });
 
     // Use custom claudePath if provided, otherwise default to 'claude'
     const claudeExecutable = this.irisConfig.claudePath || "claude";

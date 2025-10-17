@@ -34,7 +34,9 @@ import { wakeAll } from "./actions/wake-all.js";
 import { report } from "./actions/report.js";
 import { teams } from "./actions/teams.js";
 import { debug } from "./actions/debug.js";
-import { permissionsApprove } from "./actions/grant-permission.js";
+import { permissionsApprove } from "./actions/permissions.js";
+import { date } from "./actions/date.js";
+import { runWithContext } from "./utils/request-context.js";
 
 const logger = getChildLogger("iris:mcp");
 
@@ -414,6 +416,16 @@ const TOOLS: Tool[] = [
       required: ["tool_name", "input"],
     },
   },
+  {
+    name: "team_date",
+    description:
+      "Get the current system date and time in UTC. " +
+      "Returns timestamp, ISO 8601 format, UTC string, Unix timestamp, and detailed components.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
 ];
 
 export class IrisMcpServer {
@@ -728,10 +740,21 @@ export class IrisMcpServer {
                 {
                   type: "text",
                   text: JSON.stringify(
-                    await permissionsApprove(args as any),
+                    await permissionsApprove(args as any, this.iris),
                     null,
                     2,
                   ),
+                },
+              ],
+            };
+            break;
+
+          case "team_date":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(await date(args as any), null, 2),
                 },
               ],
             };
@@ -855,6 +878,88 @@ export class IrisMcpServer {
               err: error instanceof Error ? error : new Error(String(error)),
             },
             "Error handling MCP request",
+          );
+          if (!res.headersSent) {
+            res.status(500).json({
+              jsonrpc: "2.0",
+              error: {
+                code: -32603,
+                message: "Internal server error",
+              },
+              id: req.body?.id || null,
+            });
+          }
+        }
+      });
+
+      // Handle MCP requests with session-specific paths (for reverse MCP tunneling)
+      // Remote teams connect to /mcp/{sessionId} where sessionId maps to the process
+      app.all("/mcp/:sessionId", async (req, res) => {
+        const sessionId = req.params.sessionId;
+
+        logger.debug(
+          {
+            method: req.method,
+            sessionId,
+            body: req.body,
+            headers: req.headers,
+          },
+          "Received HTTP request for session-specific MCP path",
+        );
+
+        // Lookup process from pool using sessionId
+        const process = this.processPool.getProcessBySessionId(sessionId);
+        if (!process) {
+          logger.warn({ sessionId }, "Session not found in process pool");
+          return res.status(404).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32602,
+              message: `Session not found: ${sessionId}`,
+            },
+            id: req.body?.id || null,
+          });
+        }
+
+        logger.info(
+          {
+            sessionId,
+            teamName: process.teamName,
+          },
+          "Resolved team from session",
+        );
+
+        try {
+          // Run with AsyncLocalStorage context so permissions__approve can access sessionId
+          await runWithContext({ sessionId }, async () => {
+            // Create a new transport for each request (stateless mode)
+            const requestId = Math.random().toString(36).substring(7);
+            const httpTransport = new StreamableHTTPServerTransport({
+              sessionIdGenerator: undefined, // Stateless mode
+              enableJsonResponse: true,
+            });
+
+            transports.set(requestId, httpTransport);
+
+            // Clean up when connection closes
+            res.on("close", () => {
+              transports.delete(requestId);
+              httpTransport.close();
+            });
+
+            // Connect the transport to our server
+            await this.server.connect(httpTransport);
+
+            // Handle the request (works for both POST and GET)
+            await httpTransport.handleRequest(req, res, req.body);
+          });
+        } catch (error) {
+          logger.error(
+            {
+              err: error instanceof Error ? error : new Error(String(error)),
+              sessionId,
+            },
+            "Error handling session-specific MCP request",
           );
           if (!res.headersSent) {
             res.status(500).json({

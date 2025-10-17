@@ -98,7 +98,7 @@ export class ClaudeProcess extends EventEmitter {
     this.status$ = this.statusSubject.asObservable();
     this.errors$ = this.errorsSubject.asObservable();
 
-    // Create transport using factory (Phase 1: LocalTransport only)
+    // Create transport using factory
     this.transport = TransportFactory.create(teamName, irisConfig, sessionId);
 
     // Subscribe to transport observables (replaces event forwarding)
@@ -106,6 +106,7 @@ export class ClaudeProcess extends EventEmitter {
 
     this.logger.debug("ClaudeProcess created with transport", {
       teamName,
+      sessionId,
       transportType: this.transport.constructor.name,
     });
   }

@@ -40,6 +40,13 @@ export interface IrisStatus {
   };
 }
 
+export interface PermissionDecision {
+  allow: boolean;
+  message?: string;
+  teamName: string;
+  mode: "yes" | "no" | "ask" | "forward";
+}
+
 /**
  * Iris Orchestrator - Coordinates everything
  *
@@ -587,6 +594,123 @@ export class IrisOrchestrator {
     const session = this.sessionManager.getSession(fromTeam, toTeam);
     if (!session) return null;
     return this.cacheManager.getCache(session.sessionId);
+  }
+
+  /**
+   * Handle permission request using sessionId-based team detection
+   *
+   * Business logic for permission approval based on team's grantPermission config:
+   * - yes: Auto-approve all actions
+   * - no: Auto-deny all actions (read-only mode)
+   * - ask: Prompt user via dashboard (TODO: not yet implemented)
+   * - forward: Forward to parent team (TODO: not yet implemented)
+   *
+   * @param sessionId - Session ID from URL path (/mcp/:sessionId)
+   * @param toolName - Tool requesting permission (e.g., "mcp__iris__team_wake")
+   * @param toolInput - Tool input parameters
+   * @param reason - Optional reason from Claude
+   */
+  async handlePermissionRequest(
+    sessionId: string,
+    toolName: string,
+    toolInput: Record<string, unknown>,
+    reason?: string,
+  ): Promise<PermissionDecision> {
+    logger.info("Processing permission request", {
+      sessionId,
+      toolName,
+      reason,
+    });
+
+    // Lookup process from session
+    const process = this.processPool.getProcessBySessionId(sessionId);
+    if (!process) {
+      logger.error({ sessionId }, "Session not found in process pool");
+      return {
+        allow: false,
+        message: `Permission denied: Session not found (${sessionId})`,
+        teamName: "unknown",
+        mode: "no",
+      };
+    }
+
+    const teamName = process.teamName;
+    logger.debug({ sessionId, teamName }, "Resolved team from session");
+
+    // Get team config
+    const teamConfig = this.config.teams[teamName];
+    if (!teamConfig) {
+      logger.error({ teamName }, "Team config not found");
+      return {
+        allow: false,
+        message: `Permission denied: Team config not found (${teamName})`,
+        teamName,
+        mode: "no",
+      };
+    }
+
+    // Get permission mode (default: "yes")
+    const mode = teamConfig.grantPermission || "yes";
+
+    logger.info({
+      teamName,
+      mode,
+      toolName,
+    }, "Checking permission mode");
+
+    // Apply permission rules
+    switch (mode) {
+      case "yes":
+        // Auto-approve all actions
+        logger.info({ teamName, toolName }, "Auto-approving (grantPermission: yes)");
+        return {
+          allow: true,
+          teamName,
+          mode,
+        };
+
+      case "no":
+        // Auto-deny all actions (read-only mode)
+        logger.warn({ teamName, toolName }, "Auto-denying (grantPermission: no)");
+        return {
+          allow: false,
+          message: `Permission denied: Team '${teamName}' is in read-only mode (grantPermission: no)`,
+          teamName,
+          mode,
+        };
+
+      case "ask":
+        // TODO: Emit event to dashboard for manual approval
+        // For now, deny with message explaining feature not yet implemented
+        logger.warn({ teamName, toolName }, "Ask mode not yet implemented, denying");
+        return {
+          allow: false,
+          message: `Permission denied: Interactive approval (grantPermission: ask) not yet implemented for team '${teamName}'`,
+          teamName,
+          mode,
+        };
+
+      case "forward":
+        // TODO: Forward permission request to parent team
+        // For now, deny with message explaining feature not yet implemented
+        logger.warn({ teamName, toolName }, "Forward mode not yet implemented, denying");
+        return {
+          allow: false,
+          message: `Permission denied: Forward mode (grantPermission: forward) not yet implemented for team '${teamName}'`,
+          teamName,
+          mode,
+        };
+
+      default:
+        // Unknown mode - deny for safety
+        logger.error({ teamName, mode }, "Unknown grantPermission mode");
+        return {
+          allow: false,
+          message: `Permission denied: Unknown permission mode '${mode}' for team '${teamName}'`,
+          teamName,
+          mode: "no",
+        };
+    }
   }
 
   /**

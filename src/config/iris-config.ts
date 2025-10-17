@@ -61,6 +61,11 @@ const IrisConfigSchema = z
       .enum(["yes", "no", "ask", "forward"])
       .optional()
       .default("yes"), // How to handle permission requests
+    // Tool allowlist/denylist
+    allowedTools: z.string().optional(), // Comma-separated list of allowed MCP tools (passed to Claude CLI --allowed-tools flag)
+    disallowedTools: z.string().optional(), // Comma-separated list of denied MCP tools (passed to Claude CLI --disallowed-tools flag)
+    // System prompt customization
+    appendSystemPrompt: z.string().optional(), // Additional system prompt to append (passed to Claude CLI --append-system-prompt flag)
   })
   .refine(
     (data) => {

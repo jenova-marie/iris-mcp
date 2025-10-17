@@ -8,7 +8,8 @@
 import { Client, type ConnectConfig, type ClientChannel } from "ssh2";
 import { readFileSync, existsSync } from "fs";
 import { homedir } from "os";
-import { resolve } from "path";
+import { fileURLToPath } from "url";
+import { resolve, dirname, join } from "path";
 import SSHConfig from "ssh-config";
 import { BehaviorSubject, Subject, Observable } from "rxjs";
 import type { CacheEntry } from "../cache/types.js";
@@ -25,6 +26,24 @@ export class ProcessBusyError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProcessBusyError";
+  }
+}
+
+/**
+ * Load and render team identity prompt template
+ */
+function loadTeamIdentityPrompt(teamName: string): string {
+  try {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = dirname(__filename);
+    const templatePath = join(__dirname, "..", "team-identity-prompt.txt");
+    const template = readFileSync(templatePath, "utf8");
+
+    // Simple template rendering: replace {{teamName}} with actual team name
+    return template.replace(/\{\{teamName\}\}/g, teamName);
+  } catch (error) {
+    // Fallback if template file not found
+    return `# Iris MCP ${teamName}\n\nThis is the **${teamName}** team configured in the Iris MCP server for cross-project Claude coordination.`;
   }
 }
 
@@ -407,6 +426,48 @@ export class SSH2Transport implements Transport {
 
     if (this.irisConfig.skipPermissions) {
       args.push("--dangerously-skip-permissions");
+    }
+
+    if (this.irisConfig.allowedTools) {
+      args.push("--allowed-tools", this.irisConfig.allowedTools);
+    }
+
+    if (this.irisConfig.disallowedTools) {
+      args.push("--disallowed-tools", this.irisConfig.disallowedTools);
+    }
+
+    // Build system prompt: team identity + custom append
+    const teamIdentity = loadTeamIdentityPrompt(this.teamName);
+    const systemPrompt = this.irisConfig.appendSystemPrompt
+      ? `${teamIdentity}\n\n${this.irisConfig.appendSystemPrompt}`
+      : teamIdentity;
+
+    args.push("--append-system-prompt", `'${systemPrompt.replace(/'/g, "'\\''")}'`);
+
+    // Add MCP config for reverse tunnel if enabled
+    if (this.irisConfig.enableReverseMcp) {
+      const mcpPort = this.irisConfig.reverseMcpPort || 1615;
+      const protocol = this.irisConfig.allowHttp ? "http" : "https";
+
+      // Use sessionId as the unique path identifier
+      const mcpUrl = `${protocol}://localhost:${mcpPort}/mcp/${this.sessionId}`;
+
+      const mcpConfig = {
+        mcpServers: {
+          iris: {
+            type: "http",
+            url: mcpUrl,
+          },
+        },
+      };
+
+      args.push("--mcp-config", `'${JSON.stringify(mcpConfig)}'`);
+
+      this.logger.debug("Added MCP config to remote Claude command", {
+        teamName: this.teamName,
+        sessionId: this.sessionId,
+        mcpUrl,
+      });
     }
 
     // Change to project directory

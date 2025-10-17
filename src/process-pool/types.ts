@@ -68,6 +68,11 @@ export interface IrisConfig {
   allowHttp?: boolean; // Allow HTTP for reverse MCP (dev only, default: false)
   // Permission approval mode
   grantPermission?: "yes" | "no" | "ask" | "forward"; // How to handle permission requests (default: "yes" for auto-approve)
+  // Tool allowlist/denylist
+  allowedTools?: string; // Comma-separated list of allowed MCP tools (passed to Claude CLI --allowed-tools flag)
+  disallowedTools?: string; // Comma-separated list of denied MCP tools (passed to Claude CLI --disallowed-tools flag)
+  // System prompt customization
+  appendSystemPrompt?: string; // Additional system prompt to append (passed to Claude CLI --append-system-prompt flag)
 }
 
 export interface DashboardConfig {

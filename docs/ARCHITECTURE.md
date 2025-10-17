@@ -682,25 +682,22 @@ Iris is designed for **five progressive phases**:
 
 **Key Settings:**
 
-```json
-{
-  "settings": {
-    "sessionInitTimeout": 30000,    // 30s for session file creation
-    "responseTimeout": 120000,       // 2min for process health (resets)
-    "idleTimeout": 30000000,         // 8.3hr before idle process cleanup
-    "maxProcesses": 10,              // LRU eviction limit
-    "healthCheckInterval": 30000     // 30s health check frequency
-  },
-  "teams": {
-    "team-name": {
-      "path": "/absolute/path/to/project",
-      "description": "Human-readable description",
-      "idleTimeout": 30000000,       // Optional override
-      "skipPermissions": true,       // Auto-approve Claude actions
-      "color": "#FF6B9D"             // Hex color for future UI
-    }
-  }
-}
+```yaml
+settings:
+  sessionInitTimeout: 30000     # 30s for session file creation
+  responseTimeout: 120000       # 2min for process health (resets)
+  idleTimeout: 30000000         # 8.3hr before idle process cleanup
+  maxProcesses: 10              # LRU eviction limit
+  healthCheckInterval: 30000    # 30s health check frequency
+
+teams:
+  team-name:
+    path: /absolute/path/to/project
+    description: Human-readable description
+    idleTimeout: 30000000       # Optional override
+    skipPermissions: true       # Auto-approve Claude actions (deprecated)
+    grantPermission: yes        # Permission mode: yes/no/ask/forward
+    color: "#FF6B9D"            # Hex color for future UI
 ```
 
 **Hot-Reload:** Config watched with `fs.watchFile()`, reloads on changes

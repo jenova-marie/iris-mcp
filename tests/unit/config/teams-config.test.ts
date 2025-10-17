@@ -163,16 +163,16 @@ describe("TeamsConfigManager", () => {
       mockExit.mockRestore();
     });
 
-    it("should throw ConfigurationError on invalid JSON", async () => {
+    it("should throw ConfigurationError on invalid YAML", async () => {
       const { readFileSync, existsSync } = await import("fs");
 
       vi.mocked(existsSync).mockReturnValue(true);
-      vi.mocked(readFileSync).mockReturnValue("{ invalid json");
+      vi.mocked(readFileSync).mockReturnValue("{ invalid yaml");
 
       manager = new TeamsConfigManager("/test/config.json");
 
       expect(() => manager.load()).toThrow(ConfigurationError);
-      expect(() => manager.load()).toThrow("Invalid JSON");
+      expect(() => manager.load()).toThrow("Invalid YAML");
     });
 
     it("should throw ConfigurationError on validation failure", async () => {
@@ -229,6 +229,114 @@ describe("TeamsConfigManager", () => {
       // Just verify config loaded successfully (logger warning is internal implementation)
       expect(config.teams["team-alpha"]).toBeDefined();
       expect(config.teams["team-alpha"].path).toBe("/nonexistent/path");
+    });
+
+    it("should apply default grantPermission value of 'yes'", async () => {
+      const { readFileSync, existsSync } = await import("fs");
+
+      const validConfig = {
+        settings: {
+          idleTimeout: 300000,
+          maxProcesses: 10,
+          healthCheckInterval: 30000,
+          sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
+          responseTimeout: 120000,
+        },
+        teams: {
+          "team-alpha": {
+            path: "/absolute/path/team-alpha",
+            description: "Test team alpha",
+          },
+        },
+      };
+
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
+
+      manager = new TeamsConfigManager("/test/config.json");
+      const config = manager.load();
+
+      // Default value should be applied by Zod schema
+      expect(config.teams["team-alpha"].grantPermission).toBe("yes");
+    });
+
+    it("should accept valid grantPermission values", async () => {
+      const { readFileSync, existsSync } = await import("fs");
+
+      const validConfig = {
+        settings: {
+          idleTimeout: 300000,
+          maxProcesses: 10,
+          healthCheckInterval: 30000,
+          sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
+          responseTimeout: 120000,
+        },
+        teams: {
+          "team-yes": {
+            path: "/path/team-yes",
+            description: "Team with yes",
+            grantPermission: "yes",
+          },
+          "team-no": {
+            path: "/path/team-no",
+            description: "Team with no",
+            grantPermission: "no",
+          },
+          "team-ask": {
+            path: "/path/team-ask",
+            description: "Team with ask",
+            grantPermission: "ask",
+          },
+          "team-forward": {
+            path: "/path/team-forward",
+            description: "Team with forward",
+            grantPermission: "forward",
+          },
+        },
+      };
+
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
+
+      manager = new TeamsConfigManager("/test/config.json");
+      const config = manager.load();
+
+      expect(config.teams["team-yes"].grantPermission).toBe("yes");
+      expect(config.teams["team-no"].grantPermission).toBe("no");
+      expect(config.teams["team-ask"].grantPermission).toBe("ask");
+      expect(config.teams["team-forward"].grantPermission).toBe("forward");
+    });
+
+    it("should reject invalid grantPermission values", async () => {
+      const { readFileSync, existsSync } = await import("fs");
+
+      const invalidConfig = {
+        settings: {
+          idleTimeout: 300000,
+          maxProcesses: 10,
+          healthCheckInterval: 30000,
+          sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
+          responseTimeout: 120000,
+        },
+        teams: {
+          "team-alpha": {
+            path: "/absolute/path/team-alpha",
+            description: "Test team alpha",
+            grantPermission: "invalid-value",
+          },
+        },
+      };
+
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(invalidConfig));
+
+      manager = new TeamsConfigManager("/test/config.json");
+
+      expect(() => manager.load()).toThrow(ConfigurationError);
+      expect(() => manager.load()).toThrow("Configuration validation failed");
     });
   });
 
@@ -483,7 +591,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync)
         .mockReturnValueOnce(JSON.stringify(validConfig))
-        .mockReturnValueOnce("{ invalid json");
+        .mockReturnValueOnce("{ invalid yaml");
 
       manager = new TeamsConfigManager("/test/config.json");
       manager.load();
@@ -491,7 +599,7 @@ describe("TeamsConfigManager", () => {
       const callback = vi.fn();
       manager.watch(callback);
 
-      // Simulate file change with invalid JSON
+      // Simulate file change with invalid YAML
       const watchCallback = vi.mocked(watchFile).mock.calls[0][2];
       watchCallback();
 

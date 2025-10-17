@@ -3,7 +3,7 @@
  */
 
 import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Settings, Activity } from 'lucide-react';
+import { Settings, Activity, FileText } from 'lucide-react';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 export function Layout() {
@@ -13,6 +13,7 @@ export function Layout() {
   const navItems = [
     { path: '/', label: 'Processes', icon: Activity },
     { path: '/config', label: 'Configuration', icon: Settings },
+    { path: '/logs', label: 'Logs', icon: FileText },
   ];
 
   return (

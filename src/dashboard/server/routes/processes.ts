@@ -201,26 +201,26 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
    */
   router.post("/terminal/launch", async (req, res) => {
     try {
-      const { sessionId, toTeam, fromTeam = "dashboard" } = req.body;
+      const { sessionId } = req.body;
 
-      if (!toTeam) {
+      if (!sessionId) {
         return res.status(400).json({
           success: false,
-          error: "Missing required field: toTeam",
+          error: "Missing required field: sessionId",
         });
       }
 
       logger.info(
-        { toTeam, fromTeam, sessionId },
+        { sessionId },
         "Dashboard requesting terminal fork via MCP action",
       );
 
       try {
         // Use the fork MCP action (same logic as MCP clients)
-        const result = await bridge.forkSession(fromTeam, toTeam);
+        const result = await bridge.forkSessionById(sessionId);
 
         logger.info(
-          { toTeam, fromTeam, result },
+          { sessionId, result },
           "Terminal fork launched successfully via MCP action",
         );
 
@@ -237,8 +237,7 @@ export function createProcessesRouter(bridge: DashboardStateBridge): Router {
               forkError instanceof Error
                 ? forkError
                 : new Error(String(forkError)),
-            toTeam,
-            fromTeam,
+            sessionId,
           },
           "Failed to fork session via MCP action",
         );

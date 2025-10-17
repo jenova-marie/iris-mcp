@@ -56,8 +56,8 @@ export const api = {
     apiClient.post(`/processes/delete/${fromTeam}/${toTeam}`),
 
   // Terminal
-  launchTerminal: (sessionId: string, toTeam: string) =>
-    apiClient.post("/processes/terminal/launch", { sessionId, toTeam }),
+  launchTerminal: (sessionId: string) =>
+    apiClient.post("/processes/terminal/launch", { sessionId }),
 
   // Health
   getHealth: () => apiClient.get("/health"),

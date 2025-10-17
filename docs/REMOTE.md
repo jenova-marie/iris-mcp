@@ -1,7 +1,7 @@
-# Remote Team Execution Documentation (Future)
+# Remote Team Execution Documentation
 
-**Status:** Design Phase / Future Enhancement
-**Target Release:** Phase 5 or standalone Phase 6
+**Status:** ✅ IMPLEMENTED (Live Feature)
+**Version:** 0.0.1+
 **Purpose:** Enable distributed AI orchestration across remote hosts via SSH
 
 ---
@@ -23,9 +23,9 @@
 
 ## Overview
 
-**Current Limitation:** All Claude Code processes execute locally on the machine running Iris MCP.
+**Feature:** Remote team execution allows Claude Code processes to run on distributed hosts via SSH.
 
-**Proposed Enhancement:** Allow team configurations to specify **remote execution commands** (typically SSH) to run Claude Code on distributed hosts.
+**Implementation:** Team configurations can specify **remote execution commands** to run Claude Code on any SSH-accessible host.
 
 **Example Configuration:**
 ```json
@@ -47,34 +47,51 @@
 
 **Key Innovation:** Transparent remote execution - Iris treats remote teams identically to local teams, with all complexity hidden in the transport layer.
 
+## Implementation Status
+
+**✅ Implemented Features:**
+- SSH transport via OpenSSH client (default)
+- SSH config integration (`~/.ssh/config` support)
+- Remote process spawning and stdio streaming
+- Session lifecycle tied to SSH connections
+- Keepalive and connection management
+- Error handling and graceful failures
+- ProxyJump/bastion support via SSH config
+- `claudePath` configuration for custom Claude CLI paths
+- **Reverse MCP** - Remote Claude instances can call back to local Iris via SSH tunnel
+
+**🔮 Future Enhancements:**
+- ssh2 library transport (pure JavaScript, opt-in)
+- Auto-reconnect logic for transient network failures
+- Connection state tracking (online/offline/error)
+- Docker transport (`docker exec`)
+- Kubernetes transport (`kubectl exec`)
+- WebSocket/HTTP transport
+
 ---
 
-## Vision
+## Use Cases
 
-### The Problem: Distributed Development
+### Supported Environments
 
-Modern development environments are increasingly distributed:
+Remote execution enables coordination across distributed environments:
 
 - **Cloud Workspaces**: GitHub Codespaces, AWS Cloud9, Gitpod
 - **Specialized Hardware**: GPU clusters, high-memory machines, ARM servers
 - **Security Requirements**: Sensitive codebases on isolated hosts
 - **Geographic Distribution**: Teams in different data centers/regions
-- **Development Containers**: Docker/Kubernetes environments
+- **Development Containers**: Docker/Kubernetes environments (future)
 - **Hybrid Work**: Some developers local, some remote
 
-**Current Iris MCP:** Only coordinates local projects on a single machine.
+### What Remote Execution Provides
 
-**Enhanced Iris MCP:** Coordinates AI agents across any SSH-accessible host.
+Iris can now:
 
-### The Solution: Remote Team Execution
-
-Enable Iris to:
-
-1. **Spawn Claude Code processes on remote hosts via SSH**
-2. **Maintain stdio streaming across SSH connections**
-3. **Handle connection failures gracefully with auto-reconnect**
-4. **Track connection state (online/offline/error) in session management**
-5. **Provide transparent experience - remote looks like local**
+1. ✅ **Spawn Claude Code processes on remote hosts via SSH**
+2. ✅ **Maintain stdio streaming across SSH connections**
+3. ✅ **Handle connection failures gracefully**
+4. 🔮 **Track connection state (online/offline/error)** - Planned
+5. ✅ **Provide transparent experience - remote looks like local**
 
 ---
 
@@ -161,18 +178,20 @@ interface Transport {
 
 **Implementations:**
 
-1. **LocalTransport** (existing ClaudeProcess logic)
-2. **SSHTransport** (OpenSSH client - default for remote execution)
-3. **RemoteSSH2Transport** (ssh2 library - opt-in via `ssh2: true`)
-4. **Future**: DockerTransport, KubernetesTransport, WSLTransport
+1. ✅ **LocalTransport** - Local process execution (existing)
+2. ✅ **SSHTransport** - OpenSSH client (IMPLEMENTED - default for remote execution)
+3. 🔮 **RemoteSSH2Transport** - ssh2 library (PLANNED - opt-in via `ssh2: true`)
+4. 🔮 **Future**: DockerTransport, KubernetesTransport, WSLTransport
 
 ### Dual SSH Implementation Strategy
 
 Iris supports **two SSH implementations** for remote execution, each with distinct trade-offs:
 
-#### Option 1: OpenSSH Client Transport (Default)
+#### Option 1: OpenSSH Client Transport (✅ IMPLEMENTED - Default)
 
 **Uses:** Local `ssh` command-line client (OpenSSH)
+
+**Status:** Fully implemented and production-ready
 
 **Advantages:**
 - ✅ Leverages existing `~/.ssh/config` automatically
@@ -195,9 +214,11 @@ Iris supports **two SSH implementations** for remote execution, each with distin
 - When SSH agent authentication is required
 - When portability across SSH clients is needed
 
-#### Option 2: ssh2 Library Transport (Opt-in)
+#### Option 2: ssh2 Library Transport (🔮 PLANNED - Opt-in)
 
 **Uses:** Node.js `ssh2` library with `ssh-config` parser
+
+**Status:** Planned for future release
 
 **Advantages:**
 - ✅ Pure JavaScript, no external dependencies
@@ -1611,6 +1632,14 @@ Remote team execution transforms Iris MCP from a **local orchestrator** into a *
 
 ---
 
-**Document Version:** 1.0 (Proposal)
-**Last Updated:** October 2025
-**Status:** Design Phase - Pending Implementation
+**Document Version:** 2.0 (Implemented)
+**Last Updated:** January 2025
+**Status:** ✅ Live Feature - Production Ready
+
+**Changes from v1.0:**
+- OpenSSH client transport fully implemented
+- Remote execution via SSH is production-ready
+- Reverse MCP feature added for bidirectional communication
+- SSH config integration working
+- Process lifecycle management implemented
+- Updated implementation sections to reflect live status

@@ -142,6 +142,10 @@ CREATE TABLE IF NOT EXISTS team_sessions (
   -- Response tracking (NEW - refactored architecture)
   last_response_at INTEGER,
 
+  -- Debug info (NEW - for troubleshooting) ✅
+  launch_command TEXT,               -- Full command used to spawn process
+  team_config_snapshot TEXT,         -- JSON snapshot of team config at spawn time
+
   -- Constraints
   UNIQUE(from_team, to_team)         -- One session per team pair
 );
@@ -186,6 +190,18 @@ private migrateSchema(): void {
   if (!columns.some(col => col.name === "last_response_at")) {
     this.db.exec(
       "ALTER TABLE team_sessions ADD COLUMN last_response_at INTEGER"
+    );
+  }
+
+  if (!columns.some(col => col.name === "launch_command")) {
+    this.db.exec(
+      "ALTER TABLE team_sessions ADD COLUMN launch_command TEXT"
+    );
+  }
+
+  if (!columns.some(col => col.name === "team_config_snapshot")) {
+    this.db.exec(
+      "ALTER TABLE team_sessions ADD COLUMN team_config_snapshot TEXT"
     );
   }
 }
@@ -682,6 +698,13 @@ class SessionManager {
   recordUsage(sessionId: string): void;
   incrementMessageCount(sessionId: string, count?: number): void;
 
+  // Debug info ✅
+  updateDebugInfo(
+    sessionId: string,
+    launchCommand: string,
+    teamConfigSnapshot: string
+  ): void;
+
   // Queries
   listSessions(filters?: SessionFilters): SessionInfo[];
   getStats(): { total: number; active: number; archived: number; totalMessages: number };
@@ -715,6 +738,13 @@ class SessionStore {
   setCurrentCacheSessionId(sessionId: string, cacheSessionId: string | null): void;
   updateLastResponse(sessionId: string, timestamp: number): void;
 
+  // Debug info (NEW) ✅
+  updateDebugInfo(
+    sessionId: string,
+    launchCommand: string,
+    teamConfigSnapshot: string
+  ): void;
+
   // Statistics
   getStats(): { total: number; active: number; archived: number; totalMessages: number };
 
@@ -743,6 +773,10 @@ interface SessionInfo {
   processState: ProcessState;
   currentCacheSessionId: string | null;
   lastResponseAt: number | null;
+
+  // NEW - Debug info for troubleshooting ✅
+  launchCommand: string | null;
+  teamConfigSnapshot: string | null;
 }
 ```
 
@@ -770,5 +804,27 @@ interface SessionInfo {
 
 ---
 
-**Document Version:** 1.0
+## Tech Writer Notes
+
+**Coverage Areas:**
+- Session management architecture (two-layer design with SessionManager and SessionStore)
+- SQLite database schema for team_sessions table
+- In-memory caching strategy for performance
+- Process state tracking (stopped/spawning/idle/processing/terminating)
+- Debug info fields (launch_command, team_config_snapshot) for troubleshooting
+- Schema migration for graceful upgrades
+- Session lifecycle (creation, usage, state transitions)
+- Integration with Iris Orchestrator and Process Pool
+- API reference for SessionManager and SessionStore
+- Performance characteristics and scalability
+
+**Keywords:** session management, SQLite, SessionManager, SessionStore, team_sessions, process state, cache, WAL mode, session lifecycle, debug info, launch command, team config snapshot, getOrCreateSession, updateProcessState, updateDebugInfo, persistent storage
+
+**Last Updated:** 2025-10-17
+**Change Context:** Added debug info fields (launch_command, team_config_snapshot) to database schema, migration code, API methods (updateDebugInfo), and SessionInfo interface. These fields enable troubleshooting of process spawn issues by capturing the exact command and team configuration used.
+**Related Files:** DASHBOARD.md (debug info display in UI), ARCHITECTURE.md (overall system design), PROCESS_POOL.md (process lifecycle), CONFIG.md (team configuration)
+
+---
+
+**Document Version:** 1.1
 **Last Updated:** October 2025

@@ -47,7 +47,7 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 - **Zod Validation**: Strict schema validation for all configuration fields with helpful error messages
 - **Team Overrides**: Per-team `idleTimeout`, `sessionInitTimeout`, `skipPermissions`, and `grantPermission` settings
 - **Global Settings**: Configurable `maxProcesses`, `healthCheckInterval`, and default timeouts
-- **Permission Control**: New `grantPermission` field (yes/no/ask/forward) for granular permission approval (schema-only, implementation pending)
+- **Permission Control**: `grantPermission` field (yes/no/ask/forward) for granular permission approval ✅ (ask mode fully implemented with dashboard UI)
 
 ### MCP Tools (15 Total)
 
@@ -178,10 +178,37 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 ### Configuration Editor
 
 - **Live Config Editing**: Edit `config.yaml` directly from web UI with validation
-- **Team Management**: Add, edit, remove teams with path, description, color, grantPermission configuration
+- **Team Management**: Add, edit, remove teams with path, description, color, grantPermission configuration ✅
 - **Settings Panel**: Adjust maxProcesses, idleTimeout, healthCheckInterval without restart
 - **Validation Feedback**: Real-time Zod validation errors displayed inline
 - **Environment Variables**: Support for editing environment variable interpolations
+
+### Permission Approval System ✅
+
+- **Real-Time Permission Modal**: Auto-popup approval UI when remote teams request permissions (ask mode)
+- **Full Context Display**: Shows tool name, input parameters (JSON), reason, team name, session ID
+- **One-Click Approval**: Approve/Deny buttons with color-coded actions (green/red)
+- **Countdown Timer**: 60-second auto-deny timeout with visible countdown
+- **WebSocket Integration**: `permission:request`, `permission:resolved`, `permission:timeout` events
+- **Graceful Timeout Handling**: Auto-dismisses modal on timeout with cleanup
+
+### Log Viewer ✅
+
+- **Real-Time Log Streaming**: Live logs from wonder-logger memory transport via WebSocket
+- **Level Filtering**: trace, debug, info, warn, error, fatal with color-coded badges
+- **Text Search**: Client-side filtering across all log fields (message, context, custom fields)
+- **Auto-Scroll Toggle**: Hands-free monitoring with automatic scroll to bottom
+- **Timestamp Display**: Millisecond precision (HH:MM:SS.mmm format)
+- **Statistics**: Total logs and filtered count display
+- **Export Controls**: Start/Stop streaming, Clear logs, Apply level filter buttons
+
+### Debug Info Display ✅
+
+- **Launch Command Inspection**: View exact `claude` command used to spawn process
+- **Team Config Snapshot**: JSON snapshot of server-side team configuration at spawn time
+- **Expandable Sections**: Collapsible debug info per session (▶/▼ toggle)
+- **Troubleshooting Aid**: Compare client vs server config, verify spawn arguments
+- **Audit Trail**: Persistent record of session spawn parameters
 
 ### HTTP/HTTPS Support
 
@@ -199,10 +226,12 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 
 ### UI Features (Implemented)
 
-- **React Router**: Client-side routing with `/` (ProcessMonitor) and `/config` (ConfigEditor)
-- **Layout Component**: Shared navigation and header across all pages
+- **React Router**: Client-side routing with `/` (ProcessMonitor), `/config` (ConfigEditor), `/logs` (LogViewer) ✅
+- **Global Modals**: Permission approval modal integrated in App.tsx with WebSocket subscriptions ✅
+- **Layout Component**: Shared navigation with 3 pages (Processes, Configuration, Logs) ✅
 - **TanStack Query**: Optimized data fetching with caching and refetch strategies
 - **Responsive Design**: Mobile-friendly UI (framework in place, styling in progress)
+- **WebSocket Hooks**: Callback refs pattern in `useWebSocket` for permission and log subscriptions ✅
 
 ---
 
@@ -484,9 +513,9 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 
 **Keywords:** features, capabilities, MCP tools, configuration, YAML, environment variables, grantPermission, process pool, remote execution, observability, dashboard, API, CLI, intelligence layer, performance metrics, technology stack
 
-**Last Updated:** 2025-10-16
-**Change Context:** Updated Configuration Management section to document YAML format, environment variable interpolation (${VAR:-default}), and new grantPermission field. Added YAML to technology stack. Updated Dashboard configuration editor to mention grantPermission support.
-**Related Files:** CONFIG.md (complete configuration documentation), GETTING_STARTED.md (quick start), README.md (overview), ARCHITECTURE.md (system design)
+**Last Updated:** 2025-10-17
+**Change Context:** Updated permission approval system status from "schema-only, implementation pending" to ✅ fully implemented with dashboard UI. Added new dashboard features: Permission Approval System, Log Viewer, and Debug Info Display sections. Updated UI features to include /logs route, global modals, and WebSocket hooks. All ask mode permission functionality is now live with real-time modal approval.
+**Related Files:** PERMISSIONS.md (permission system details), DASHBOARD.md (UI documentation), CONFIG.md (configuration), SESSION.md (debug info fields), GETTING_STARTED.md (quick start), README.md (overview), ARCHITECTURE.md (system design)
 
 ---
 

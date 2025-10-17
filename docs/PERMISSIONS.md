@@ -43,7 +43,7 @@ Remote Claude (via reverse MCP tunnel)
 
 Configure permission behavior using the `grantPermission` field in team config:
 
-### Mode: `yes` (Default)
+### Mode: `yes`
 
 **Auto-approve all tool requests**
 
@@ -53,7 +53,7 @@ teams:
     path: /path/to/backend
     remote: "ssh backend-server"
     enableReverseMcp: true
-    grantPermission: yes  # Auto-approve (default)
+    grantPermission: yes  # Auto-approve
 ```
 
 **Behavior:**
@@ -95,7 +95,7 @@ teams:
 
 ---
 
-### Mode: `ask`
+### Mode: `ask` (Default) ✅
 
 **Prompt user via dashboard for manual approval**
 
@@ -105,21 +105,24 @@ teams:
     path: /path/to/qa
     remote: "ssh qa-server"
     enableReverseMcp: true
-    grantPermission: ask  # Manual approval required
+    grantPermission: ask  # Manual approval required (default)
 ```
 
-**Behavior:**
-- Tool requests create pending permission entries
-- Dashboard displays real-time approval popup with context
-- User manually approves or denies each request
-- Configurable timeout (default: 30 seconds, see `permissionTimeout` in settings)
-- Auto-denies on timeout
+**Status:** ✅ **Fully Implemented** (as of v0.0.1)
 
-**Dashboard Integration:**
-- WebSocket broadcast of permission requests
-- Shows tool name, input parameters, reason, and recent conversation context
+**Behavior:**
+- Tool requests create pending permission entries via `PendingPermissionsManager`
+- Dashboard displays real-time approval modal with full context
+- User manually approves or denies each request with one click
+- Configurable timeout (default: 30 seconds, see `permissionTimeout` in settings)
+- Auto-denies on timeout with cleanup
+
+**Dashboard Integration:** ✅ **Live**
+- WebSocket broadcast of permission requests (`permission:request` event)
+- Real-time modal popup with tool name, input parameters, reason, session context
 - One-click approve/deny buttons
-- Timeout countdown display
+- Countdown timer display (60 seconds default in UI)
+- Auto-dismisses on timeout with `permission:timeout` event
 
 **Use cases:**
 - QA/testing environments
@@ -300,36 +303,50 @@ export async function permissionsApprove(
 }
 ```
 
-### 5. Pending Permissions Manager
+### 5. Pending Permissions Manager ✅
 
-**File:** `src/permissions/pending-manager.ts`
+**File:** `src/permissions/pending-manager.ts` (Implemented)
 
 Manages "ask" mode permission requests with:
-- Promise-based resolution (blocks Claude until approved/denied/timeout)
-- Automatic timeout handling (default 30s)
-- EventEmitter for WebSocket broadcast to dashboard
-- Unique permission IDs for tracking
+- **Promise-based resolution**: Blocks Claude process until user approves/denies or timeout occurs
+- **Automatic timeout handling**: Configurable timeout (default 5 minutes via `permissionTimeout` setting)
+- **EventEmitter integration**: Broadcasts events to dashboard via WebSocket
+- **Unique permission IDs**: UUID-based tracking for each request
+- **Auto-cleanup**: Resolves pending promises on timeout and removes stale entries
 
 **Events:**
-- `permission:created` - New permission request (broadcast to dashboard)
-- `permission:resolved` - Permission approved/denied by user
-- `permission:timeout` - Permission timed out (auto-denied)
+- `permission:created` - New permission request created (broadcast to dashboard clients)
+- `permission:resolved` - Permission approved/denied by user via dashboard
+- `permission:timeout` - Permission request timed out (auto-denied)
 
 **API:**
 ```typescript
-// Create pending permission (blocks until resolved)
+// Create pending permission (async - blocks until resolved or timeout)
 const response = await pendingPermissions.createPendingPermission(
   sessionId,
   teamName,
   toolName,
   toolInput,
-  reason,
-  timeoutMs
+  reason
+);
+// Returns: { approved: boolean, reason?: string }
+
+// Dashboard approves/denies (called via WebSocket handler)
+const success = pendingPermissions.resolvePendingPermission(
+  permissionId,
+  approved,
+  reason
 );
 
-// Dashboard approves/denies
-pendingPermissions.resolvePendingPermission(permissionId, approved, reason);
+// Get all pending requests (for dashboard UI)
+const pending = pendingPermissions.getPendingRequests();
 ```
+
+**Integration Points:**
+- **IrisOrchestrator** (`src/iris.ts:1846-1903`): Calls `createPendingPermission()` for "ask" mode
+- **DashboardStateBridge** (`src/dashboard/server/state-bridge.ts`): Forwards events to WebSocket clients
+- **Dashboard Server** (`src/dashboard/server/index.ts`): WebSocket handlers for `permission:response` events
+- **MCP Server** (`src/mcp_server.ts:932-934`): Initializes manager with configurable timeout
 
 ### 6. HTTP Route Handler
 
@@ -390,41 +407,84 @@ Each team has isolated permission scope:
 - No cross-team permission inheritance (except future "forward" mode)
 - Dashboard approval shows full tool context for informed decisions
 
-## Dashboard Integration
+## Dashboard Integration ✅
 
-### WebSocket Events
+### WebSocket Events (Implemented)
 
-The dashboard listens for permission events via WebSocket:
+The dashboard receives real-time permission events via WebSocket (Socket.io):
 
+**Server → Client Events** (`src/dashboard/server/index.ts:1305-1324`):
 ```typescript
-// Server-side (future dashboard implementation)
-pendingPermissions.on('permission:created', (request) => {
-  io.emit('permission-request', request);
+socket.emit('permission:request', {
+  permissionId: string,
+  sessionId: string,
+  teamName: string,
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  reason?: string,
+  createdAt: string
 });
 
-pendingPermissions.on('permission:resolved', (result) => {
-  io.emit('permission-resolved', result);
+socket.emit('permission:resolved', {
+  permissionId: string,
+  approved: boolean,
+  reason?: string
+});
+
+socket.emit('permission:timeout', {
+  permissionId: string,
+  request: PendingPermissionRequest
 });
 ```
 
-### REST API Endpoints
+**Client → Server Events** (`src/dashboard/server/index.ts:1333-1361`):
+```typescript
+socket.on('permission:response', {
+  permissionId: string,
+  approved: boolean,
+  reason?: string
+});
+```
 
-*Planned for dashboard implementation:*
+**Event Flow:**
+1. Remote Claude requests permission → `PendingPermissionsManager` creates pending entry
+2. Manager emits `permission:created` → `DashboardStateBridge` forwards as `ws:permission:request`
+3. Dashboard server broadcasts `permission:request` to all connected WebSocket clients
+4. User responds via modal → Client sends `permission:response`
+5. Server calls `bridge.resolvePermission()` → Unblocks Claude process
+6. Manager emits `permission:resolved` → Dashboard server broadcasts to all clients
 
-- `GET /api/permissions` - List pending permissions
-- `POST /api/permissions/:id/approve` - Approve permission
-- `POST /api/permissions/:id/deny` - Deny permission
+### State Bridge API (Implemented)
 
-### UI Components
+**File:** `src/dashboard/server/state-bridge.ts:1690-1714`
 
-*Planned for dashboard implementation:*
+```typescript
+// Get all pending permission requests
+const pending = bridge.getPendingPermissions();
 
-**Permission Approval Modal:**
-- Real-time popup on new permission request
-- Shows tool name, input parameters, reason
-- Recent conversation context (last 5 messages)
-- One-click approve/deny buttons
-- Timeout countdown display
+// Resolve a permission request
+const success = bridge.resolvePermission(permissionId, approved, reason);
+```
+
+### UI Components ✅
+
+**Permission Approval Modal** (`src/dashboard/client/src/components/PermissionApprovalModal.tsx`)
+
+**Features:**
+- Real-time popup on new permission request (via WebSocket)
+- Displays tool name, input parameters (JSON formatted), reason, team name, session ID
+- One-click approve/deny buttons with color-coded actions (green/red)
+- Countdown timer (60 seconds default) with auto-dismiss on timeout
+- Clean modal design with backdrop blur
+- Full parameter inspection with scrollable JSON view
+
+**Implementation Details:**
+- Integrated in `App.tsx` as global modal
+- Uses `useWebSocket` hook for permission event subscription
+- Automatically shows/hides based on pending permission state
+- Timeout handled gracefully with `onTimeout` callback
+
+See [DASHBOARD.md](./DASHBOARD.md#permission-approval-system) for complete dashboard documentation.
 
 ## Troubleshooting
 
@@ -592,15 +652,25 @@ interface PendingPermissionRequest {
 }
 ```
 
+## Implemented Features ✅
+
+1. **Ask Mode** - Real-time dashboard approval with WebSocket integration
+2. **Pending Permissions Manager** - Promise-based blocking with timeout handling
+3. **Dashboard UI** - Permission approval modal with full context display
+4. **Event System** - EventEmitter integration for reactive permission flow
+5. **Session-Based Detection** - AsyncLocalStorage context for team identification
+
 ## Future Enhancements
 
-1. **Forward Mode Implementation** - Hierarchical permission delegation
+1. **Forward Mode Implementation** - Hierarchical permission delegation to parent teams
 2. **Permission History** - SQLite storage of approval decisions for audit trail
-3. **Permission Policies** - Fine-grained rules per tool/action
+3. **Permission Policies** - Fine-grained rules per tool/action (allowlist/denylist)
 4. **Notification Integration** - Slack/webhook forwarding for remote approval
-5. **Permission Templates** - Reusable permission profiles
+5. **Permission Templates** - Reusable permission profiles across teams
 6. **Time-Based Restrictions** - Approval windows (e.g., business hours only)
 7. **Multi-Factor Approval** - Require multiple approvers for sensitive operations
+8. **Bulk Approval** - Approve multiple pending requests at once
+9. **Permission Analytics** - Track approval rates, common denials, tool usage patterns
 
 ## Testing
 
@@ -640,3 +710,25 @@ pnpm start
 # 5. Approve/deny via dashboard
 # Check dashboard UI for approval modal
 ```
+
+---
+
+## Tech Writer Notes
+
+**Coverage Areas:**
+- Permission approval system architecture and modes (yes/no/ask/forward)
+- SessionId-based team detection using AsyncLocalStorage
+- PendingPermissionsManager implementation and API
+- Dashboard integration with WebSocket events (permission:request, permission:resolved, permission:timeout)
+- Permission Approval Modal UI component
+- MCP config injection for session-specific URLs
+- Security considerations (read-only mode, permission boundaries)
+- Configuration options (grantPermission field, permissionTimeout setting)
+- Implementation details for all permission system components
+- Troubleshooting permission-related issues
+
+**Keywords:** permissions, grantPermission, ask mode, PendingPermissionsManager, permission approval, dashboard modal, WebSocket events, AsyncLocalStorage, sessionId, team detection, reverse MCP, remote teams, security, timeout handling, permission:request, permission:resolved
+
+**Last Updated:** 2025-10-17
+**Change Context:** Updated "ask" mode from planned to fully implemented (✅). Added details on PendingPermissionsManager implementation, dashboard WebSocket integration, and Permission Approval Modal UI. Changed default permission mode from "yes" to "ask" for safer defaults. Added implementation file references and integration points. Documented complete event flow and API methods.
+**Related Files:** DASHBOARD.md (permission modal UI), CONFIG.md (grantPermission configuration), REMOTE.md (reverse MCP integration), TEAM_IDENTIFICATION.md (sessionId-based detection)

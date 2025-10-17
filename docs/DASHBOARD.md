@@ -37,6 +37,9 @@ The dashboard consists of two main components:
 - Manage sessions (sleep, reboot, delete)
 - Edit configuration with live validation
 - Real-time updates via WebSocket
+- **Approve/deny permission requests** from remote teams ✅
+- **Stream logs** from wonder-logger memory transport ✅
+- **Debug session spawning** with launch command and config inspection ✅
 
 ---
 
@@ -136,6 +139,24 @@ Color-coded status badges:
 
 All actions show confirmation dialogs and loading states.
 
+#### Debug Info (Expandable) ✅
+
+**New Feature**: Each session card now includes a collapsible "Debug Info" section (if available).
+
+**Displays**:
+- **Launch Command**: The full `claude` command used to spawn the process (with all args)
+- **Team Config (Server-Side)**: JSON snapshot of the team configuration at spawn time
+
+**Purpose**:
+- Troubleshooting spawn failures or configuration issues
+- Verifying which arguments were passed to Claude CLI
+- Comparing client vs server team configuration
+- Audit trail for session parameters
+
+**Toggle**: Click "▶ Debug Info" to expand, "▼ Debug Info" to collapse
+
+**Availability**: Debug info populated on session wake/reboot (requires `src/actions/wake.ts:106-126`)
+
 #### Header Stats
 
 Top-right summary:
@@ -184,16 +205,138 @@ After successful save, shows purple banner:
 
 **Note**: Changes are written to disk immediately but require server restart to take effect (config hot-reload planned for future).
 
-### 3. Layout & Navigation
+### 3. Log Viewer ✅
+
+**Location**: `/logs` (src/dashboard/client/src/pages/LogViewer.tsx)
+
+Real-time log streaming from wonder-logger's memory transport via WebSocket.
+
+#### Features
+
+- **Live log streaming** with 1-second polling interval
+- **Level filtering**: trace, debug, info, warn, error, fatal with color-coded badges
+- **Text search** across all log fields (message, context, custom fields)
+- **Auto-scroll toggle** for hands-free monitoring
+- **Timestamp display** with millisecond precision (HH:MM:SS.mmm format)
+- **Statistics** showing total logs and filtered count
+
+#### Controls
+
+**Stream Controls**:
+- Start/Stop streaming buttons
+- Clear logs button
+
+**Level Filters**:
+- Click individual levels to filter (shows all by default)
+- Apply Filter button to restart stream with new levels
+- Color-coded badges match log entry colors
+
+**Display Options**:
+- Auto-scroll checkbox (enabled by default)
+- Search filter input (real-time client-side filtering)
+
+#### Log Display Format
+
+Each log entry shows:
+- **Timestamp** (HH:MM:SS.mmm)
+- **Level** (uppercase, color-coded)
+- **Context** (purple text in brackets, e.g., `[iris:core]`)
+- **Message** (main log text)
+- **Additional fields** (collapsed under main entry, shows all extra properties)
+
+**Color Coding**:
+- **trace**: gray
+- **debug**: blue
+- **info**: green
+- **warn**: yellow
+- **error**: red
+- **fatal**: red bold
+
+#### Implementation
+
+**Server Integration** (`src/dashboard/server/index.ts:1368-1475`):
+- WebSocket events: `logs:start`, `logs:stop`, `logs:get-stores`
+- Polling mechanism (1-second interval) retrieves new logs since last timestamp
+- Uses `DashboardStateBridge.getLogs()` to query wonder-logger memory
+- Filters by level (optional array of levels)
+- Emits `logs:batch` events with parsed log entries
+
+**Client Hook** (`src/dashboard/client/src/hooks/useWebSocket.ts`):
+- Added `onLogBatch` callback parameter
+- `startLogStream(options)` method with level filtering
+- `stopLogStream()` method
+- `getLogStores()` method (for future multi-store support)
+
+**State Management**:
+- Local React state for logs array, filter, level selection, auto-scroll
+- Incremental log accumulation (never clears unless user clicks Clear)
+- Client-side search filtering (doesn't affect stream)
+
+### 4. Permission Approval System ✅
+
+**Location**: Global modal in App.tsx
+
+Real-time permission approval interface for remote teams using "ask" mode in [grantPermission](./CONFIG.md#permission-modes) configuration.
+
+#### Permission Approval Modal
+
+**Component**: `src/dashboard/client/src/components/PermissionApprovalModal.tsx`
+
+**Triggered By**: Remote Claude instances requesting tool permissions when team configured with `grantPermission: ask`
+
+**Modal Display**:
+- **Header**: Warning icon with "Permission Request" title
+- **Team Name**: Which team is requesting permission
+- **Tool Name**: The MCP tool being requested (monospace font)
+- **Reason**: Optional explanation from Claude for why permission is needed
+- **Input Parameters**: Scrollable JSON view of full tool input
+- **Session ID**: Full session ID (for troubleshooting)
+- **Countdown Timer**: 60-second countdown (auto-denies on timeout)
+
+**Actions**:
+- **Approve** (green button): Grants permission, Claude continues execution
+- **Deny** (red button): Denies permission, Claude receives error
+- **Auto-timeout**: Modal auto-dismisses after 60 seconds, permission denied
+
+**UX Features**:
+- Backdrop blur effect draws focus to modal
+- Gradient orange/yellow header for visibility
+- Full parameter inspection with syntax highlighting
+- One-click approval workflow
+- Graceful timeout handling
+
+#### Integration Flow
+
+1. Remote team Claude requests permission → `PendingPermissionsManager` creates request
+2. Manager emits `permission:created` → `DashboardStateBridge` forwards as `ws:permission:request`
+3. Dashboard server broadcasts `permission:request` via WebSocket → All connected clients receive event
+4. App.tsx shows modal with request details → User clicks Approve/Deny
+5. Client sends `permission:response` → Server calls `bridge.resolvePermission()`
+6. Permission resolved → Claude process unblocked → Modal closes
+
+#### Configuration
+
+Enable permission approval in team config:
+
+```yaml
+teams:
+  qa:
+    grantPermission: ask  # Shows approval modal for every tool request
+```
+
+See [PERMISSIONS.md](./PERMISSIONS.md#dashboard-integration) for complete permission system documentation.
+
+### 5. Layout & Navigation
 
 **Location**: src/dashboard/client/src/components/Layout.tsx
 
 #### Sidebar
 
 - **Header**: "Iris MCP" gradient logo + "Dashboard" subtitle
-- **Navigation**: Two menu items
+- **Navigation**: Three menu items
   - Processes (Activity icon)
   - Configuration (Settings icon)
+  - Logs (FileText icon) ✅
 - **Status Footer**: WebSocket connection indicator
 
 Active route highlighted with purple accent.
@@ -585,6 +728,51 @@ Request cache stream for a session.
 
 *Note: Not yet fully implemented.*
 
+#### `permission:response` ✅
+
+Respond to permission approval request.
+
+**Payload**:
+```json
+{
+  "permissionId": "uuid-string",
+  "approved": true,
+  "reason": "Approved by user via dashboard"
+}
+```
+
+**Handler**: `src/dashboard/server/index.ts:1333-1361`
+
+#### `logs:start` ✅
+
+Start streaming logs from wonder-logger memory.
+
+**Payload**:
+```json
+{
+  "storeName": "iris-mcp",
+  "level": ["info", "warn", "error"]
+}
+```
+
+**Handler**: `src/dashboard/server/index.ts:1368-1447`
+
+#### `logs:stop` ✅
+
+Stop log streaming.
+
+**Payload**: None
+
+**Handler**: `src/dashboard/server/index.ts:1451-1458`
+
+#### `logs:get-stores` ✅
+
+Request list of available log store names.
+
+**Payload**: None
+
+**Handler**: `src/dashboard/server/index.ts:1461-1475`
+
 ### Server → Client
 
 #### `init`
@@ -647,6 +835,103 @@ Real-time cache entry (for future use).
 }
 ```
 
+#### `permission:request` ✅
+
+New permission request from remote team (ask mode).
+
+**Payload**:
+```json
+{
+  "permissionId": "uuid-string",
+  "sessionId": "session-abc123",
+  "teamName": "qa",
+  "toolName": "mcp__filesystem__write_file",
+  "toolInput": { "path": "/tmp/test.txt", "content": "hello" },
+  "reason": "Writing test output",
+  "createdAt": "2025-10-17T12:34:56.789Z"
+}
+```
+
+**Source**: `src/dashboard/server/index.ts:1305-1311`
+
+#### `permission:resolved` ✅
+
+Permission request was approved or denied.
+
+**Payload**:
+```json
+{
+  "permissionId": "uuid-string",
+  "approved": true,
+  "reason": "Approved by user via dashboard"
+}
+```
+
+**Source**: `src/dashboard/server/index.ts:1313-1318`
+
+#### `permission:timeout` ✅
+
+Permission request timed out.
+
+**Payload**:
+```json
+{
+  "permissionId": "uuid-string",
+  "request": { /* PendingPermissionRequest */ }
+}
+```
+
+**Source**: `src/dashboard/server/index.ts:1320-1324`
+
+#### `logs:batch` ✅
+
+Batch of parsed log entries.
+
+**Payload**:
+```json
+{
+  "logs": [
+    {
+      "timestamp": 1697551234567,
+      "level": "info",
+      "context": "iris:core",
+      "message": "Session created",
+      "sessionId": "abc123"
+    }
+  ],
+  "storeName": "iris-mcp",
+  "timestamp": 1697551234567
+}
+```
+
+**Source**: Polling interval in `src/dashboard/server/index.ts:1419-1447`
+
+#### `logs:stores` ✅
+
+List of available log store names (response to `logs:get-stores`).
+
+**Payload**:
+```json
+{
+  "stores": ["iris-mcp", "wonder-logger"]
+}
+```
+
+**Source**: `src/dashboard/server/index.ts:1464`
+
+#### `logs:error` ✅
+
+Error occurred during log retrieval.
+
+**Payload**:
+```json
+{
+  "message": "Failed to retrieve logs: ..."
+}
+```
+
+**Source**: `src/dashboard/server/index.ts:1413`, `1445`, `1470`
+
 #### `error`
 
 Error occurred.
@@ -664,15 +949,18 @@ Error occurred.
 
 ### Core Components
 
-#### App.tsx
+#### App.tsx ✅
 
-Root component with routing and React Query setup.
+Root component with routing, React Query, and permission approval.
 
 - Configures `QueryClient` with:
   - `refetchOnWindowFocus: false`
   - `retry: 1`
 - Wraps app in `QueryClientProvider` and `BrowserRouter`
-- Defines routes: `/` (ProcessMonitor), `/config` (ConfigEditor)
+- Defines routes: `/` (ProcessMonitor), `/config` (ConfigEditor), `/logs` (LogViewer) ✅
+- **Global Permission Modal**: Manages permission approval state and WebSocket integration ✅
+- Connects to WebSocket for `permission:request` events
+- Shows `PermissionApprovalModal` when remote teams request permissions
 
 #### Layout.tsx
 
@@ -728,24 +1016,92 @@ Configuration editing page.
 - Server-side Zod schema validation
 - Detailed error display with field paths
 
+#### LogViewer.tsx ✅
+
+Log streaming page.
+
+**State Management**:
+- `logs`: Accumulated array of parsed log entries
+- `isStreaming`: Boolean streaming state
+- `selectedLevels`: Array of filtered log levels
+- `autoScroll`: Boolean auto-scroll toggle
+- `filter`: Text search string
+
+**Hooks**:
+- `useWebSocket` with `onLogBatch` callback for real-time log updates
+- No polling (server pushes log batches every 1 second)
+
+**Key Functions**:
+- `handleStartStreaming`: Starts log stream with level filter
+- `handleStopStreaming`: Stops server-side polling
+- `handleClearLogs`: Clears local log array
+- `handleToggleLevel`: Adds/removes level from filter
+- `handleApplyFilter`: Restarts stream with new level filter
+
+**Display Features**:
+- Color-coded log levels with background colors
+- Timestamp formatting (HH:MM:SS.mmm)
+- Context labels in purple
+- Expandable additional fields
+- Auto-scroll to bottom
+- Client-side text filtering
+
+#### PermissionApprovalModal.tsx ✅
+
+Permission approval modal component.
+
+**Props**:
+- `request`: `PendingPermissionRequest | null`
+- `onApprove`: Callback with `permissionId`
+- `onDeny`: Callback with `permissionId`
+- `onTimeout`: Callback when countdown reaches zero
+
+**State Management**:
+- `timeRemaining`: Countdown timer (60 seconds)
+- Auto-decrements every second
+- Calls `onTimeout` when reaches zero
+
+**Display**:
+- Modal overlay with backdrop blur
+- Gradient orange/yellow header
+- Team name, tool name, reason, session ID
+- JSON-formatted tool input (scrollable)
+- Countdown timer badge
+- Approve/Deny buttons
+
+**UX**:
+- Only renders when `request` is not null
+- Auto-hides on timeout
+- Prevents backdrop clicks (intentional UX decision)
+
 ### Hooks
 
-#### useWebSocket.ts
+#### useWebSocket.ts ✅
 
-WebSocket connection hook.
+WebSocket connection hook with callback refs pattern.
 
 **Parameters**:
-- `onProcessStatus`: Callback for process updates
-- `onCacheStream`: Callback for cache stream data
+- `onProcessStatus`: Callback for process updates (optional)
+- `onCacheStream`: Callback for cache stream data (optional)
+- `onPermissionRequest`: Callback for permission requests (optional) ✅
+- `onLogBatch`: Callback for log batch updates (optional) ✅
 
 **Returns**:
 - `connected`: Boolean connection state
 - `socket`: Socket.IO client instance
 - `streamCache`: Function to request cache stream
+- `respondToPermission`: Function to approve/deny permissions ✅
+- `startLogStream`: Function to start log streaming with options ✅
+- `stopLogStream`: Function to stop log streaming ✅
+- `getLogStores`: Function to request available log stores ✅
 
 **Events Listened**:
 - `connect`, `disconnect`
 - `init`, `process-status`, `cache-stream`, `config-saved`, `error`
+- `permission:request`, `permission:resolved`, `permission:timeout` ✅
+- `logs:batch`, `logs:stores`, `logs:error` ✅
+
+**Pattern**: Uses callback refs (stored in `useRef`) to allow callback updates without reconnecting socket
 
 ### API Client
 
@@ -779,10 +1135,12 @@ src/dashboard/
     │   ├── App.tsx
     │   ├── main.tsx      # Entry point
     │   ├── components/
-    │   │   └── Layout.tsx
+    │   │   ├── Layout.tsx
+    │   │   └── PermissionApprovalModal.tsx ✅
     │   ├── pages/
     │   │   ├── ProcessMonitor.tsx
-    │   │   └── ConfigEditor.tsx
+    │   │   ├── ConfigEditor.tsx
+    │   │   └── LogViewer.tsx ✅
     │   ├── hooks/
     │   │   └── useWebSocket.ts
     │   ├── api/
@@ -1094,3 +1452,28 @@ Key highlights:
 
 For development help, see [Development](#development).
 For production deployment, see [Deployment](#deployment).
+
+---
+
+## Tech Writer Notes
+
+**Coverage Areas:**
+- Dashboard architecture (session-based model, state bridge pattern, WebSocket communication)
+- Permission Approval Modal and real-time permission UI
+- Log Viewer page with streaming from wonder-logger
+- Debug info display for sessions (launch command, team config snapshot)
+- Process Monitor page features and actions
+- Configuration Editor with validation
+- WebSocket events (process-status, permission:request/resolved/timeout, logs:batch/stores/error)
+- React components (App, Layout, ProcessMonitor, ConfigEditor, LogViewer, PermissionApprovalModal)
+- useWebSocket hook with callback refs pattern
+- API endpoints for sessions, config, fork terminal
+- Build commands, project structure, development workflow
+- SSL/TLS configuration, fork script setup
+- Deployment and production build process
+
+**Keywords:** dashboard, React, WebSocket, Socket.io, permission approval, log viewer, debug info, ProcessMonitor, session management, fork terminal, state bridge, DashboardStateBridge, Express server, TanStack Query, Vite, useWebSocket, permission modal, log streaming, wonder-logger, launch command, team config snapshot
+
+**Last Updated:** 2025-10-17
+**Change Context:** Added permission approval system documentation (modal, WebSocket events, integration flow), log viewer page with streaming capabilities, and debug info display in session cards. Updated component documentation, WebSocket events reference, and project structure. Added cross-references to PERMISSIONS.md for permission system details.
+**Related Files:** PERMISSIONS.md (permission approval details), CONFIG.md (configuration schema), ARCHITECTURE.md (overall system architecture), PROCESS_POOL.md (process pool design), SESSION.md (session management)

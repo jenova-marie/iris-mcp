@@ -146,5 +146,26 @@ For complete license texts, see:
 
 ---
 
-**Last Updated**: 2025-10-15
+## Reference Implementations & Acknowledgments
+
+This project implements interfaces and patterns inspired by or based on the following reference implementations:
+
+### Claude Code Permission Prompt Tool Interface
+
+**Reference**: https://github.com/mmarcen/test_permission-prompt-tool
+**Author**: mmarcen
+**Purpose**: Minimal working example of the MCP permission approval system
+
+Our implementation in `src/actions/grant-permission.ts` follows the same interface specification:
+- Tool name: `permissions__approve` (with double underscore)
+- Input parameters: `tool_name`, `input`, `reason` (optional)
+- Response format: `{ behavior: "allow" | "deny", message?, updatedInput? }`
+
+This reference implementation provided valuable guidance for understanding Claude Code's `--permission-prompt-tool` feature and helped us implement the permission approval mechanism for remote team coordination.
+
+**Acknowledgment**: We are grateful to mmarcen for providing a clear, minimal example that demonstrated the permission prompt interface specification.
+
+---
+
+**Last Updated**: 2025-10-16
 **Dependency Count**: 200+ packages

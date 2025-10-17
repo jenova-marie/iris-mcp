@@ -80,7 +80,13 @@ If you identify functionality changes that need new tests (but don't write them 
 - Document specific test cases that should be added by a developer
 - Include enough detail for a developer to implement the tests
 
-### 7. Maintain Unit Test Changelog
+### 7. Document Persistent Failures
+If any tests cannot be fixed after 3 attempts:
+- Update or create `tests/unit/FAILURES.md` with structured failure documentation
+- Include detailed failure reasons, attempted fixes, and recommendations
+- Prioritize failures for developer attention
+
+### 8. Maintain Unit Test Changelog
 After completing all test updates:
 - Update or create `tests/unit/CHANGELOG.md` following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format
 - Add entry with current date and categorize changes as Added/Changed/Fixed
@@ -151,6 +157,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 **Files:** [count] test files updated, [count] TODO items added
 ```
 
+## FAILURES.md Format
+
+When tests cannot be fixed after 3 attempts, document them in a structured format:
+
+```markdown
+# Unit Test Failures
+
+Persistent test failures that could not be resolved by the unit-test agent after 3 attempts.
+
+## [YYYY-MM-DD] - Agent Session
+
+### [test-filename.test.ts]
+
+#### Test: "[test name]"
+**Failure Reason:** [Detailed description of why the test is failing]
+**Attempts Made:**
+1. [Description of first fix attempt and result]
+2. [Description of second fix attempt and result] 
+3. [Description of third fix attempt and result]
+
+**Source Changes:** [What code changes triggered this test failure]
+**Error Message:**
+```
+[Full error output from vitest]
+```
+
+**Recommended Action:** [Suggest what a developer should investigate]
+**Priority:** High/Medium/Low
+
+---
+```
+
 ## Test Update Guidelines
 
 ### DO:
@@ -163,11 +201,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - ✅ Preserve the original testing intent
 
 ### DON'T:
-- ❌ Add entirely new test cases (document in REQUESTED.md instead)
+- ❌ Add entirely new test cases (document in TODO.md instead)
 - ❌ Remove tests without understanding why they exist
 - ❌ Change test logic unless the underlying behavior changed
 - ❌ Simplify tests just to make them pass
 - ❌ Ignore failing tests that reveal actual bugs
+- ❌ Continue trying to fix a test beyond 3 attempts (document in FAILURES.md instead)
 
 ### Quality Standards:
 - Maintain consistent test naming conventions
@@ -179,25 +218,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Verification Process
 
-### 1. Run Affected Tests
-```bash
-# Run specific test files you've updated
-npm test -- tests/unit/path/to/updated-test.ts
+### 1. Run Individual Tests (Focused Testing)
+When working on specific tests, use focused commands to avoid wasting processing power:
 
-# Run related test suites
-npm test:unit -- --grep "ProcessPool"
+```bash
+# Run specific test file
+pnpm vitest tests/unit/[test-file] -n "[test-name]"
+
+# Example: Run specific test in process-pool manager
+pnpm vitest tests/unit/process-pool/pool-manager.test.ts -n "should handle process spawning"
 ```
 
-### 2. Validate Updates
+### 2. Run All Unit Tests (Final Verification)
+After completing all updates, verify the entire test suite:
+
+```bash
+# Run all unit tests to ensure nothing is broken
+pnpm vitest tests/unit
+```
+
+### 3. Handle Persistent Failures
+If a test fails after **3 attempts** to fix it:
+- **Do not** continue trying indefinitely
+- Document the failure in `tests/unit/FAILURES.md`
+- Move on to other tests
+- Report the documented failures in your summary
+
+### 4. Validate Updates
 - Confirm tests pass with your changes
-- Verify tests still cover the intended scenarios
+- Verify tests still cover the intended scenarios  
 - Check that error cases are properly handled
 - Ensure no tests were inadvertently broken
 
-### 3. Test Coverage Analysis
+### 5. Test Coverage Analysis
 - If coverage tools are available, check that coverage isn't decreased
 - Identify any new uncovered code paths
-- Document coverage gaps in REQUESTED.md
+- Document coverage gaps in TODO.md
 
 ## Error Handling
 
@@ -265,7 +321,12 @@ Provide a comprehensive report including:
 - Total number of changes logged
 - Status of maintenance activities
 
-### 6. Recommendations
+### 6. FAILURES.md Updated (if applicable)
+- Documentation of any tests that could not be fixed after 3 attempts
+- Clear failure descriptions and attempted solutions
+- Priority assessment for developer follow-up
+
+### 7. Recommendations
 - Suggestions for developer follow-up
 - Areas that might need deeper review
 - Process improvements for future updates

@@ -1,0 +1,123 @@
+# ==============================================================================
+# Iris MCP Configuration Example
+# ==============================================================================
+#
+# This example demonstrates all available configuration options with
+# real-world scenarios for each team type.
+#
+# Copy this file to ~/.iris/config.yaml and customize for your setup.
+#
+# Environment variables can be used with the syntax:
+#   ${VAR_NAME}          - Required variable (throws if not set)
+#   ${VAR_NAME:-default} - Optional variable with default value
+#
+# ==============================================================================
+
+settings:
+  # Timeouts
+  sessionInitTimeout: 30000        # 30 seconds
+  spawnTimeout: 20000              # 20 seconds
+  responseTimeout: 120000          # 2 minutes
+  idleTimeout: 3600000             # 1 hour
+
+  # Resource limits
+  maxProcesses: 10                 # Max concurrent Claude processes
+  healthCheckInterval: 30000       # 30 seconds
+
+  # MCP Server
+  httpPort: 1615                   # Port for Claude CLI to connect
+  defaultTransport: http           # Use HTTP for Claude CLI
+
+  # Observability
+  wonderLoggerConfig: ./wonder-logger.yaml  # OpenTelemetry, Prometheus, logs
+
+dashboard:
+  enabled: true
+  host: localhost
+
+  # HTTP (development only - not secure over network)
+  http: 0                          # Disabled in this example
+
+  # HTTPS (recommended for production)
+  https: 3100                      # Enabled with self-signed cert
+  selfsigned: false                # Using custom certificate
+
+  # Custom SSL certificate paths
+  certPath: ./cert.pem
+  keyPath: ./key.pem
+
+database:
+  path: data/team-sessions.db      # SQLite database for sessions
+  inMemory: false                  # Persistent storage
+
+# ==============================================================================
+# Teams Configuration Examples
+# ==============================================================================
+teams:
+  # ------------------------------------------------------------------------------
+  # Example 1: Minimal Local Team
+  # ------------------------------------------------------------------------------
+  # The simplest possible team configuration - just path and description.
+  # All other settings inherit from global defaults.
+  team-frontend:
+    path: /Users/jenova/projects/myapp/frontend
+    description: React frontend application - minimal config with defaults
+
+  # ------------------------------------------------------------------------------
+  # Example 2: Local Team with Custom Timeout
+  # ------------------------------------------------------------------------------
+  # Backend API that needs longer idle timeout for debugging sessions.
+  team-backend:
+    path: /Users/jenova/projects/myapp/backend
+    description: Node.js backend API - custom idle timeout
+    idleTimeout: 600000            # 10 minutes (vs default 1 hour)
+
+  # ------------------------------------------------------------------------------
+  # Example 3: Local Team with Auto-Approve
+  # ------------------------------------------------------------------------------
+  # Mobile team with skipPermissions=true for faster iteration.
+  # WARNING: Claude has full file access - use only in trusted environments!
+  team-mobile:
+    path: /Users/jenova/projects/myapp/mobile
+    description: React Native mobile app - auto-approve actions
+    skipPermissions: true
+
+  # ------------------------------------------------------------------------------
+  # Example 4: Local Team with UI Color
+  # ------------------------------------------------------------------------------
+  # DevOps team with custom color for dashboard identification.
+  team-devops:
+    path: /Users/jenova/projects/myapp/infra
+    description: Infrastructure and deployment - custom color for UI
+    color: "#FF5733"               # Orange for infra team
+
+  # ------------------------------------------------------------------------------
+  # Example 5: Remote Team with Reverse MCP
+  # ------------------------------------------------------------------------------
+  # E2E testing suite running on remote host with bidirectional communication.
+  # Remote Claude can call back to local Iris via SSH reverse tunnel.
+  team-remote:
+    # Remote execution configuration
+    remote: ssh <host>                            # SSH connection string
+    claudePath: ~/.local/bin/claude               # Claude CLI path on remote
+    path: /Users/<user>/projects/myapp/e2e-tests  # Project path on remote
+
+    description: Remote end-to-end testing suite - all optional fields configured
+
+    # Override timeouts for remote (network latency consideration)
+    idleTimeout: 1800000           # 30 minutes
+
+    # Permission handling
+    skipPermissions: false         # Require approval for file operations
+
+    # Reverse MCP: Allow remote Claude to call back to local Iris
+    enableReverseMcp: true         # Enable SSH reverse tunnel
+    reverseMcpPort: 1615           # Port to tunnel (matches httpPort)
+
+    # SSH connection tuning
+    remoteOptions:
+      serverAliveInterval: 30000   # Send keep-alive every 30 seconds
+      serverAliveCountMax: 3       # Disconnect after 3 missed keep-alives
+
+    # Dashboard color
+    color: "#4CAF50"               # Green for remote team

@@ -1,0 +1,191 @@
+# ==============================================================================
+# Iris MCP Configuration
+# ==============================================================================
+#
+# This is the main configuration file for Iris MCP Server.
+# All settings can use environment variable interpolation with ${VAR:-default} syntax.
+#
+# Documentation: https://github.com/jenova-marie/iris-mcp/blob/main/docs/CONFIG.md
+# Getting Started: https://github.com/jenova-marie/iris-mcp/blob/main/GETTING_STARTED.md
+#
+# ==============================================================================
+
+# ==============================================================================
+# Global Settings
+# ==============================================================================
+settings:
+  # Session initialization timeout (milliseconds)
+  # How long to wait for Claude session files to be created
+  # Increase this if teams have slow startup (large dependencies, slow disk, etc.)
+  sessionInitTimeout: ${IRIS_SESSION_INIT_TIMEOUT:-30000}  # 30 seconds
+
+  # Process spawn timeout (milliseconds)
+  # How long to wait for Claude process to start responding
+  spawnTimeout: ${IRIS_SPAWN_TIMEOUT:-20000}  # 20 seconds
+
+  # Message response timeout (milliseconds)
+  # Maximum time to wait for Claude to respond to a message
+  # Increase for complex tasks that take longer to process
+  responseTimeout: ${IRIS_RESPONSE_TIMEOUT:-120000}  # 2 minutes
+
+  # Idle timeout (milliseconds)
+  # How long a Claude process can be idle before being terminated
+  # Set higher if you want processes to stay warm longer
+  # Set lower to free resources faster
+  idleTimeout: ${IRIS_IDLE_TIMEOUT:-3600000}  # 1 hour
+
+  # Maximum concurrent Claude processes
+  # When this limit is reached, least-recently-used processes are terminated
+  # Adjust based on available RAM (each process ~60-125MB)
+  maxProcesses: ${IRIS_MAX_PROCESSES:-10}
+
+  # Health check interval (milliseconds)
+  # How often to check if Claude processes are healthy
+  healthCheckInterval: ${IRIS_HEALTH_CHECK_INTERVAL:-30000}  # 30 seconds
+
+  # HTTP port for MCP server
+  # This is the port Claude CLI will connect to
+  httpPort: ${IRIS_HTTP_PORT:-1615}
+
+  # Default transport protocol
+  # Options: "stdio" (standard input/output) or "http" (HTTP server)
+  # Use "http" for Claude CLI, "stdio" for embedded/testing
+  defaultTransport: ${IRIS_DEFAULT_TRANSPORT:-http}
+
+  # Wonder Logger configuration file path
+  # Path to wonder-logger.yaml for observability configuration
+  # Supports OpenTelemetry, Prometheus metrics, distributed tracing
+  wonderLoggerConfig: ${IRIS_WONDER_LOGGER_CONFIG:-./wonder-logger.yaml}
+
+# ==============================================================================
+# Web Dashboard Configuration
+# ==============================================================================
+dashboard:
+  # Enable/disable web dashboard
+  # The dashboard provides real-time monitoring of Claude processes and sessions
+  enabled: ${IRIS_DASHBOARD_ENABLED:-true}
+
+  # Dashboard host binding
+  # Use "localhost" for local-only access (recommended for security)
+  # Use "0.0.0.0" to allow network access (use with caution!)
+  host: ${IRIS_DASHBOARD_HOST:-localhost}
+
+  # HTTP port (set to 0 to disable HTTP)
+  # Recommended for local development only
+  http: ${IRIS_DASHBOARD_HTTP:-3100}
+
+  # HTTPS port (set to 0 to disable HTTPS)
+  # Recommended for production deployments
+  # Requires either selfsigned=true OR certPath+keyPath
+  https: ${IRIS_DASHBOARD_HTTPS:-0}
+
+  # Auto-generate self-signed SSL certificate
+  # Set to true for quick local HTTPS setup
+  # DO NOT use in production - get proper certificates!
+  selfsigned: ${IRIS_DASHBOARD_SELFSIGNED:-false}
+
+  # SSL certificate file path (when selfsigned=false)
+  # Path to your SSL certificate (e.g., from Let's Encrypt)
+  # certPath: ${IRIS_CERT_PATH:-./cert.pem}
+
+  # SSL private key file path (when selfsigned=false)
+  # Path to your SSL private key
+  # keyPath: ${IRIS_KEY_PATH:-./key.pem}
+
+# ==============================================================================
+# Database Configuration
+# ==============================================================================
+database:
+  # SQLite database file path
+  # Stores session metadata, message counts, timestamps
+  # Relative paths are resolved from IRIS_HOME
+  path: ${IRIS_DB_PATH:-data/team-sessions.db}
+
+  # Use in-memory database (for testing only!)
+  # All data is lost when server stops
+  # DO NOT use in production
+  inMemory: ${IRIS_DB_IN_MEMORY:-false}
+
+# ==============================================================================
+# Teams Configuration
+# ==============================================================================
+#
+# Each team represents a Claude Code instance in a specific project directory.
+# Teams communicate with each other via Iris MCP tools (team_tell, team_wake, etc.)
+#
+# Add teams using: iris add-team <name> [path]
+# Example: iris add-team frontend ~/projects/myapp/frontend
+#
+# ==============================================================================
+teams:
+  # No teams configured yet!
+  #
+  # Quick start:
+  #   1. Run: iris add-team <name> [path]
+  #   2. The team will be added here automatically with defaults
+  #   3. Edit this file to customize team settings (optional)
+  #
+  # Example team configuration (uncomment and customize):
+  #
+  # team-frontend:
+  #   # Project directory (required)
+  #   path: /Users/you/projects/myapp/frontend
+  #
+  #   # Human-readable description
+  #   description: React frontend application
+  #
+  #   # Override global idle timeout for this team (optional)
+  #   # Useful for teams with slower/faster requirements
+  #   # idleTimeout: 600000  # 10 minutes
+  #
+  #   # Skip permission prompts (auto-approve all actions)
+  #   # WARNING: Use with caution! Claude will have full access to files
+  #   # skipPermissions: true
+  #
+  #   # Team color for dashboard UI (hex color, optional)
+  #   # color: "#61DAFB"  # React blue
+  #
+  # team-backend:
+  #   path: /Users/you/projects/myapp/backend
+  #   description: Node.js Express API
+  #   idleTimeout: 1800000  # 30 minutes (longer for API debugging)
+  #   color: "#68A063"  # Node.js green
+  #
+  # # Remote team example (SSH execution)
+  # team-remote:
+  #   # SSH connection string (enables remote execution)
+  #   remote: ssh user@remote-host
+  #
+  #   # Path to Claude CLI on remote machine (required when remote is set)
+  #   claudePath: ~/.local/bin/claude
+  #
+  #   # Project path on remote machine
+  #   path: /home/user/projects/myapp/e2e-tests
+  #
+  #   description: Remote end-to-end testing suite
+  #
+  #   # Enable reverse MCP tunnel (allows remote Claude to call back to local Iris)
+  #   # Requires remote execution to be configured
+  #   enableReverseMcp: true
+  #
+  #   # Port to tunnel (default: 1615)
+  #   reverseMcpPort: 1615
+  #
+  #   # SSH connection options (optional)
+  #   remoteOptions:
+  #     # SSH port
+  #     port: 22
+  #
+  #     # Path to SSH private key
+  #     identity: ~/.ssh/id_rsa
+  #
+  #     # SSH keep-alive interval (seconds)
+  #     serverAliveInterval: 30
+  #
+  #     # Max missed keep-alives before disconnect
+  #     serverAliveCountMax: 3
+  #
+  #     # Enable SSH compression
+  #     compression: true
+  #
+  #   color: "#FF6B6B"  # Remote indicator color

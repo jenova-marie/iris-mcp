@@ -28,21 +28,17 @@
 **Implementation:** Team configurations can specify **remote execution commands** to run Claude Code on any SSH-accessible host.
 
 **Example Configuration:**
-```json
-{
-  "teams": {
-    "team-gpu": {
-      "remote": "ssh gpu.prod.company.com",
-      "path": "/home/ai/projects/ml-pipeline",
-      "description": "ML team running on GPU cluster"
-    },
-    "team-cloud": {
-      "remote": "ssh -i ~/.ssh/codespace_key dev@codespace-abc.github.dev",
-      "path": "/workspaces/backend",
-      "description": "Backend team in GitHub Codespace"
-    }
-  }
-}
+```yaml
+teams:
+  team-gpu:
+    remote: ssh gpu.prod.company.com
+    path: /home/ai/projects/ml-pipeline
+    description: ML team running on GPU cluster
+
+  team-cloud:
+    remote: ssh -i ~/.ssh/codespace_key dev@codespace-abc.github.dev
+    path: /workspaces/backend
+    description: Backend team in GitHub Codespace
 ```
 
 **Key Innovation:** Transparent remote execution - Iris treats remote teams identically to local teams, with all complexity hidden in the transport layer.
@@ -245,29 +241,22 @@ Iris supports **two SSH implementations** for remote execution, each with distin
 #### Configuration
 
 **OpenSSH Client (Default):**
-```json
-{
-  "team-backend": {
-    "remote": "ssh inanna",
-    "path": "/opt/containers",
-    "description": "Backend team on remote host"
-  }
-}
+```yaml
+team-backend:
+  remote: ssh inanna
+  path: /opt/containers
+  description: Backend team on remote host
 ```
 
 **ssh2 Library (Opt-in):**
-```json
-{
-  "team-backend": {
-    "remote": "ssh inanna",
-    "ssh2": true,
-    "path": "/opt/containers",
-    "description": "Backend team on remote host",
-    "remoteOptions": {
-      "passphrase": "${SSH_KEY_PASSPHRASE}"
-    }
-  }
-}
+```yaml
+team-backend:
+  remote: ssh inanna
+  ssh2: true
+  path: /opt/containers
+  description: Backend team on remote host
+  remoteOptions:
+    passphrase: ${SSH_KEY_PASSPHRASE}
 ```
 
 #### SSH Config Integration
@@ -383,74 +372,56 @@ interface IrisConfig {
 
 **1. GitHub Codespace**
 
-```json
-{
-  "team-backend": {
-    "remote": "ssh -o StrictHostKeyChecking=no codespace-abc@123.github.dev",
-    "path": "/workspaces/backend",
-    "description": "Backend team running in GitHub Codespace",
-    "remoteOptions": {
-      "connectTimeout": 10000,
-      "serverAliveInterval": 30000
-    }
-  }
-}
+```yaml
+team-backend:
+  remote: ssh -o StrictHostKeyChecking=no codespace-abc@123.github.dev
+  path: /workspaces/backend
+  description: Backend team running in GitHub Codespace
+  remoteOptions:
+    connectTimeout: 10000
+    serverAliveInterval: 30000
 ```
 
 **2. AWS Cloud9**
 
-```json
-{
-  "team-data": {
-    "remote": "ssh ec2-user@ec2-54-123-45-67.compute-1.amazonaws.com",
-    "path": "/home/ec2-user/environment/data-pipeline",
-    "description": "Data team on AWS Cloud9",
-    "remoteOptions": {
-      "identity": "~/.ssh/aws-cloud9.pem",
-      "port": 22
-    }
-  }
-}
+```yaml
+team-data:
+  remote: ssh ec2-user@ec2-54-123-45-67.compute-1.amazonaws.com
+  path: /home/ec2-user/environment/data-pipeline
+  description: Data team on AWS Cloud9
+  remoteOptions:
+    identity: ~/.ssh/aws-cloud9.pem
+    port: 22
 ```
 
 **3. GPU Cluster**
 
-```json
-{
-  "team-ml": {
-    "remote": "ssh ml@gpu-cluster.company.com",
-    "path": "/mnt/shared/ml-models",
-    "description": "ML team with GPU access",
-    "remoteOptions": {
-      "identity": "~/.ssh/gpu_cluster_rsa",
-      "serverAliveInterval": 60000
-    }
-  }
-}
+```yaml
+team-ml:
+  remote: ssh ml@gpu-cluster.company.com
+  path: /mnt/shared/ml-models
+  description: ML team with GPU access
+  remoteOptions:
+    identity: ~/.ssh/gpu_cluster_rsa
+    serverAliveInterval: 60000
 ```
 
 **4. Docker Container**
 
-```json
-{
-  "team-test": {
-    "remote": "docker exec -i test-container",
-    "path": "/app",
-    "description": "Testing team in Docker container"
-  }
-}
+```yaml
+team-test:
+  remote: docker exec -i test-container
+  path: /app
+  description: Testing team in Docker container
 ```
 
 **5. Kubernetes Pod**
 
-```json
-{
-  "team-frontend": {
-    "remote": "kubectl exec -i frontend-pod-abc123 --",
-    "path": "/usr/src/app",
-    "description": "Frontend team in Kubernetes"
-  }
-}
+```yaml
+team-frontend:
+  remote: kubectl exec -i frontend-pod-abc123 --
+  path: /usr/src/app
+  description: Frontend team in Kubernetes
 ```
 
 ---
@@ -604,19 +575,14 @@ class SSH2Transport implements Transport {
 **Solutions:**
 
 1. **SSH Agent Forwarding**
-   ```json
-   {
-     "remote": "ssh -A user@host"
-   }
+   ```yaml
+   remote: ssh -A user@host
    ```
 
 2. **Explicit Identity File**
-   ```json
-   {
-     "remoteOptions": {
-       "identity": "~/.ssh/company_rsa"
-     }
-   }
+   ```yaml
+   remoteOptions:
+     identity: ~/.ssh/company_rsa
    ```
 
 3. **SSH Config File**
@@ -630,10 +596,8 @@ class SSH2Transport implements Transport {
    ```
 
    Then in Iris config:
-   ```json
-   {
-     "remote": "ssh gpu-cluster"
-   }
+   ```yaml
+   remote: ssh gpu-cluster
    ```
 
 **Recommendation:** Leverage existing SSH config for complex setups. Iris just executes the `remote` command string.
@@ -1100,20 +1064,15 @@ describe('SSH2Transport', () => {
 
 **Scenario:** Frontend local, backend in AWS Cloud9
 
-```json
-{
-  "teams": {
-    "team-frontend": {
-      "path": "/Users/dev/projects/frontend",
-      "description": "Local frontend development"
-    },
-    "team-backend": {
-      "remote": "ssh ec2-user@cloud9.amazonaws.com",
-      "path": "/home/ec2-user/backend",
-      "description": "Backend on AWS Cloud9"
-    }
-  }
-}
+```yaml
+teams:
+  team-frontend:
+    path: /Users/dev/projects/frontend
+    description: Local frontend development
+  team-backend:
+    remote: ssh ec2-user@cloud9.amazonaws.com
+    path: /home/ec2-user/backend
+    description: Backend on AWS Cloud9
 ```
 
 **Workflow:**
@@ -1135,16 +1094,12 @@ User receives answer without ever touching AWS console
 
 **Scenario:** ML model training on dedicated GPU servers
 
-```json
-{
-  "teams": {
-    "team-ml": {
-      "remote": "ssh ml@gpu-cluster.company.com",
-      "path": "/mnt/shared/ml-models",
-      "description": "ML team with 8x A100 GPUs"
-    }
-  }
-}
+```yaml
+teams:
+  team-ml:
+    remote: ssh ml@gpu-cluster.company.com
+    path: /mnt/shared/ml-models
+    description: ML team with 8x A100 GPUs
 ```
 
 **Workflow:**
@@ -1166,26 +1121,20 @@ User gets status updates without SSH'ing to GPU cluster
 
 **Scenario:** Teams distributed across continents
 
-```json
-{
-  "teams": {
-    "team-us": {
-      "remote": "ssh dev@us-east-1.company.com",
-      "path": "/app/us-region",
-      "description": "US-based team"
-    },
-    "team-eu": {
-      "remote": "ssh dev@eu-west-1.company.com",
-      "path": "/app/eu-region",
-      "description": "EU-based team (GDPR compliance)"
-    },
-    "team-asia": {
-      "remote": "ssh dev@ap-southeast-1.company.com",
-      "path": "/app/asia-region",
-      "description": "Asia-Pacific team"
-    }
-  }
-}
+```yaml
+teams:
+  team-us:
+    remote: ssh dev@us-east-1.company.com
+    path: /app/us-region
+    description: US-based team
+  team-eu:
+    remote: ssh dev@eu-west-1.company.com
+    path: /app/eu-region
+    description: EU-based team (GDPR compliance)
+  team-asia:
+    remote: ssh dev@ap-southeast-1.company.com
+    path: /app/asia-region
+    description: Asia-Pacific team
 ```
 
 **Workflow:** Global coordination from single Iris instance.
@@ -1194,14 +1143,11 @@ User gets status updates without SSH'ing to GPU cluster
 
 **Scenario:** Sensitive codebase on isolated bastion host
 
-```json
-{
-  "team-security": {
-    "remote": "ssh -J bastion.company.com security@vault.internal",
-    "path": "/secure/audit-system",
-    "description": "Security team on air-gapped network"
-  }
-}
+```yaml
+team-security:
+  remote: ssh -J bastion.company.com security@vault.internal
+  path: /secure/audit-system
+  description: Security team on air-gapped network
 ```
 
 **SSH Jump Host (`-J`):** Iris → Bastion → Vault (multi-hop SSH)
@@ -1210,19 +1156,15 @@ User gets status updates without SSH'ing to GPU cluster
 
 **Scenario:** Teams working in containerized environments
 
-```json
-{
-  "team-containerized": {
-    "remote": "docker exec -i dev-container",
-    "path": "/app",
-    "description": "Team in Docker dev container"
-  },
-  "team-k8s": {
-    "remote": "kubectl exec -i frontend-pod-abc --",
-    "path": "/usr/src/app",
-    "description": "Team in Kubernetes pod"
-  }
-}
+```yaml
+team-containerized:
+  remote: docker exec -i dev-container
+  path: /app
+  description: Team in Docker dev container
+team-k8s:
+  remote: kubectl exec -i frontend-pod-abc --
+  path: /usr/src/app
+  description: Team in Kubernetes pod
 ```
 
 **Workflow:** Same Iris interface, different execution environments.
@@ -1241,20 +1183,14 @@ User gets status updates without SSH'ing to GPU cluster
 **Mitigations:**
 
 - **Never embed keys in config**:
-  ```json
-  // ❌ BAD
-  {
-    "remoteOptions": {
-      "privateKey": "-----BEGIN RSA PRIVATE KEY-----\n..."
-    }
-  }
+  ```yaml
+  # ❌ BAD
+  remoteOptions:
+    privateKey: "-----BEGIN RSA PRIVATE KEY-----\n..."
 
-  // ✅ GOOD
-  {
-    "remoteOptions": {
-      "identity": "~/.ssh/company_rsa"
-    }
-  }
+  # ✅ GOOD
+  remoteOptions:
+    identity: ~/.ssh/company_rsa
   ```
 
 - **Use SSH Agent**:
@@ -1264,10 +1200,8 @@ User gets status updates without SSH'ing to GPU cluster
   ```
 
   Then:
-  ```json
-  {
-    "remote": "ssh -A user@host"
-  }
+  ```yaml
+  remote: ssh -A user@host
   ```
 
 - **Leverage SSH Config**:
@@ -1287,12 +1221,9 @@ User gets status updates without SSH'ing to GPU cluster
 **Mitigation:**
 
 - **Strict checking (default)**:
-  ```json
-  {
-    "remoteOptions": {
-      "strictHostKeyChecking": true  // Reject unknown hosts
-    }
-  }
+  ```yaml
+  remoteOptions:
+    strictHostKeyChecking: true  # Reject unknown hosts
   ```
 
 - **Pre-populate known_hosts**:
@@ -1301,11 +1232,9 @@ User gets status updates without SSH'ing to GPU cluster
   ```
 
 - **Only disable for trusted networks**:
-  ```json
-  {
-    "remote": "ssh -o StrictHostKeyChecking=no user@localhost"
-    // Only for development/testing!
-  }
+  ```yaml
+  remote: ssh -o StrictHostKeyChecking=no user@localhost
+  # Only for development/testing!
   ```
 
 ### 3. Credential Leakage
@@ -1317,10 +1246,8 @@ User gets status updates without SSH'ing to GPU cluster
 - **Sanitize logs**: Never log full SSH commands with credentials
 - **Audit config files**: Restrict permissions on `config.yaml` (600)
 - **Use environment variables** for sensitive data:
-  ```json
-  {
-    "remote": "ssh ${SSH_USER}@${SSH_HOST}"
-  }
+  ```yaml
+  remote: ssh ${SSH_USER}@${SSH_HOST}
   ```
 
 ### 4. Remote Code Execution
@@ -1456,42 +1383,28 @@ Total:          6200ms  (+24% overhead)
 
 **Migration path:**
 
-```json
-// Step 1: Start with local teams
-{
-  "teams": {
-    "team-alpha": {
-      "path": "/Users/dev/alpha"
-    }
-  }
-}
+```yaml
+# Step 1: Start with local teams
+teams:
+  team-alpha:
+    path: /Users/dev/alpha
 
-// Step 2: Gradually add remote teams
-{
-  "teams": {
-    "team-alpha": {
-      "path": "/Users/dev/alpha"
-    },
-    "team-beta": {
-      "remote": "ssh dev@cloud.com",
-      "path": "/app/beta"
-    }
-  }
-}
+# Step 2: Gradually add remote teams
+teams:
+  team-alpha:
+    path: /Users/dev/alpha
+  team-beta:
+    remote: ssh dev@cloud.com
+    path: /app/beta
 
-// Step 3: Fully distributed
-{
-  "teams": {
-    "team-alpha": {
-      "remote": "ssh dev@host-a.com",
-      "path": "/app/alpha"
-    },
-    "team-beta": {
-      "remote": "ssh dev@host-b.com",
-      "path": "/app/beta"
-    }
-  }
-}
+# Step 3: Fully distributed
+teams:
+  team-alpha:
+    remote: ssh dev@host-a.com
+    path: /app/alpha
+  team-beta:
+    remote: ssh dev@host-b.com
+    path: /app/beta
 ```
 
 ---
@@ -1544,17 +1457,13 @@ Total:          6200ms  (+24% overhead)
 
 **Instead of SSH, use HTTP/WebSocket for remote execution:**
 
-```json
-{
-  "team-cloud": {
-    "remote": "https://api.iris-cloud.com/teams/backend",
-    "remoteType": "http",
-    "authentication": {
-      "type": "bearer",
-      "token": "${IRIS_CLOUD_TOKEN}"
-    }
-  }
-}
+```yaml
+team-cloud:
+  remote: https://api.iris-cloud.com/teams/backend
+  remoteType: http
+  authentication:
+    type: bearer
+    token: ${IRIS_CLOUD_TOKEN}
 ```
 
 **Benefits:**

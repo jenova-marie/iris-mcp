@@ -16,6 +16,7 @@ import type { TeamsConfigManager } from "../../config/iris-config.js";
 import type { TeamsConfig } from "../../process-pool/types.js";
 import { PoolEvent } from "../../process-pool/types.js";
 import { IrisOrchestrator } from "../../iris.js";
+import type { PendingPermissionsManager } from "../../permissions/pending-manager.js";
 import { getChildLogger } from "../../utils/logger.js";
 
 const logger = getChildLogger("dashboard:state");
@@ -43,6 +44,10 @@ export interface SessionProcessInfo {
   uptime: number; // Process uptime (0 if stopped)
   queueLength: number; // Process queue length (0 if stopped)
   lastResponseAt: number | null; // Last response timestamp
+
+  // Debug info (for troubleshooting)
+  launchCommand: string | null; // Full command used to spawn this session
+  teamConfigSnapshot: string | null; // JSON snapshot of server-side config
 }
 
 /**
@@ -51,12 +56,14 @@ export interface SessionProcessInfo {
  */
 export class DashboardStateBridge extends EventEmitter {
   private iris: IrisOrchestrator;
+  private pendingPermissions?: PendingPermissionsManager;
 
   constructor(
     private pool: ClaudeProcessPool,
     private sessionManager: SessionManager,
     private configManager: TeamsConfigManager,
     iris?: IrisOrchestrator,
+    pendingPermissions?: PendingPermissionsManager,
   ) {
     super();
 
@@ -68,6 +75,9 @@ export class DashboardStateBridge extends EventEmitter {
         this.pool,
         this.configManager.getConfig(),
       );
+
+    // Store permissions manager if provided
+    this.pendingPermissions = pendingPermissions;
 
     this.setupEventForwarding();
   }
@@ -97,6 +107,45 @@ export class DashboardStateBridge extends EventEmitter {
         });
       },
     );
+
+    // Forward permission events if manager is available
+    if (this.pendingPermissions) {
+      this.pendingPermissions.on("permission:created", (request) => {
+        logger.debug(
+          {
+            permissionId: request.permissionId,
+            teamName: request.teamName,
+            toolName: request.toolName,
+          },
+          "Forwarding permission:created event",
+        );
+        this.emit("ws:permission:request", request);
+      });
+
+      this.pendingPermissions.on("permission:resolved", (data) => {
+        logger.debug(
+          {
+            permissionId: data.permissionId,
+            approved: data.approved,
+          },
+          "Forwarding permission:resolved event",
+        );
+        this.emit("ws:permission:resolved", data);
+      });
+
+      this.pendingPermissions.on("permission:timeout", (data) => {
+        logger.debug(
+          {
+            permissionId: data.permissionId,
+          },
+          "Forwarding permission:timeout event",
+        );
+        this.emit("ws:permission:timeout", {
+          permissionId: data.permissionId,
+          request: data.request,
+        });
+      });
+    }
 
     logger.info("Event forwarding initialized");
   }
@@ -167,6 +216,10 @@ export class DashboardStateBridge extends EventEmitter {
         uptime: processInfo?.uptime || 0,
         queueLength: processInfo?.queueLength || 0,
         lastResponseAt: session.lastResponseAt,
+
+        // Debug info (for troubleshooting)
+        launchCommand: session.launchCommand,
+        teamConfigSnapshot: session.teamConfigSnapshot,
       });
     }
 
@@ -222,6 +275,10 @@ export class DashboardStateBridge extends EventEmitter {
       uptime: processInfo?.uptime || 0,
       queueLength: processInfo?.queueLength || 0,
       lastResponseAt: session.lastResponseAt,
+
+      // Debug info (for troubleshooting)
+      launchCommand: session.launchCommand,
+      teamConfigSnapshot: session.teamConfigSnapshot,
     };
   }
 
@@ -464,5 +521,82 @@ export class DashboardStateBridge extends EventEmitter {
       this.pool,
       this.configManager,
     );
+  }
+
+  /**
+   * Fork a session by sessionId (lookup fromTeam/toTeam automatically)
+   * More convenient API that doesn't require caller to know the team pair
+   */
+  async forkSessionById(sessionId: string): Promise<any> {
+    // Look up session to get fromTeam and toTeam
+    const session = this.sessionManager.getSessionById(sessionId);
+
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`);
+    }
+
+    if (!session.fromTeam) {
+      throw new Error(`Session ${sessionId} has no fromTeam (legacy session)`);
+    }
+
+    // Delegate to existing fork method
+    return await this.forkSession(session.fromTeam, session.toTeam);
+  }
+
+  /**
+   * Get all pending permission requests
+   */
+  getPendingPermissions() {
+    if (!this.pendingPermissions) {
+      return [];
+    }
+    return this.pendingPermissions.getPendingRequests();
+  }
+
+  /**
+   * Resolve a pending permission request
+   */
+  resolvePermission(
+    permissionId: string,
+    approved: boolean,
+    reason?: string,
+  ): boolean {
+    if (!this.pendingPermissions) {
+      logger.warn("Cannot resolve permission - manager not available");
+      return false;
+    }
+    return this.pendingPermissions.resolvePendingPermission(
+      permissionId,
+      approved,
+      reason,
+    );
+  }
+
+  /**
+   * Get logs from wonder-logger memory transport
+   * Delegates to the debug MCP action
+   */
+  async getLogs(options: {
+    since?: number;
+    storeName?: string;
+    format?: "raw" | "parsed";
+    level?: string | string[];
+  }): Promise<any> {
+    const { debug } = await import("../../actions/debug.js");
+    return await debug({
+      logs_since: options.since,
+      storeName: options.storeName,
+      format: options.format,
+      level: options.level,
+    });
+  }
+
+  /**
+   * Get all available log store names
+   */
+  async getLogStores(): Promise<string[]> {
+    const { debug } = await import("../../actions/debug.js");
+    const result = await debug({ getAllStores: true });
+    return result.availableStores || [];
   }
 }

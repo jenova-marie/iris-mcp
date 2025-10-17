@@ -44,6 +44,10 @@ interface SessionProcessInfo {
   uptime: number;
   queueLength: number;
   lastResponseAt: number | null;
+
+  // Debug info (for troubleshooting)
+  launchCommand: string | null;
+  teamConfigSnapshot: string | null;
 }
 
 function getStatusColor(status: string): string {
@@ -100,6 +104,7 @@ export function ProcessMonitor() {
       | "success"
       | "error";
   }>({});
+  const [expandedDebug, setExpandedDebug] = useState<Set<string>>(new Set());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Handle WebSocket updates
@@ -237,11 +242,11 @@ export function ProcessMonitor() {
   }, []);
 
   const handleLaunchTerminal = useCallback(
-    async (sessionId: string, toTeam: string) => {
+    async (sessionId: string) => {
       setTerminalStatus((prev) => ({ ...prev, [sessionId]: "launching" }));
 
       try {
-        const response = await api.launchTerminal(sessionId, toTeam);
+        const response = await api.launchTerminal(sessionId);
 
         if (response.data.success) {
           // Success - terminal launched
@@ -275,8 +280,7 @@ export function ProcessMonitor() {
         console.error("Failed to launch terminal:", error);
         alert(
           `Failed to launch terminal: ${errorMsg}\n\n` +
-            `Session ID: ${sessionId}\n` +
-            `Team: ${toTeam}\n\n` +
+            `Session ID: ${sessionId}\n\n` +
             "You can manually run:\n" +
             `claude --resume ${sessionId}`,
         );
@@ -587,7 +591,7 @@ export function ProcessMonitor() {
                   {terminalScriptAvailable && (
                     <button
                       onClick={() =>
-                        handleLaunchTerminal(session.sessionId, session.toTeam)
+                        handleLaunchTerminal(session.sessionId)
                       }
                       disabled={
                         terminalStatus[session.sessionId] === "launching"
@@ -617,6 +621,56 @@ export function ProcessMonitor() {
                         </>
                       )}
                     </button>
+                  )}
+                </div>
+              )}
+
+              {/* Debug Info Section */}
+              {session.launchCommand && (
+                <div className="mt-4 border-t border-gray-700 pt-4">
+                  <button
+                    onClick={() => {
+                      const newExpanded = new Set(expandedDebug);
+                      if (newExpanded.has(session.poolKey)) {
+                        newExpanded.delete(session.poolKey);
+                      } else {
+                        newExpanded.add(session.poolKey);
+                      }
+                      setExpandedDebug(newExpanded);
+                    }}
+                    className="flex items-center gap-2 text-sm text-text-secondary hover:text-accent-purple transition-colors"
+                  >
+                    <span className="font-mono">
+                      {expandedDebug.has(session.poolKey) ? "▼" : "▶"}
+                    </span>
+                    <span>Debug Info</span>
+                  </button>
+
+                  {expandedDebug.has(session.poolKey) && (
+                    <div className="mt-2 space-y-3">
+                      <div>
+                        <label className="text-xs text-text-secondary uppercase tracking-wide">
+                          Launch Command
+                        </label>
+                        <pre className="mt-1 p-2 bg-bg-dark rounded text-xs font-mono text-green-400 overflow-x-auto">
+                          {session.launchCommand}
+                        </pre>
+                      </div>
+                      {session.teamConfigSnapshot && (
+                        <div>
+                          <label className="text-xs text-text-secondary uppercase tracking-wide">
+                            Team Config (Server-Side)
+                          </label>
+                          <pre className="mt-1 p-2 bg-bg-dark rounded text-xs font-mono text-blue-400 overflow-x-auto max-h-60 overflow-y-auto">
+                            {JSON.stringify(
+                              JSON.parse(session.teamConfigSnapshot),
+                              null,
+                              2,
+                            )}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

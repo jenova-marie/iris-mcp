@@ -134,6 +134,7 @@ program
             sessionManager,
             configManager,
             mcpServer.getIris(), // Share the same IrisOrchestrator instance
+            mcpServer.getPendingPermissions(), // Enable permission approval UI
           );
           await webServer.start(config.dashboard);
         } catch (error) {
@@ -305,6 +306,7 @@ if (process.argv.length === 2) {
             sessionManager,
             configManager,
             mcpServer.getIris(), // Share the same IrisOrchestrator instance
+            mcpServer.getPendingPermissions(), // Enable permission approval UI
           );
           await webServer.start(config.dashboard);
         } catch (error) {

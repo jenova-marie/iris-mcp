@@ -19,6 +19,7 @@ import { PoolEvent } from "./process-pool/types.js";
 import { SessionManager } from "./session/session-manager.js";
 import { IrisOrchestrator } from "./iris.js";
 import { getChildLogger } from "./utils/logger.js";
+import { PendingPermissionsManager } from "./permissions/pending-manager.js";
 import { getIrisHome, getConfigPath, getDataDir } from "./utils/paths.js";
 import { tell } from "./actions/tell.js";
 import { quickTell } from "./actions/quick_tell.js";
@@ -434,6 +435,7 @@ export class IrisMcpServer {
   private sessionManager: SessionManager;
   private processPool: ClaudeProcessPool;
   private iris: IrisOrchestrator;
+  private pendingPermissions: PendingPermissionsManager;
 
   constructor(
     sessionManager: SessionManager,
@@ -457,11 +459,17 @@ export class IrisMcpServer {
     this.processPool = processPool;
     this.configManager = configManager;
 
+    // Initialize pending permissions manager
+    const permissionTimeout =
+      this.configManager.getConfig().settings?.permissionTimeout || 30000;
+    this.pendingPermissions = new PendingPermissionsManager(permissionTimeout);
+
     // Initialize Iris orchestrator (BLL)
     this.iris = new IrisOrchestrator(
       this.sessionManager,
       this.processPool,
       this.configManager.getConfig(),
+      this.pendingPermissions,
     );
 
     // Set up MCP handlers
@@ -821,6 +829,14 @@ export class IrisMcpServer {
         "Process error",
       );
     });
+  }
+
+  /**
+   * Get the PendingPermissionsManager instance
+   * Used by dashboard bridge to access pending permissions
+   */
+  getPendingPermissions(): PendingPermissionsManager {
+    return this.pendingPermissions;
   }
 
   async run(

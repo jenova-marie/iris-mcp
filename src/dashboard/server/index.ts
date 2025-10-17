@@ -162,6 +162,7 @@ export async function startDashboardServer(
       sessions: bridge.getActiveSessions(),
       poolStatus: bridge.getPoolStatus(),
       config: bridge.getConfig(),
+      pendingPermissions: bridge.getPendingPermissions(),
     });
 
     // Subscribe to process status updates
@@ -177,10 +178,26 @@ export async function startDashboardServer(
       socket.emit('cache-stream', data);
     };
 
+    // Subscribe to permission events
+    const permissionRequestHandler = (data: any) => {
+      socket.emit('permission:request', data);
+    };
+
+    const permissionResolvedHandler = (data: any) => {
+      socket.emit('permission:resolved', data);
+    };
+
+    const permissionTimeoutHandler = (data: any) => {
+      socket.emit('permission:timeout', data);
+    };
+
     // Register event handlers
     bridge.on('ws:process-status', processStatusHandler);
     bridge.on('ws:config-saved', configSavedHandler);
     bridge.on('ws:cache-stream', cacheStreamHandler);
+    bridge.on('ws:permission:request', permissionRequestHandler);
+    bridge.on('ws:permission:resolved', permissionResolvedHandler);
+    bridge.on('ws:permission:timeout', permissionTimeoutHandler);
 
     // Handle client requests to stream cache for a specific session
     socket.on('stream-cache', (sessionId: string) => {
@@ -194,16 +211,170 @@ export async function startDashboardServer(
       }
     });
 
+    // Handle permission responses from dashboard
+    socket.on('permission:response', (data: {
+      permissionId: string;
+      approved: boolean;
+      reason?: string;
+    }) => {
+      logger.info({
+        socketId: socket.id,
+        permissionId: data.permissionId,
+        approved: data.approved,
+      }, 'Received permission response from dashboard');
+
+      const success = bridge.resolvePermission(
+        data.permissionId,
+        data.approved,
+        data.reason,
+      );
+
+      if (!success) {
+        logger.warn({
+          socketId: socket.id,
+          permissionId: data.permissionId,
+        }, 'Failed to resolve permission - may have already timed out');
+
+        socket.emit('permission:error', {
+          permissionId: data.permissionId,
+          message: 'Permission already resolved or timed out',
+        });
+      }
+    });
+
+    // Log streaming state
+    let logStreamInterval: NodeJS.Timeout | null = null;
+    let lastLogTimestamp = Date.now();
+
+    // Handle log stream requests
+    socket.on('logs:start', async (data: {
+      storeName?: string;
+      level?: string | string[];
+    }) => {
+      logger.info({
+        socketId: socket.id,
+        storeName: data.storeName,
+        level: data.level,
+      }, 'Client requested log stream');
+
+      // Clear existing interval if any
+      if (logStreamInterval) {
+        clearInterval(logStreamInterval);
+      }
+
+      // Reset timestamp to get all logs initially
+      lastLogTimestamp = Date.now() - (60 * 1000); // Start from 1 minute ago
+
+      // Send initial batch of logs
+      try {
+        const result = await bridge.getLogs({
+          since: lastLogTimestamp,
+          storeName: data.storeName,
+          format: 'parsed',
+          level: data.level,
+        });
+
+        socket.emit('logs:batch', {
+          logs: result.logs || [],
+          storeName: result.storeName,
+          timestamp: result.timestamp,
+        });
+
+        // Update timestamp for next poll
+        // Add 1ms to exclude the last log we just sent (wonder-logger uses >= not >)
+        if (result.logs && result.logs.length > 0) {
+          const lastLog = result.logs[result.logs.length - 1];
+          lastLogTimestamp = (lastLog.timestamp || Date.now()) + 1;
+        }
+      } catch (error: any) {
+        logger.error({
+          err: error instanceof Error ? error : new Error(String(error)),
+          socketId: socket.id,
+        }, 'Failed to get initial logs');
+
+        socket.emit('logs:error', {
+          message: error.message || 'Failed to retrieve logs',
+        });
+      }
+
+      // Start polling for new logs every 1 second
+      logStreamInterval = setInterval(async () => {
+        try {
+          const result = await bridge.getLogs({
+            since: lastLogTimestamp,
+            storeName: data.storeName,
+            format: 'parsed',
+            level: data.level,
+          });
+
+          // Only emit if there are new logs
+          if (result.logs && result.logs.length > 0) {
+            socket.emit('logs:batch', {
+              logs: result.logs,
+              storeName: result.storeName,
+              timestamp: result.timestamp,
+            });
+
+            // Update timestamp for next poll
+            // Add 1ms to exclude the last log we just sent (wonder-logger uses >= not >)
+            const lastLog = result.logs[result.logs.length - 1];
+            lastLogTimestamp = (lastLog.timestamp || Date.now()) + 1;
+          }
+        } catch (error: any) {
+          logger.error({
+            err: error instanceof Error ? error : new Error(String(error)),
+            socketId: socket.id,
+          }, 'Failed to poll logs');
+        }
+      }, 1000); // Poll every second
+    });
+
+    // Handle log stream stop
+    socket.on('logs:stop', () => {
+      logger.info({ socketId: socket.id }, 'Client stopped log stream');
+
+      if (logStreamInterval) {
+        clearInterval(logStreamInterval);
+        logStreamInterval = null;
+      }
+    });
+
+    // Get available log stores
+    socket.on('logs:get-stores', async () => {
+      try {
+        const stores = await bridge.getLogStores();
+        socket.emit('logs:stores', { stores });
+      } catch (error: any) {
+        logger.error({
+          err: error instanceof Error ? error : new Error(String(error)),
+          socketId: socket.id,
+        }, 'Failed to get log stores');
+
+        socket.emit('logs:error', {
+          message: error.message || 'Failed to retrieve log stores',
+        });
+      }
+    });
+
     // Handle disconnection
     socket.on('disconnect', () => {
       logger.info({
         socketId: socket.id,
       }, 'Dashboard client disconnected');
 
+      // Clean up log streaming
+      if (logStreamInterval) {
+        clearInterval(logStreamInterval);
+        logStreamInterval = null;
+      }
+
       // Clean up event handlers
       bridge.off('ws:process-status', processStatusHandler);
       bridge.off('ws:config-saved', configSavedHandler);
       bridge.off('ws:cache-stream', cacheStreamHandler);
+      bridge.off('ws:permission:request', permissionRequestHandler);
+      bridge.off('ws:permission:resolved', permissionResolvedHandler);
+      bridge.off('ws:permission:timeout', permissionTimeoutHandler);
     });
   });
 

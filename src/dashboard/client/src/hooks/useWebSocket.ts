@@ -29,14 +29,57 @@ export interface CacheStreamData {
   timestamp: number;
 }
 
+export interface PendingPermissionRequest {
+  permissionId: string;
+  sessionId: string;
+  teamName: string;
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  reason?: string;
+  createdAt: string;
+}
+
+export interface ParsedLogEntry {
+  timestamp: number;
+  level: string;
+  context?: string;
+  message: string;
+  [key: string]: any;
+}
+
+export interface LogBatchData {
+  logs: ParsedLogEntry[];
+  storeName?: string;
+  timestamp: number;
+}
+
 export interface WebSocketState {
   connected: boolean;
   socket: Socket | null;
 }
 
-export function useWebSocket(onProcessStatus?: (data: ProcessStatus) => void, onCacheStream?: (data: CacheStreamData) => void) {
+export function useWebSocket(
+  onProcessStatus?: (data: ProcessStatus) => void,
+  onCacheStream?: (data: CacheStreamData) => void,
+  onPermissionRequest?: (data: PendingPermissionRequest) => void,
+  onLogBatch?: (data: LogBatchData) => void,
+) {
   const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
+
+  // Store callbacks in refs so they can be updated without reconnecting
+  const onProcessStatusRef = useRef(onProcessStatus);
+  const onCacheStreamRef = useRef(onCacheStream);
+  const onPermissionRequestRef = useRef(onPermissionRequest);
+  const onLogBatchRef = useRef(onLogBatch);
+
+  // Update refs on each render
+  useEffect(() => {
+    onProcessStatusRef.current = onProcessStatus;
+    onCacheStreamRef.current = onCacheStream;
+    onPermissionRequestRef.current = onPermissionRequest;
+    onLogBatchRef.current = onLogBatch;
+  });
 
   useEffect(() => {
     // Connect to WebSocket
@@ -63,20 +106,51 @@ export function useWebSocket(onProcessStatus?: (data: ProcessStatus) => void, on
 
     socket.on('process-status', (data: ProcessStatus) => {
       console.log('[WebSocket] Process status update', data);
-      if (onProcessStatus) {
-        onProcessStatus(data);
+      if (onProcessStatusRef.current) {
+        onProcessStatusRef.current(data);
       }
     });
 
     socket.on('cache-stream', (data: CacheStreamData) => {
       console.log('[WebSocket] Cache stream data', data);
-      if (onCacheStream) {
-        onCacheStream(data);
+      if (onCacheStreamRef.current) {
+        onCacheStreamRef.current(data);
       }
     });
 
     socket.on('config-saved', (data: any) => {
       console.log('[WebSocket] Config saved', data);
+    });
+
+    socket.on('permission:request', (data: PendingPermissionRequest) => {
+      console.log('[WebSocket] Permission request', data);
+      if (onPermissionRequestRef.current) {
+        onPermissionRequestRef.current(data);
+      }
+    });
+
+    socket.on('permission:resolved', (data: any) => {
+      console.log('[WebSocket] Permission resolved', data);
+    });
+
+    socket.on('permission:timeout', (data: any) => {
+      console.log('[WebSocket] Permission timeout', data);
+    });
+
+    // Log streaming events
+    socket.on('logs:batch', (data: LogBatchData) => {
+      console.log('[WebSocket] Log batch received', data.logs.length, 'logs');
+      if (onLogBatchRef.current) {
+        onLogBatchRef.current(data);
+      }
+    });
+
+    socket.on('logs:stores', (data: { stores: string[] }) => {
+      console.log('[WebSocket] Log stores', data.stores);
+    });
+
+    socket.on('logs:error', (error: { message: string }) => {
+      console.error('[WebSocket] Log error', error);
     });
 
     socket.on('error', (error: any) => {
@@ -87,7 +161,7 @@ export function useWebSocket(onProcessStatus?: (data: ProcessStatus) => void, on
     return () => {
       socket.disconnect();
     };
-  }, [onProcessStatus, onCacheStream]);
+  }, []); // Empty deps - connect once, callbacks updated via refs
 
   const streamCache = (sessionId: string) => {
     if (socketRef.current && connected) {
@@ -96,9 +170,45 @@ export function useWebSocket(onProcessStatus?: (data: ProcessStatus) => void, on
     }
   };
 
+  const respondToPermission = (permissionId: string, approved: boolean, reason?: string) => {
+    if (socketRef.current && connected) {
+      console.log('[WebSocket] Responding to permission', { permissionId, approved, reason });
+      socketRef.current.emit('permission:response', {
+        permissionId,
+        approved,
+        reason,
+      });
+    }
+  };
+
+  const startLogStream = (options?: { storeName?: string; level?: string | string[] }) => {
+    if (socketRef.current && connected) {
+      console.log('[WebSocket] Starting log stream', options);
+      socketRef.current.emit('logs:start', options || {});
+    }
+  };
+
+  const stopLogStream = () => {
+    if (socketRef.current && connected) {
+      console.log('[WebSocket] Stopping log stream');
+      socketRef.current.emit('logs:stop');
+    }
+  };
+
+  const getLogStores = () => {
+    if (socketRef.current && connected) {
+      console.log('[WebSocket] Requesting log stores');
+      socketRef.current.emit('logs:get-stores');
+    }
+  };
+
   return {
     connected,
     socket: socketRef.current,
     streamCache,
+    respondToPermission,
+    startLogStream,
+    stopLogStream,
+    getLogStores,
   };
 }

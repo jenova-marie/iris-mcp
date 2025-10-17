@@ -2,7 +2,24 @@
 
 **Status:** Planning Phase
 **Created:** 2025-01-15
+**Updated:** 2025-01-16
 **Target Release:** Phase 3
+
+**PREREQUISITE:** [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md) must be completed before starting this phase.
+
+---
+
+## Critical Update (2025-01-16)
+
+**Authentication is now the foundational layer.** This plan has been restructured to depend on the completion of [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md), which covers:
+
+- API key generation, storage, and management
+- Permission-based access control (RBAC)
+- Rate limiting and audit logging
+- CLI commands for key management
+- Security hardening (TLS, secret scanning)
+
+**Do not proceed with API endpoint implementation until auth foundation is complete and tested.**
 
 ---
 
@@ -76,7 +93,7 @@ All MCP tools map 1:1 to HTTP endpoints:
 
 ### Update `src/example.config.json`
 
-Add new `api` section:
+**Note:** API key management is now handled via CLI and SQLite storage (see [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md)). Do not store API keys in `config.json`.
 
 ```json
 {
@@ -84,27 +101,21 @@ Add new `api` section:
   "dashboard": { /* existing */ },
   "database": { /* existing */ },
   "api": {
-    "enabled": true,
+    "enabled": false,            // Default: disabled for security
     "port": 1615,
-    "host": "0.0.0.0",
-    "requireAuth": false,
+    "host": "127.0.0.1",         // Default: localhost only
+    "requireAuth": true,         // Default: auth required
+    "keyStorePath": "${IRIS_HOME}/keys.db",
+    "auditLogPath": "${IRIS_HOME}/audit.db",
     "cors": {
       "enabled": true,
-      "origins": ["http://localhost:3000", "http://localhost:3100"]
+      "origins": ["http://localhost:3100"]  // Dashboard only
     },
     "rateLimit": {
       "enabled": true,
-      "windowMs": 900000,
+      "windowMs": 900000,        // 15 minutes
       "maxRequests": 100
-    },
-    "apiKeys": [
-      {
-        "key": "iris_sk_example_abc123",
-        "name": "Example API Key",
-        "permissions": ["tell", "wake", "status"],
-        "enabled": true
-      }
-    ]
+    }
   },
   "teams": { /* existing */ }
 }
@@ -112,46 +123,25 @@ Add new `api` section:
 
 ### Update `src/config/iris-config.ts`
 
-Add Zod schema for API configuration:
+**Note:** Zod schema is defined in [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md). Summary:
 
 ```typescript
-const ApiKeySchema = z.object({
-  key: z.string().min(1),
-  name: z.string(),
-  permissions: z.array(z.enum([
-    "tell",
-    "wake",
-    "sleep",
-    "status",
-    "cache:read",
-    "cache:write",
-    "admin"
-  ])),
-  enabled: z.boolean().default(true)
-});
-
 const ApiConfigSchema = z.object({
-  enabled: z.boolean().default(true),
+  enabled: z.boolean().default(false),
   port: z.number().int().min(1).max(65535).default(1615),
-  host: z.string().default("0.0.0.0"),
-  requireAuth: z.boolean().default(false),
+  host: z.string().default('127.0.0.1'),
+  requireAuth: z.boolean().default(true),
+  keyStorePath: z.string().default('${IRIS_HOME}/keys.db'),
+  auditLogPath: z.string().default('${IRIS_HOME}/audit.db'),
   cors: z.object({
     enabled: z.boolean().default(true),
-    origins: z.array(z.string()).default(["*"])
-  }).optional().default({
-    enabled: true,
-    origins: ["*"]
+    origins: z.array(z.string()).default(['http://localhost:3100'])
   }),
   rateLimit: z.object({
     enabled: z.boolean().default(true),
-    windowMs: z.number().positive().default(900000), // 15 minutes
+    windowMs: z.number().positive().default(900000),
     maxRequests: z.number().int().positive().default(100)
-  }).optional().default({
-    enabled: true,
-    windowMs: 900000,
-    maxRequests: 100
-  }),
-  apiKeys: z.array(ApiKeySchema).optional().default([])
+  })
 });
 
 // Add to TeamsConfigSchema
@@ -159,36 +149,30 @@ const TeamsConfigSchema = z.object({
   settings: { /* existing */ },
   dashboard: { /* existing */ },
   database: { /* existing */ },
-  api: ApiConfigSchema.optional().default({
-    enabled: true,
-    port: 1615,
-    host: "0.0.0.0",
-    requireAuth: false
-  }),
+  api: ApiConfigSchema.optional(),
   teams: { /* existing */ }
 });
 ```
 
 ### Update `src/process-pool/types.ts`
 
-Add API configuration type:
+**Note:** Type definitions are in [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md). Summary:
 
 ```typescript
-export interface ApiKey {
-  key: string;
-  name: string;
-  permissions: Array<
-    "tell" | "wake" | "sleep" | "status" |
-    "cache:read" | "cache:write" | "admin"
-  >;
-  enabled: boolean;
-}
+export type Permission =
+  | 'team:tell' | 'team:wake' | 'team:sleep' | 'team:cancel'
+  | 'team:clear' | 'team:compact' | 'team:fork'
+  | 'cache:read' | 'cache:write'
+  | 'status:read' | 'debug:read'
+  | 'admin';
 
 export interface ApiConfig {
   enabled: boolean;
   port: number;
   host: string;
   requireAuth: boolean;
+  keyStorePath: string;
+  auditLogPath: string;
   cors?: {
     enabled: boolean;
     origins: string[];
@@ -198,7 +182,6 @@ export interface ApiConfig {
     windowMs: number;
     maxRequests: number;
   };
-  apiKeys?: ApiKey[];
 }
 
 export interface TeamsConfig {
@@ -214,21 +197,16 @@ export interface TeamsConfig {
 
 ## Authentication & Security
 
-### API Key Format
+**IMPORTANT:** All authentication and security implementation is detailed in [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md).
 
-`iris_sk_{random_string}`
+### Summary
 
-Example: `iris_sk_abc123def456ghi789jkl012`
-
-### Permission Model
-
-- `tell` - Send messages via team_tell, team_quick_tell
-- `wake` - Start processes (wake, wake_all)
-- `sleep` - Stop processes (sleep, clear, cancel)
-- `status` - Read system status (isAwake, teams, report)
-- `cache:read` - View cache contents
-- `cache:write` - Clear cache
-- `admin` - All permissions (bypass all checks)
+- **API Key Format**: `iris_sk_{environment}_{random}` (50-55 chars)
+- **Storage**: SQLite database (`keys.db`), never `config.json`
+- **Permissions**: Granular RBAC (e.g., `team:tell`, `cache:read`, `admin`)
+- **Rate Limiting**: Per-API-key, configurable limits
+- **Audit Logging**: All auth events logged to SQLite + Wonder Logger
+- **CLI Management**: `pnpm iris key generate/list/revoke`
 
 ### Middleware Stack
 
@@ -236,86 +214,16 @@ Example: `iris_sk_abc123def456ghi789jkl012`
 app.use(helmet());                          // Security headers
 app.use(cors(config.api.cors));             // CORS
 app.use(express.json({ limit: '10mb' }));   // JSON parsing
-app.use('/api/', apiRateLimiter);           // Rate limiting
-app.use('/api/', authenticateApiKey);       // Auth (if enabled)
+app.use('/api/', apiRateLimiter);           // Rate limiting (from auth plan)
+app.use('/api/', authenticateApiKey);       // Auth middleware (from auth plan)
 app.use('/api/', errorHandler);             // Error handling
 ```
 
-### Authentication Middleware
-
-```typescript
-// src/api/middleware/auth.ts
-export function authenticateApiKey(
-  req: Request,
-  res: Response,
-  next: NextFunction
-) {
-  // Skip if auth not required
-  if (!config.api.requireAuth) {
-    return next();
-  }
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({
-      error: 'UnauthorizedError',
-      message: 'Missing or invalid Authorization header',
-      statusCode: 401,
-      timestamp: Date.now()
-    });
-  }
-
-  const apiKey = authHeader.replace('Bearer ', '');
-  const key = config.api.apiKeys?.find(k => k.key === apiKey && k.enabled);
-
-  if (!key) {
-    return res.status(401).json({
-      error: 'UnauthorizedError',
-      message: 'Invalid API key',
-      statusCode: 401,
-      timestamp: Date.now()
-    });
-  }
-
-  // Attach key to request for permission checks
-  req.apiKey = key;
-  next();
-}
-
-export function requirePermission(permission: string) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!config.api.requireAuth) {
-      return next();
-    }
-
-    const key = req.apiKey;
-    if (!key) {
-      return res.status(403).json({
-        error: 'ForbiddenError',
-        message: 'No API key found',
-        statusCode: 403,
-        timestamp: Date.now()
-      });
-    }
-
-    // Admin has all permissions
-    if (key.permissions.includes('admin')) {
-      return next();
-    }
-
-    if (!key.permissions.includes(permission)) {
-      return res.status(403).json({
-        error: 'ForbiddenError',
-        message: `Insufficient permissions. Required: ${permission}`,
-        statusCode: 403,
-        timestamp: Date.now()
-      });
-    }
-
-    next();
-  };
-}
-```
+**Implementation reference**: See [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md) sections:
+- "Authentication Middleware" (HTTP)
+- "WebSocket Authentication" (Socket.io)
+- "Rate Limiting"
+- "Audit Logging"
 
 ---
 
@@ -460,13 +368,27 @@ export function errorHandler(
 
 ## Implementation Steps
 
+**PREREQUISITE**: Complete [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md) Phase 3.0-3.2 before proceeding.
+
+### Step 0: Authentication Foundation (from auth plan)
+**Status:** Must be completed first
+
+- ✅ API key generation and storage
+- ✅ Permission model implementation
+- ✅ Auth middleware (HTTP + WebSocket)
+- ✅ Rate limiting
+- ✅ Audit logging
+- ✅ CLI commands for key management
+
 ### Step 1: Configuration Schema
 **Files:** `src/config/iris-config.ts`, `src/process-pool/types.ts`
 
-- Add `ApiConfigSchema` to Zod validation
+**Note:** Most of this is completed in auth plan.
+
+- Add `ApiConfigSchema` to Zod validation (from auth plan)
 - Add `api` field to `TeamsConfigSchema`
-- Export `ApiConfig` and `ApiKey` types in types.ts
-- Update `example.config.json` with API section
+- Export types in types.ts (from auth plan)
+- Update `example.config.json` with API section (from auth plan)
 
 ### Step 2: API Server Boilerplate
 **Files:** `src/api_server.ts`
@@ -566,11 +488,13 @@ export class IrisApiServer {
 ### Step 3: Middleware
 **Files:** `src/api/middleware/*.ts`
 
+**Note:** Auth and rate-limit are completed in auth plan.
+
 Create:
-- `auth.ts` - API key validation with permission checks
-- `rate-limit.ts` - express-rate-limit configuration
+- ~~`auth.ts`~~ - ✅ Completed in auth plan
+- ~~`rate-limit.ts`~~ - ✅ Completed in auth plan
 - `error-handler.ts` - Convert errors to standard JSON format
-- `validation.ts` - Request body/params validation helpers
+- `validation.ts` - Request body/params validation helpers (leverage existing `src/utils/validation.ts`)
 
 ### Step 4: Route Handlers
 **Files:** `src/api/routes/*.ts`
@@ -709,30 +633,48 @@ pnpm add -D @types/express @types/cors
 
 ## Migration Timeline
 
-### Phase 3.1: Core Infrastructure (Week 1-2)
+**UPDATED 2025-01-16**: Auth is now Phase 3.0-3.2 (prerequisite). API endpoints are Phase 3.3-3.5.
+
+### Phase 3.0: Auth Foundation (Week 1) - **PREREQUISITE**
+See [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md)
+- [ ] API key generation and storage (`key-generator.ts`, `key-store.ts`)
+- [ ] SQLite schema for keys and audit log
+- [ ] Permission model implementation
+- [ ] Unit tests for auth components
+
+### Phase 3.1: Auth Middleware (Week 2) - **PREREQUISITE**
+See [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md)
+- [ ] HTTP auth middleware
+- [ ] WebSocket auth middleware
+- [ ] Rate limiting middleware
+- [ ] Audit logging middleware
+- [ ] Integration tests for auth
+
+### Phase 3.2: CLI Integration (Week 2) - **PREREQUISITE**
+See [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md)
+- [ ] `pnpm iris key generate`
+- [ ] `pnpm iris key list`
+- [ ] `pnpm iris key revoke`
 - [ ] Configuration schema updates
-- [ ] Basic Express server setup (`api_server.ts`)
-- [ ] REST endpoints (no auth)
+- [ ] Security hardening
+
+### Phase 3.3: API Server Infrastructure (Week 3)
+- [ ] Express server setup (`api_server.ts`)
 - [ ] Error handling middleware
+- [ ] Integration with auth middleware (from Phase 3.0-3.2)
 - [ ] Basic health check endpoint
+- [ ] REST endpoint scaffolding
 
-### Phase 3.2: Security (Week 3)
-- [ ] Authentication middleware
-- [ ] Permission system
-- [ ] Rate limiting
-- [ ] CORS configuration
-- [ ] Security headers (Helmet)
-
-### Phase 3.3: WebSocket (Week 4)
-- [ ] Socket.io integration
+### Phase 3.4: WebSocket Integration (Week 4)
+- [ ] Socket.io integration with auth
 - [ ] Cache streaming
 - [ ] Process lifecycle events
 - [ ] Tell streaming (real-time responses)
 - [ ] Room-based broadcasting
 
-### Phase 3.4: Testing & Documentation (Week 5)
-- [ ] Integration test suite
-- [ ] API documentation
+### Phase 3.5: Testing & Documentation (Week 5)
+- [ ] Integration test suite for API endpoints
+- [ ] API documentation (OpenAPI/Swagger)
 - [ ] Client examples (curl, Node.js, Python, React)
 - [ ] Performance benchmarks
 - [ ] Security audit

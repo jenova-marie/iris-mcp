@@ -62,6 +62,10 @@ export interface IrisConfig {
   ssh2?: boolean; // Use ssh2 library instead of OpenSSH client (default: false)
   remoteOptions?: RemoteOptions;
   claudePath?: string; // Custom path to Claude CLI executable (default: "claude", supports ~ expansion)
+  // Reverse MCP tunneling
+  enableReverseMcp?: boolean; // Enable reverse MCP tunnel for this team
+  reverseMcpPort?: number; // Port to tunnel (default: 1615)
+  allowHttp?: boolean; // Allow HTTP for reverse MCP (dev only, default: false)
 }
 
 export interface DashboardConfig {

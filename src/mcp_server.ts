@@ -34,6 +34,7 @@ import { wakeAll } from "./actions/wake-all.js";
 import { report } from "./actions/report.js";
 import { teams } from "./actions/teams.js";
 import { debug } from "./actions/debug.js";
+import { permissionsApprove } from "./actions/grant-permission.js";
 
 const logger = getChildLogger("iris:mcp");
 
@@ -388,6 +389,31 @@ const TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: "permissions__approve",
+    description:
+      "Permission approval handler for Claude Code's --permission-prompt-tool feature. " +
+      "This tool is called by Claude Code when it needs permission to use another tool. " +
+      "Auto-approves all Iris MCP tools (mcp__iris__*) and denies all others.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        tool_name: {
+          type: "string",
+          description: "The name of the tool requesting permission (e.g., 'mcp__iris__team_teams')",
+        },
+        input: {
+          type: "object",
+          description: "The input parameters for the tool being requested",
+        },
+        reason: {
+          type: "string",
+          description: "Optional reason provided by Claude for why it needs permission",
+        },
+      },
+      required: ["tool_name", "input"],
+    },
+  },
 ];
 
 export class IrisMcpServer {
@@ -691,6 +717,21 @@ export class IrisMcpServer {
                 {
                   type: "text",
                   text: JSON.stringify(await debug(args as any), null, 2),
+                },
+              ],
+            };
+            break;
+
+          case "permissions__approve":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    await permissionsApprove(args as any),
+                    null,
+                    2,
+                  ),
                 },
               ],
             };

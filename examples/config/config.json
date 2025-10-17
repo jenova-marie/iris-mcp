@@ -50,8 +50,12 @@
       "description": "Remote end-to-end testing suite - all optional fields configured",
       "idleTimeout": 1800000,
       "skipPermissions": false,
-      "forwardPermissions": true,
-      "remoteForwardingPort": 1615,
+      "enableReverseMcp": true,
+      "reverseMcpPort": 1615,
+      "remoteOptions": {
+        "serverAliveInterval": 30000,
+        "serverAliveCountMax": 3
+      },
       "color": "#4CAF50"
     }
   }

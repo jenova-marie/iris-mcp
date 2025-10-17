@@ -49,6 +49,10 @@ const IrisConfigSchema = z.object({
     })
     .optional(),
   claudePath: z.string().optional(), // Custom path to Claude CLI executable (default: "claude", supports ~ expansion)
+  // Reverse MCP tunneling
+  enableReverseMcp: z.boolean().optional(), // Enable reverse MCP tunnel for this team
+  reverseMcpPort: z.number().int().min(1).max(65535).optional(), // Port to tunnel (default: 1615)
+  allowHttp: z.boolean().optional(), // Allow HTTP for reverse MCP (dev only, default: false)
 }).refine(
   (data) => {
     // If remote is specified, claudePath is required
@@ -60,6 +64,18 @@ const IrisConfigSchema = z.object({
   {
     message: "claudePath is required when remote is specified",
     path: ["claudePath"],
+  }
+).refine(
+  (data) => {
+    // enableReverseMcp requires remote execution to be configured
+    if (data.enableReverseMcp && !data.remote) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: "enableReverseMcp requires remote execution to be configured",
+    path: ["enableReverseMcp"],
   }
 );
 

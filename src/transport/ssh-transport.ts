@@ -94,6 +94,19 @@ export class SSHTransport implements Transport {
       });
     }
 
+    // Add reverse MCP tunnel if enabled
+    if (this.irisConfig.enableReverseMcp) {
+      const tunnelPort = this.irisConfig.reverseMcpPort || 1615;
+      // Use environment variable or default to 1615 for Iris HTTP port
+      const irisHttpPort = process.env.IRIS_HTTP_PORT || "1615";
+      sshArgs.push("-R", `${tunnelPort}:localhost:${irisHttpPort}`);
+      this.logger.debug("Adding reverse MCP tunnel to SSH command", {
+        teamName: this.teamName,
+        tunnelPort,
+        irisHttpPort,
+      });
+    }
+
     // Add Iris-managed SSH options
     sshArgs.push(
       "-T", // Disable PTY allocation (cleaner stdio)
@@ -175,6 +188,41 @@ export class SSHTransport implements Transport {
       "--output-format",
       "stream-json",
     );
+
+    // Skip permissions if configured
+    if (this.irisConfig.skipPermissions) {
+      args.push("--dangerously-skip-permissions");
+    }
+
+    // Add permission prompt tool for reverse MCP (allows remote Claude to ask for permission via the tunnel)
+    if (this.irisConfig.enableReverseMcp) {
+      args.push("--permission-prompt-tool", "mcp__iris__permissions__approve");
+    }
+
+    // Add MCP config for reverse tunnel if enabled
+    if (this.irisConfig.enableReverseMcp) {
+      const mcpPort = this.irisConfig.reverseMcpPort || 1615;
+      // Use HTTP if explicitly allowed (dev mode), otherwise HTTPS
+      const protocol = this.irisConfig.allowHttp ? "http" : "https";
+      const mcpConfig = {
+        mcpServers: {
+          iris: {
+            type: "http",
+            url: `${protocol}://localhost:${mcpPort}/mcp`,
+          },
+        },
+      };
+
+      // Pass as JSON string to --mcp-config (single-quoted to prevent shell interpretation)
+      args.push("--mcp-config", `'${JSON.stringify(mcpConfig)}'`);
+
+      this.logger.debug("Adding MCP config to remote Claude command", {
+        teamName: this.teamName,
+        mcpPort,
+        protocol,
+        mcpUrl: `${protocol}://localhost:${mcpPort}/mcp`,
+      });
+    }
 
     // Change to project directory, then execute Claude
     const cdCmd = `cd ${this.escapeShellArg(this.irisConfig.path)}`;

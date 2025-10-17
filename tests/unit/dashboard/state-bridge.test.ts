@@ -384,6 +384,27 @@ describe("DashboardStateBridge", () => {
         },
       ]);
 
+      // Mock process pool status to match - one active process, one stopped
+      vi.mocked(mockProcessPool.getStatus).mockReturnValue({
+        processes: {
+          "team-alpha->team-beta": {
+            pid: 12345,
+            status: "idle",
+            messagesProcessed: 3,
+            uptime: 60000,
+            queueLength: 0,
+            sessionId: "test-123",
+            messageCount: 5,
+            lastActivity: Date.now(),
+            idleTimeRemaining: 240000,
+          },
+          // team-beta->team-alpha has no process (stopped)
+        },
+        totalProcesses: 1,
+        maxProcesses: 10,
+        activeSessions: 1,
+      });
+
       const status = stateBridge.getPoolStatus();
 
       expect(status).toEqual({

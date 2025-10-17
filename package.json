@@ -10,7 +10,7 @@
   },
   "scripts": {
     "build": "pnpm build:server && pnpm build:client",
-    "build:server": "tsc && cp src/default.config.yaml dist/default.config.yaml",
+    "build:server": "tsc && cp src/default.config.yaml dist/default.config.yaml && cp -r src/templates dist/templates",
     "build:client": "cd src/dashboard/client && pnpm install && pnpm build",
     "dev": "tsx watch src/index.ts",
     "dev:client": "cd src/dashboard/client && pnpm dev",

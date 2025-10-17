@@ -228,6 +228,127 @@ describe("ClaudeProcessPool", () => {
     });
   });
 
+  describe("getProcessBySessionId", () => {
+    it("should return undefined for non-existent session", () => {
+      const process = pool.getProcessBySessionId("non-existent-session");
+
+      expect(process).toBeUndefined();
+    });
+
+    it("should return process for existing session", async () => {
+      const createdProcess = await pool.getOrCreateProcess(
+        "team-alpha",
+        "session-123",
+        "team-beta",
+      );
+
+      const retrievedProcess = pool.getProcessBySessionId("session-123");
+
+      expect(retrievedProcess).toBeDefined();
+      expect(retrievedProcess).toBe(createdProcess);
+      expect(retrievedProcess?.teamName).toBe("team-alpha");
+      expect(retrievedProcess?.sessionId).toBe("session-123");
+    });
+
+    it("should distinguish between different sessions", async () => {
+      const process1 = await pool.getOrCreateProcess(
+        "team-alpha",
+        "session-1",
+        "team-beta",
+      );
+      const process2 = await pool.getOrCreateProcess(
+        "team-beta",
+        "session-2",
+        "team-gamma",
+      );
+
+      const retrieved1 = pool.getProcessBySessionId("session-1");
+      const retrieved2 = pool.getProcessBySessionId("session-2");
+
+      expect(retrieved1).toBe(process1);
+      expect(retrieved2).toBe(process2);
+      expect(retrieved1).not.toBe(retrieved2);
+    });
+
+    it("should return undefined after process termination", async () => {
+      await pool.getOrCreateProcess("team-alpha", "session-123", "team-beta");
+
+      // Verify process exists
+      expect(pool.getProcessBySessionId("session-123")).toBeDefined();
+
+      // Terminate process
+      await pool.terminateProcess("team-alpha");
+
+      // Should no longer find process
+      expect(pool.getProcessBySessionId("session-123")).toBeUndefined();
+    });
+
+    it("should handle multiple processes with different sessions", async () => {
+      const process1 = await pool.getOrCreateProcess(
+        "team-alpha",
+        "session-1",
+        "team-beta",
+      );
+      const process2 = await pool.getOrCreateProcess(
+        "team-alpha",
+        "session-2",
+        "team-gamma",
+      );
+      const process3 = await pool.getOrCreateProcess(
+        "team-beta",
+        "session-3",
+        "team-alpha",
+      );
+
+      expect(pool.getProcessBySessionId("session-1")).toBe(process1);
+      expect(pool.getProcessBySessionId("session-2")).toBe(process2);
+      expect(pool.getProcessBySessionId("session-3")).toBe(process3);
+    });
+
+    it("should work correctly after LRU eviction", async () => {
+      // Fill pool to max
+      await pool.getOrCreateProcess("team-alpha", "session-1", "team-beta");
+      await pool.getOrCreateProcess("team-beta", "session-2", "team-beta");
+      const process3 = await pool.getOrCreateProcess(
+        "team-gamma",
+        "session-3",
+        "team-beta",
+      );
+
+      // Add team-delta to config
+      mockConfigManager.getIrisConfig = vi.fn((teamName: string) => {
+        if (teamName === "team-delta") {
+          return {
+            path: "/path/to/delta",
+            description: "Delta team",
+            skipPermissions: true,
+          };
+        }
+        return testConfig.teams[teamName] || null;
+      });
+
+      // This should evict session-1
+      const process4 = await pool.getOrCreateProcess(
+        "team-delta",
+        "session-4",
+        "team-beta",
+      );
+
+      // Evicted session should return undefined
+      expect(pool.getProcessBySessionId("session-1")).toBeUndefined();
+
+      // Active sessions should still work
+      expect(pool.getProcessBySessionId("session-3")).toBe(process3);
+      expect(pool.getProcessBySessionId("session-4")).toBe(process4);
+    });
+
+    it("should handle empty session ID", () => {
+      const process = pool.getProcessBySessionId("");
+
+      expect(process).toBeUndefined();
+    });
+  });
+
   describe("terminateProcess", () => {
     it("should terminate specific process", async () => {
       const process = await pool.getOrCreateProcess(

@@ -79,8 +79,8 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.19.1",
     "@jenova-marie/wonder-logger": "^1.0.11",
+    "@modelcontextprotocol/sdk": "^1.19.1",
     "better-sqlite3": "^11.0.0",
     "commander": "^12.0.0",
     "cors": "^2.8.5",
@@ -95,6 +95,7 @@
     "ssh-config": "^5.0.3",
     "ssh2": "^1.17.0",
     "ws": "^8.16.0",
+    "yaml": "^2.8.1",
     "zod": "^3.23.0"
   }
 }

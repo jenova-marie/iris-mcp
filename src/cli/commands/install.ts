@@ -54,12 +54,12 @@ function getClaudeDesktopConfigPath(): string {
 }
 
 /**
- * Create default Iris MCP config from default.config.json
+ * Create default Iris MCP config from default.config.yaml
  */
 function createDefaultIrisConfig(configPath: string): void {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
-  const defaultConfigPath = resolve(__dirname, "../../default.config.json");
+  const defaultConfigPath = resolve(__dirname, "../../default.config.yaml");
 
   if (!existsSync(defaultConfigPath)) {
     throw new Error(
@@ -95,7 +95,8 @@ export async function install(options: InstallOptions): Promise<void> {
   // Check if teams are configured
   let hasTeams = false;
   try {
-    const irisConfig = JSON.parse(readFileSync(irisConfigPath, "utf-8"));
+    const { parse } = await import('yaml');
+    const irisConfig = parse(readFileSync(irisConfigPath, "utf-8"));
     hasTeams = irisConfig.teams && Object.keys(irisConfig.teams).length > 0;
   } catch (error) {
     // Ignore errors, we'll just assume no teams

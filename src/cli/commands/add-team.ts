@@ -5,6 +5,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve, join } from "path";
+import { parseDocument } from "yaml";
 import { getChildLogger } from "../../utils/logger.js";
 import { getConfigPath } from "../../utils/paths.js";
 
@@ -46,10 +47,11 @@ export async function addTeam(
   const configPath = getConfigPath();
   logger.info(`Loading config from: ${configPath}`);
 
-  let config: any;
+  let doc: any;
   try {
     const configContent = readFileSync(configPath, "utf-8");
-    config = JSON.parse(configContent);
+    // Parse as YAML Document to preserve comments
+    doc = parseDocument(configContent);
   } catch (error) {
     logger.error(
       { err: error instanceof Error ? error : new Error(String(error)) },
@@ -58,19 +60,23 @@ export async function addTeam(
     process.exit(1);
   }
 
+  // Get the teams node (or create if doesn't exist)
+  const teams = doc.get('teams');
+
   // Check if team already exists
-  if (config.teams && config.teams[name]) {
+  if (teams && teams.has(name)) {
     logger.error(`Team "${name}" already exists in configuration.`);
-    logger.info(`Existing team path: ${config.teams[name].path}`);
+    const existingTeam = teams.get(name);
+    logger.info(`Existing team path: ${existingTeam.get('path')}`);
     process.exit(1);
   }
 
-  // Ensure teams object exists
-  if (!config.teams) {
-    config.teams = {};
+  // Ensure teams node exists
+  if (!teams) {
+    doc.set('teams', doc.createNode({}));
   }
 
-  // Build team configuration
+  // Build team configuration object
   const irisConfig: any = {
     path: teamPath,
     description: options.description || `Team ${name}`,
@@ -89,12 +95,13 @@ export async function addTeam(
     irisConfig.color = options.color;
   }
 
-  // Add team to config
-  config.teams[name] = irisConfig;
+  // Add team to config (this preserves existing comments!)
+  const teamsNode = doc.get('teams');
+  teamsNode.set(name, doc.createNode(irisConfig));
 
-  // Write updated config
+  // Write updated config (preserves comments and formatting)
   try {
-    writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");
+    writeFileSync(configPath, doc.toString(), "utf-8");
     logger.info(`✅ Successfully added team "${name}" to configuration`);
     logger.info(`   Path: ${teamPath}`);
     logger.info(`   Config: ${configPath}`);

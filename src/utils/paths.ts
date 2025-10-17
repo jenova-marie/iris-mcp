@@ -16,11 +16,29 @@ export function getIrisHome(): string {
 }
 
 /**
- * Get the path to config.json configuration file
- * Located at $IRIS_HOME/config.json or ~/.iris/config.json
+ * Get the path to config.yaml configuration file
+ * Located at $IRIS_HOME/config.yaml or ~/.iris/config.yaml
+ * Also supports .yml extension
  */
 export function getConfigPath(): string {
-  return resolve(getIrisHome(), "config.json");
+  const irisHome = getIrisHome();
+
+  // Try .yaml first (preferred), then .yml
+  const yamlPath = resolve(irisHome, "config.yaml");
+  const ymlPath = resolve(irisHome, "config.yml");
+
+  // If .yaml exists, use it
+  if (existsSync(yamlPath)) {
+    return yamlPath;
+  }
+
+  // If .yml exists, use it
+  if (existsSync(ymlPath)) {
+    return ymlPath;
+  }
+
+  // Default to .yaml (will be created on install)
+  return yamlPath;
 }
 
 /**

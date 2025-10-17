@@ -1,15 +1,17 @@
 /**
  * Iris MCP - Teams Configuration Loader
- * Loads and validates config.json configuration with Zod
+ * Loads and validates config.yaml configuration with Zod
  */
 
 import { readFileSync, existsSync, watchFile } from "fs";
 import { resolve, dirname, isAbsolute } from "path";
 import { z } from "zod";
+import { parse as parseYaml } from "yaml";
 import type { TeamsConfig } from "../process-pool/types.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ConfigurationError } from "../utils/errors.js";
 import { getConfigPath, ensureIrisHome } from "../utils/paths.js";
+import { interpolateObject } from "../utils/env-interpolation.js";
 
 // Lazy logger getter to avoid initialization at module load time
 let _logger: ReturnType<typeof getChildLogger> | null = null;
@@ -219,10 +221,15 @@ export class TeamsConfigManager {
       }
 
       const content = readFileSync(this.configPath, "utf8");
-      const parsed = JSON.parse(content);
+
+      // Parse YAML
+      const parsed = parseYaml(content);
+
+      // Interpolate environment variables
+      const interpolated = interpolateObject(parsed, true);
 
       // Validate with Zod
-      const validated = TeamsConfigSchema.parse(parsed);
+      const validated = TeamsConfigSchema.parse(interpolated);
 
       // Check if teams are configured
       if (Object.keys(validated.teams).length === 0) {
@@ -299,10 +306,16 @@ export class TeamsConfigManager {
         );
       }
 
-      if (error instanceof SyntaxError) {
+      // YAML parse errors
+      if (error instanceof Error && error.name === 'YAMLParseError') {
         throw new ConfigurationError(
-          `Invalid JSON in configuration file: ${error.message}`,
+          `Invalid YAML in configuration file: ${error.message}`,
         );
+      }
+
+      // Environment variable interpolation errors
+      if (error instanceof Error && error.message.includes('Environment variable')) {
+        throw new ConfigurationError(error.message);
       }
 
       throw error;

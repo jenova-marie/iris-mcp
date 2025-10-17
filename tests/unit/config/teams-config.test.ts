@@ -258,7 +258,7 @@ describe("TeamsConfigManager", () => {
       const config = manager.load();
 
       // Default value should be applied by Zod schema
-      expect(config.teams["team-alpha"].grantPermission).toBe("yes");
+      expect(config.teams["team-alpha"].grantPermission).toBe("ask");
     });
 
     it("should accept valid grantPermission values", async () => {
@@ -417,7 +417,8 @@ describe("TeamsConfigManager", () => {
           "team-alpha": {
             path: "/absolute/path/team-alpha",
             description: "Test team alpha",
-            appendSystemPrompt: "You are a specialized frontend development team.",
+            appendSystemPrompt:
+              "You are a specialized frontend development team.",
           },
         },
       };

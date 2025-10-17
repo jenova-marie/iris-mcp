@@ -382,11 +382,51 @@ const IrisConfigSchema = z.object({
   idleTimeout: z.number().positive().optional(),
   sessionInitTimeout: z.number().positive().optional(),
   skipPermissions: z.boolean().optional(),
-  grantPermission: z.enum(["yes", "no", "ask", "forward"]).optional().default("yes"),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
     .optional(),
+  // Phase 2: Remote execution via SSH
+  remote: z.string().optional(),
+  ssh2: z.boolean().optional(),
+  remoteOptions: z.object({
+    identity: z.string().optional(),
+    passphrase: z.string().optional(),
+    port: z.number().int().min(1).max(65535).optional(),
+    strictHostKeyChecking: z.boolean().optional(),
+    connectTimeout: z.number().positive().optional(),
+    serverAliveInterval: z.number().positive().optional(),
+    serverAliveCountMax: z.number().int().positive().optional(),
+    compression: z.boolean().optional(),
+    forwardAgent: z.boolean().optional(),
+    extraSshArgs: z.array(z.string()).optional(),
+  }).optional(),
+  claudePath: z.string().optional(),
+  // Reverse MCP tunneling
+  enableReverseMcp: z.boolean().optional(),
+  reverseMcpPort: z.number().int().min(1).max(65535).optional(),
+  allowHttp: z.boolean().optional(),
+  // Permission approval mode
+  grantPermission: z.enum(["yes", "no", "ask", "forward"]).optional().default("ask"),
+  // Tool allowlist/denylist
+  allowedTools: z.string().optional(),
+  disallowedTools: z.string().optional(),
+  // System prompt customization
+  appendSystemPrompt: z.string().optional(),
+})
+.refine((data) => {
+  if (data.remote && !data.claudePath) return false;
+  return true;
+}, {
+  message: "claudePath is required when remote is specified",
+  path: ["claudePath"],
+})
+.refine((data) => {
+  if (data.enableReverseMcp && !data.remote) return false;
+  return true;
+}, {
+  message: "enableReverseMcp requires remote execution to be configured",
+  path: ["enableReverseMcp"],
 });
 
 const TeamsConfigSchema = z.object({
@@ -496,11 +536,11 @@ Resolved:    /Users/jenova/.iris/projects/alpha
 The `grantPermission` field controls how Claude handles permission requests for file operations and tool usage. This is **Phase 1** (schema only) - the implementation is planned for a future release.
 
 **Type:** `enum ["yes", "no", "ask", "forward"]`
-**Default:** `"yes"` (auto-approve all actions)
+**Default:** `"ask"` (manual approval for safety)
 
 ### Permission Modes
 
-**`yes` - Auto-Approve (Default)**
+**`yes` - Auto-Approve**
 ```yaml
 teams:
   team-dev:
@@ -522,7 +562,7 @@ teams:
 - **Use case:** Read-only analysis, code review teams
 - **Note:** May limit Claude's effectiveness
 
-**`ask` - Interactive Prompt**
+**`ask` - Interactive Prompt (Default)**
 ```yaml
 teams:
   team-prod:
@@ -721,8 +761,23 @@ interface IrisConfig {
   idleTimeout?: number;           // Optional override for this team
   sessionInitTimeout?: number;    // Optional override for this team
   skipPermissions?: boolean;      // (Deprecated) Auto-approve all Claude actions
-  grantPermission?: "yes" | "no" | "ask" | "forward";  // Permission approval mode
   color?: string;                 // Hex color for UI (#FF6B9D)
+  // Remote execution
+  remote?: string;                // SSH connection string (e.g., "user@host")
+  ssh2?: boolean;                 // Use ssh2 library instead of OpenSSH (default: false)
+  remoteOptions?: RemoteOptions;  // SSH connection options
+  claudePath?: string;            // Custom Claude CLI path (supports ~ expansion)
+  // Reverse MCP tunneling
+  enableReverseMcp?: boolean;     // Enable reverse MCP tunnel for this team
+  reverseMcpPort?: number;        // Port to tunnel (default: 1615)
+  allowHttp?: boolean;            // Allow HTTP for reverse MCP (dev only)
+  // Permission approval mode
+  grantPermission?: "yes" | "no" | "ask" | "forward";  // Permission mode (default: "ask")
+  // Tool allowlist/denylist
+  allowedTools?: string;          // Comma-separated list of allowed MCP tools
+  disallowedTools?: string;       // Comma-separated list of denied MCP tools
+  // System prompt customization
+  appendSystemPrompt?: string;    // Additional system prompt to append
 }
 ```
 
@@ -939,6 +994,6 @@ See [PERMISSION_APPROVAL_PLAN.md](./future/PERMISSION_APPROVAL_PLAN.md) for impl
 
 **Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, grantPermission, skipPermissions, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration
 
-**Last Updated:** 2025-10-16
-**Change Context:** Migrated from config.yaml to config.yaml format, added environment variable interpolation with ${VAR:-default} syntax, documented new grantPermission field (enum: yes/no/ask/forward) for permission approval system (Phase 1 schema only)
+**Last Updated:** 2025-10-17
+**Change Context:** Updated grantPermission default from "yes" to "ask" for safer defaults. Added documentation for remote execution fields (remote, ssh2, remoteOptions, claudePath), reverse MCP tunneling (enableReverseMcp, reverseMcpPort, allowHttp), and tool management (allowedTools, disallowedTools, appendSystemPrompt). All schema definitions now match actual implementation in src/config/iris-config.ts.
 **Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design)

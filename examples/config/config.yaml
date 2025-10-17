@@ -11,44 +11,46 @@
 #   ${VAR_NAME}          - Required variable (throws if not set)
 #   ${VAR_NAME:-default} - Optional variable with default value
 #
+# See docs/CONFIG.md for more information.
+#
 # ==============================================================================
 
 settings:
   # Timeouts
-  sessionInitTimeout: 30000        # 30 seconds
-  spawnTimeout: 20000              # 20 seconds
-  responseTimeout: 120000          # 2 minutes
-  idleTimeout: 3600000             # 1 hour
+  sessionInitTimeout: 30000 # 30 seconds
+  spawnTimeout: 20000 # 20 seconds
+  responseTimeout: 120000 # 2 minutes
+  idleTimeout: 3600000 # 1 hour
 
   # Resource limits
-  maxProcesses: 10                 # Max concurrent Claude processes
-  healthCheckInterval: 30000       # 30 seconds
+  maxProcesses: 10 # Max concurrent Claude processes
+  healthCheckInterval: 30000 # 30 seconds
 
   # MCP Server
-  httpPort: 1615                   # Port for Claude CLI to connect
-  defaultTransport: http           # Use HTTP for Claude CLI
+  httpPort: 1615 # Port for Claude CLI to connect
+  defaultTransport: http # Use HTTP for Claude CLI
 
   # Observability
-  wonderLoggerConfig: ./wonder-logger.yaml  # OpenTelemetry, Prometheus, logs
+  wonderLoggerConfig: ./wonder-logger.yaml # OpenTelemetry, Prometheus, logs
 
 dashboard:
   enabled: true
   host: localhost
 
   # HTTP (development only - not secure over network)
-  http: 0                          # Disabled in this example
+  http: 0 # Disabled in this example
 
   # HTTPS (recommended for production)
-  https: 3100                      # Enabled with self-signed cert
-  selfsigned: false                # Using custom certificate
+  https: 3100 # Enabled with self-signed cert
+  selfsigned: false # Using custom certificate
 
   # Custom SSL certificate paths
   certPath: ./cert.pem
   keyPath: ./key.pem
 
 database:
-  path: data/team-sessions.db      # SQLite database for sessions
-  inMemory: false                  # Persistent storage
+  path: data/team-sessions.db # SQLite database for sessions
+  inMemory: false # Persistent storage
 
 # ==============================================================================
 # Teams Configuration Examples
@@ -70,7 +72,7 @@ teams:
   team-backend:
     path: /Users/jenova/projects/myapp/backend
     description: Node.js backend API - custom idle timeout
-    idleTimeout: 600000            # 10 minutes (vs default 1 hour)
+    idleTimeout: 600000 # 10 minutes (vs default 1 hour)
 
   # ------------------------------------------------------------------------------
   # Example 3: Local Team with Auto-Approve
@@ -89,7 +91,7 @@ teams:
   team-devops:
     path: /Users/jenova/projects/myapp/infra
     description: Infrastructure and deployment - custom color for UI
-    color: "#FF5733"               # Orange for infra team
+    color: "#FF5733" # Orange for infra team
 
   # ------------------------------------------------------------------------------
   # Example 5: Remote Team with Reverse MCP
@@ -98,26 +100,26 @@ teams:
   # Remote Claude can call back to local Iris via SSH reverse tunnel.
   team-remote:
     # Remote execution configuration
-    remote: ssh <host>                            # SSH connection string
-    claudePath: ~/.local/bin/claude               # Claude CLI path on remote
-    path: /Users/<user>/projects/myapp/e2e-tests  # Project path on remote
+    remote: ssh <host> # SSH connection string
+    claudePath: ~/.local/bin/claude # Claude CLI path on remote
+    path: /Users/<user>/projects/myapp/e2e-tests # Project path on remote
 
     description: Remote end-to-end testing suite - all optional fields configured
 
     # Override timeouts for remote (network latency consideration)
-    idleTimeout: 1800000           # 30 minutes
+    idleTimeout: 1800000 # 30 minutes
 
     # Permission handling
-    skipPermissions: false         # Require approval for file operations
+    skipPermissions: false # Require approval for file operations
 
     # Reverse MCP: Allow remote Claude to call back to local Iris
-    enableReverseMcp: true         # Enable SSH reverse tunnel
-    reverseMcpPort: 1615           # Port to tunnel (matches httpPort)
+    enableReverseMcp: true # Enable SSH reverse tunnel
+    reverseMcpPort: 1615 # Port to tunnel (matches httpPort)
 
     # SSH connection tuning
     remoteOptions:
-      serverAliveInterval: 30000   # Send keep-alive every 30 seconds
-      serverAliveCountMax: 3       # Disconnect after 3 missed keep-alives
+      serverAliveInterval: 30000 # Send keep-alive every 30 seconds
+      serverAliveCountMax: 3 # Disconnect after 3 missed keep-alives
 
     # Dashboard color
-    color: "#4CAF50"               # Green for remote team
+    color: "#4CAF50" # Green for remote team

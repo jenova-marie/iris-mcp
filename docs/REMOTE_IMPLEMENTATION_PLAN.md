@@ -732,7 +732,7 @@ describe('SSH2Transport', () => {
 
 ### Task 2.4: Update Example Config
 
-**File:** `src/example.config.json` (MODIFY)
+**File:** `src/example.config.yaml` (MODIFY)
 
 ```json
 {
@@ -1796,7 +1796,7 @@ ssh dev@remote-host.example.com
 
 ### 2. Add Remote Team to Config
 
-Edit `~/.iris/config.json`:
+Edit `~/.iris/config.yaml`:
 
 ```json
 {

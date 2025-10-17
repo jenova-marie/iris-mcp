@@ -39,7 +39,7 @@ Iris MCP is designed for **flexibility across deployment contexts**:
 1. **No forced complexity** - Simple deployments stay simple
 2. **Provider agnostic** - Works with any OAuth2/OIDC provider (Auth0, Okta, Keycloak, Azure AD, Google)
 3. **Zero-trust ready** - SPIFFE/SPIRE for service-to-service auth without secrets
-4. **Configurable by default** - All auth strategies disabled by default, opt-in via `config.json`
+4. **Configurable by default** - All auth strategies disabled by default, opt-in via `config.yaml`
 5. **Separation of concerns** - MCP tool approval ≠ API authentication
 
 ### Authentication vs Authorization
@@ -209,7 +209,7 @@ iris_sk_prod_abc123def456ghi789jkl012mno345pqr678
 
 ### Storage
 
-**SQLite database** (`$IRIS_HOME/keys.db`), **never in `config.json`**.
+**SQLite database** (`$IRIS_HOME/keys.db`), **never in `config.yaml`**.
 
 **Schema**:
 ```sql
@@ -1233,7 +1233,7 @@ auditLog('auth:failed', {
 
 ### Environment Variables
 
-**Secrets should never be in `config.json`**. Use environment variables:
+**Secrets should never be in `config.yaml`**. Use environment variables:
 
 ```bash
 # OAuth2 client secret

@@ -277,7 +277,7 @@ The refactored system separates two distinct timeout concerns:
 
 ### 1. Response Timeout (Process Health Monitor)
 
-**Source:** `config.json` → `settings.responseTimeout` (default: 120000ms = 2 minutes)
+**Source:** `config.yaml` → `settings.responseTimeout` (default: 120000ms = 2 minutes)
 **Managed By:** Iris
 **Purpose:** Detect stalled Claude processes
 **Behavior:** Timer resets on EVERY message received from Claude
@@ -678,7 +678,7 @@ Iris is designed for **five progressive phases**:
 
 ## Configuration
 
-**File:** `$IRIS_HOME/config.json` (or `~/.iris/config.json`)
+**File:** `$IRIS_HOME/config.yaml` (or `~/.iris/config.yaml`)
 
 **Key Settings:**
 
@@ -804,7 +804,7 @@ iris start --http  # Future: HTTP transport
 ```
 
 **Integration with Claude Code:**
-- Registered in `~/.claude/config.json` as MCP server
+- Registered in `~/.claude/config.yaml` as MCP server
 - Auto-started by Claude CLI when tools invoked
 - Process lifetime managed by Claude CLI
 

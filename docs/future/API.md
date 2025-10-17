@@ -190,7 +190,7 @@ iris-mcp api-key create --name "ci-cd-pipeline" --scope teams:read,teams:write
 Configure authentication:
 
 ```json
-// iris-config.json
+// iris-config.yaml
 {
   "api": {
     "enabled": true,

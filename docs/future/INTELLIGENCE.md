@@ -108,7 +108,7 @@ User: "iris exec backend 'rm -rf node_modules prisma/migrations'"
 
 ### Configuration
 
-Enable/configure the Intelligence Layer in `iris-config.json`:
+Enable/configure the Intelligence Layer in `iris-config.yaml`:
 
 ```json
 {

@@ -32,7 +32,7 @@ iris --version
 
 # Setup (first time)
 iris init
-# Created ~/.iris/config.json
+# Created ~/.iris/config.yaml
 # Created ~/.iris/credentials.json
 ```
 
@@ -360,7 +360,7 @@ iris config edit
 iris config reset
 ```
 
-**Configuration File** (`~/.iris/config.json`):
+**Configuration File** (`~/.iris/config.yaml`):
 ```json
 {
   "server": {
@@ -701,7 +701,7 @@ The Iris CLI is a standalone Node.js application that provides a rich command-li
 │                                                               │
 │  ┌────────────────────────────────────────────────────────┐ │
 │  │  Config Manager                                          │ │
-│  │  • Read/write ~/.iris/config.json                       │ │
+│  │  • Read/write ~/.iris/config.yaml                       │ │
 │  │  • Environment variable handling                        │ │
 │  │  • Credential management                                │ │
 │  └────────────────────────────────────────────────────────┘ │
@@ -1115,7 +1115,7 @@ import os from 'os';
 
 export class ConfigManager {
   private static configDir = path.join(os.homedir(), '.iris');
-  private static configFile = path.join(ConfigManager.configDir, 'config.json');
+  private static configFile = path.join(ConfigManager.configDir, 'config.yaml');
 
   static async load(): Promise<Config> {
     await this.ensureConfigDir();
@@ -1143,7 +1143,7 @@ export class ConfigManager {
     const config = this.defaults();
     await this.save(config);
 
-    console.log(chalk.green('✓ Created ~/.iris/config.json'));
+    console.log(chalk.green('✓ Created ~/.iris/config.yaml'));
     console.log(chalk.green('✓ Created ~/.iris/credentials.json'));
   }
 

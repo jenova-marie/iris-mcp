@@ -209,7 +209,7 @@ const IrisConfigSchema = z.object({
 
 #### Task 1.3: Update Example Config
 
-**File**: `examples/config.json`
+**File**: `examples/config.yaml`
 
 ```json
 {
@@ -666,7 +666,7 @@ Or in your config:
 
 ### 2. Configure Remote Team with Reverse MCP
 
-Edit `~/.iris/config.json`:
+Edit `~/.iris/config.yaml`:
 
 ```json
 {

@@ -144,7 +144,7 @@ pnpm iris generate-key "Dashboard Client" --permissions tell,wake,status --expir
 
 ### Key Storage
 
-**DO NOT store API keys in `config.json`**. Mixing configuration with secrets is a security anti-pattern.
+**DO NOT store API keys in `config.yaml`**. Mixing configuration with secrets is a security anti-pattern.
 
 **Storage Location**: `$IRIS_HOME/keys.db` (SQLite)
 
@@ -593,7 +593,7 @@ auditLog('auth:validated', {
 
 ## Configuration Integration
 
-### Update `example.config.json`
+### Update `example.config.yaml`
 
 ```json
 {
@@ -621,7 +621,7 @@ auditLog('auth:validated', {
 }
 ```
 
-**No `apiKeys` array in config.json** - keys are managed via CLI and stored in `keys.db`.
+**No `apiKeys` array in config.yaml** - keys are managed via CLI and stored in `keys.db`.
 
 ### Zod Schema
 
@@ -969,7 +969,7 @@ describe('Authentication Middleware', () => {
 - [ ] Implement `pnpm iris key list`
 - [ ] Implement `pnpm iris key revoke`
 - [ ] Update configuration schema
-- [ ] Update `example.config.json`
+- [ ] Update `example.config.yaml`
 
 ### Phase 3.3: Hardening (Week 3)
 
@@ -988,7 +988,7 @@ describe('Authentication Middleware', () => {
 Authentication is considered complete when:
 
 - ✅ API keys can be generated, listed, and revoked via CLI
-- ✅ Keys are stored securely (hashed) in SQLite, never in `config.json`
+- ✅ Keys are stored securely (hashed) in SQLite, never in `config.yaml`
 - ✅ HTTP and WebSocket authentication middleware validates keys
 - ✅ Permission checks enforce granular RBAC
 - ✅ Rate limiting prevents abuse

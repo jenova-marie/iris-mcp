@@ -614,7 +614,7 @@ iris install
 **Actions:**
 1. Create `~/.iris/` directory
 2. Copy `src/default.config.yaml` to `~/.iris/config.yaml`
-3. Register Iris with Claude CLI config (`~/.claude/config.json`)
+3. Register Iris with Claude CLI config (`~/.claude/config.yaml`)
 
 ### Add Team Command
 
@@ -940,5 +940,5 @@ See [PERMISSION_APPROVAL_PLAN.md](./future/PERMISSION_APPROVAL_PLAN.md) for impl
 **Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, grantPermission, skipPermissions, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration
 
 **Last Updated:** 2025-10-16
-**Change Context:** Migrated from config.json to config.yaml format, added environment variable interpolation with ${VAR:-default} syntax, documented new grantPermission field (enum: yes/no/ask/forward) for permission approval system (Phase 1 schema only)
+**Change Context:** Migrated from config.yaml to config.yaml format, added environment variable interpolation with ${VAR:-default} syntax, documented new grantPermission field (enum: yes/no/ask/forward) for permission approval system (Phase 1 schema only)
 **Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design)

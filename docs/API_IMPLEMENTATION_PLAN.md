@@ -91,9 +91,9 @@ All MCP tools map 1:1 to HTTP endpoints:
 
 ## Configuration Changes
 
-### Update `src/example.config.json`
+### Update `src/example.config.yaml`
 
-**Note:** API key management is now handled via CLI and SQLite storage (see [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md)). Do not store API keys in `config.json`.
+**Note:** API key management is now handled via CLI and SQLite storage (see [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md)). Do not store API keys in `config.yaml`.
 
 ```json
 {
@@ -202,7 +202,7 @@ export interface TeamsConfig {
 ### Summary
 
 - **API Key Format**: `iris_sk_{environment}_{random}` (50-55 chars)
-- **Storage**: SQLite database (`keys.db`), never `config.json`
+- **Storage**: SQLite database (`keys.db`), never `config.yaml`
 - **Permissions**: Granular RBAC (e.g., `team:tell`, `cache:read`, `admin`)
 - **Rate Limiting**: Per-API-key, configurable limits
 - **Audit Logging**: All auth events logged to SQLite + Wonder Logger
@@ -388,7 +388,7 @@ export function errorHandler(
 - Add `ApiConfigSchema` to Zod validation (from auth plan)
 - Add `api` field to `TeamsConfigSchema`
 - Export types in types.ts (from auth plan)
-- Update `example.config.json` with API section (from auth plan)
+- Update `example.config.yaml` with API section (from auth plan)
 
 ### Step 2: API Server Boilerplate
 **Files:** `src/api_server.ts`

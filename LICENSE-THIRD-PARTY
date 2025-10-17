@@ -2,9 +2,9 @@
 
 This document contains the licenses for all third-party open source software used in the Iris MCP Server project.
 
-**Project**: Iris MCP Server  
-**License**: MIT  
-**Repository**: https://github.com/jenova-marie/iris-mcp  
+**Project**: Iris MCP Server
+**License**: MIT
+**Repository**: https://github.com/jenova-marie/iris-mcp
 **Author**: Jenova Marie
 
 ---
@@ -35,7 +35,7 @@ All dependencies are compatible with the project's MIT license and allow commerc
 - **License**: MIT
 - **Description**: Model Context Protocol implementation for TypeScript
 
-#### @recoverysky/wonder-logger (MIT)
+#### @jenova-marie/wonder-logger (MIT)
 - **Version**: 1.0.11
 - **Author**: jenova-marie
 - **Homepage**: https://github.com/jenova-marie/wonder-logger

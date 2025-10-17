@@ -156,9 +156,9 @@ When no sessions exist, displays centered card:
 #### JSON Editor
 
 - Large textarea with syntax highlighting (via CSS)
-- Edit `config.json` directly in browser
+- Edit `config.yaml` directly in browser
 - Real-time validation on save
-- Displays config file path (from `$IRIS_HOME/config.json`)
+- Displays config file path (from `$IRIS_HOME/config.yaml`)
 
 #### Validation
 
@@ -236,7 +236,7 @@ Active route highlighted with purple accent.
 
 ## Configuration
 
-Dashboard configuration is part of the main `config.json`:
+Dashboard configuration is part of the main `config.yaml`:
 
 ```json
 {
@@ -367,7 +367,7 @@ Get current configuration.
 {
   "success": true,
   "config": { /* full config object */ },
-  "configPath": "/Users/user/.iris/config.json"
+  "configPath": "/Users/user/.iris/config.yaml"
 }
 ```
 
@@ -388,7 +388,7 @@ Save configuration (with validation).
 {
   "success": true,
   "message": "Configuration saved successfully",
-  "configPath": "/Users/user/.iris/config.json"
+  "configPath": "/Users/user/.iris/config.yaml"
 }
 ```
 
@@ -634,7 +634,7 @@ Configuration was saved.
 **Payload**:
 ```json
 {
-  "configPath": "/Users/user/.iris/config.json",
+  "configPath": "/Users/user/.iris/config.yaml",
   "timestamp": 1234567890
 }
 ```
@@ -834,7 +834,7 @@ VITE_API_URL=http://localhost:3100/api
 VITE_WS_URL=http://localhost:3100
 ```
 
-Server uses main config.json, no env vars needed.
+Server uses main config.yaml, no env vars needed.
 
 ### Hot Reload Development
 
@@ -1005,7 +1005,7 @@ server {
   ```bash
   lsof -i :3100
   ```
-- Change port in `config.json` or kill the process
+- Change port in `config.yaml` or kill the process
 
 **Error**: `SSL certificate not found`
 
@@ -1026,7 +1026,7 @@ server {
 
 **Cause**: `dashboard.forkScriptPath` not configured
 
-- Add to `config.json`:
+- Add to `config.yaml`:
   ```json
   {
     "dashboard": {
@@ -1074,7 +1074,7 @@ server {
 **Error**: "Permission denied"
 
 - Ensure server has write access to config file
-- Check file permissions: `ls -l ~/.iris/config.json`
+- Check file permissions: `ls -l ~/.iris/config.yaml`
 
 ---
 

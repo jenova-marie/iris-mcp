@@ -285,7 +285,7 @@ private removeFromAccessOrder(poolKey: string): void {
 
 **Configuration:**
 ```typescript
-healthCheckInterval: 30000  // ms (from config.json)
+healthCheckInterval: 30000  // ms (from config.yaml)
 ```
 
 **Implementation:**

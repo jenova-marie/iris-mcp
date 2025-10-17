@@ -408,7 +408,7 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 - **Database**: `better-sqlite3` for session store and notification queue
 - **Validation**: Zod schemas for configuration and input validation
 - **Configuration**: YAML parsing with `yaml` package, environment variable interpolation
-- **Observability**: `@recoverysky/wonder-logger` with Pino + OpenTelemetry
+- **Observability**: `@jenova-marie/wonder-logger` with Pino + OpenTelemetry
 - **Tracing**: OpenTelemetry SDK with OTLP, Jaeger exporters
 - **Metrics**: Prometheus pull endpoint + OTLP push
 - **Testing**: Vitest with V8 coverage provider

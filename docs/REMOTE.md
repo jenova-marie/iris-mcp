@@ -1315,7 +1315,7 @@ User gets status updates without SSH'ing to GPU cluster
 **Mitigations:**
 
 - **Sanitize logs**: Never log full SSH commands with credentials
-- **Audit config files**: Restrict permissions on `config.json` (600)
+- **Audit config files**: Restrict permissions on `config.yaml` (600)
 - **Use environment variables** for sensitive data:
   ```json
   {

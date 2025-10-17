@@ -99,7 +99,7 @@ Phase 3 will introduce **HTTP and WebSocket transports** alongside the existing 
 http://localhost:1615/api
 ```
 
-Configurable via `config.json`:
+Configurable via `config.yaml`:
 ```json
 {
   "settings": {

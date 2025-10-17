@@ -1,14 +1,14 @@
 /**
- * Unit tests for clear action
+ * Unit tests for reboot action
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { clear } from "../../../src/actions/reboot.js";
+import { reboot } from "../../../src/actions/reboot.js";
 import type { IrisOrchestrator } from "../../../src/iris.js";
 import type { SessionManager } from "../../../src/session/session-manager.js";
 import type { ClaudeProcessPool } from "../../../src/process-pool/pool-manager.js";
 import type { ClaudeProcess } from "../../../src/process-pool/claude-process.js";
 
-describe("clear action", () => {
+describe("reboot action", () => {
   let mockIris: IrisOrchestrator;
   let mockSessionManager: SessionManager;
   let mockProcessPool: ClaudeProcessPool;
@@ -29,13 +29,16 @@ describe("clear action", () => {
     // Mock ClaudeProcessPool
     mockProcessPool = {
       getProcessBySessionId: vi.fn(),
+      getOrCreateProcess: vi.fn().mockResolvedValue({
+        sessionId: "new-session-id",
+      }),
     } as unknown as ClaudeProcessPool;
   });
 
   describe("validation", () => {
     it("should reject invalid toTeam name", async () => {
       await expect(
-        clear(
+        reboot(
           { fromTeam: "team-iris", toTeam: "../invalid" },
           mockIris,
           mockSessionManager,
@@ -46,7 +49,7 @@ describe("clear action", () => {
 
     it("should reject invalid fromTeam name", async () => {
       await expect(
-        clear(
+        reboot(
           { fromTeam: "../../etc/passwd", toTeam: "team-alpha" },
           mockIris,
           mockSessionManager,
@@ -71,7 +74,7 @@ describe("clear action", () => {
     });
 
     it("should create first session when none exists", async () => {
-      const result = await clear(
+      const result = await reboot(
         { fromTeam: "team-iris", toTeam: "team-alpha" },
         mockIris,
         mockSessionManager,
@@ -125,7 +128,7 @@ describe("clear action", () => {
     });
 
     it("should delete old session and create new one", async () => {
-      const result = await clear(
+      const result = await reboot(
         { fromTeam: "team-iris", toTeam: "team-alpha" },
         mockIris,
         mockSessionManager,
@@ -193,7 +196,7 @@ describe("clear action", () => {
     });
 
     it("should terminate process, delete session, and create new one", async () => {
-      const result = await clear(
+      const result = await reboot(
         { fromTeam: "team-iris", toTeam: "team-alpha" },
         mockIris,
         mockSessionManager,
@@ -231,7 +234,7 @@ describe("clear action", () => {
         new Error("Termination failed"),
       );
 
-      const result = await clear(
+      const result = await reboot(
         { fromTeam: "team-iris", toTeam: "team-alpha" },
         mockIris,
         mockSessionManager,
@@ -277,7 +280,7 @@ describe("clear action", () => {
       );
 
       await expect(
-        clear(
+        reboot(
           { fromTeam: "team-iris", toTeam: "team-alpha" },
           mockIris,
           mockSessionManager,
@@ -323,7 +326,7 @@ describe("clear action", () => {
         sessionId: "old-session-id",
       } as any);
 
-      await clear(
+      await reboot(
         { fromTeam: "team-iris", toTeam: "team-alpha" },
         mockIris,
         mockSessionManager,
@@ -337,7 +340,7 @@ describe("clear action", () => {
     it("should handle missing message cache gracefully", async () => {
       vi.mocked(mockIris.getMessageCache).mockReturnValue(null);
 
-      const result = await clear(
+      const result = await reboot(
         { fromTeam: "team-iris", toTeam: "team-alpha" },
         mockIris,
         mockSessionManager,

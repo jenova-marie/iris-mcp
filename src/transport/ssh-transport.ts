@@ -28,7 +28,11 @@ import {
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError, TimeoutError } from "../utils/errors.js";
 import type { IrisConfig } from "../process-pool/types.js";
-import type { Transport, TransportStatus } from "./transport.interface.js";
+import type {
+  Transport,
+  TransportStatus,
+  CommandInfo,
+} from "./transport.interface.js";
 import { TransportStatus as Status } from "./transport.interface.js";
 import type { CacheEntry } from "../cache/types.js";
 
@@ -56,6 +60,10 @@ export class SSHTransport implements Transport {
   private messagesProcessed = 0;
   private lastResponseAt: number | null = null;
 
+  // Debug info (captured during spawn)
+  private launchCommand: string | null = null;
+  private teamConfigSnapshot: string | null = null;
+
   constructor(
     private teamName: string,
     private irisConfig: IrisConfig,
@@ -79,7 +87,7 @@ export class SSHTransport implements Transport {
    * Build SSH command array for spawning
    * Example: ['ssh', '-T', '-o', 'ServerAliveInterval=30', 'user@host', 'cd /path && claude ...']
    */
-  private buildSSHCommand(): string[] {
+  private buildSSHCommand(commandInfo: CommandInfo): string[] {
     const sshArgs: string[] = [];
 
     // Parse remote string (e.g., "ssh inanna" or "ssh -J bastion user@host")
@@ -156,82 +164,23 @@ export class SSHTransport implements Transport {
     // Append user SSH args (e.g., "-J bastion user@host" or just "inanna")
     sshArgs.push(...userSshArgs);
 
-    // Append remote command
-    const claudeCommand = this.buildClaudeCommand();
-    sshArgs.push(claudeCommand);
+    // Append remote command (built from CommandInfo)
+    const remoteCommand = this.buildRemoteCommand(commandInfo);
+    sshArgs.push(remoteCommand);
 
     return ["ssh", ...sshArgs];
   }
 
   /**
-   * Build remote Claude command
-   * Example: "cd /opt/containers && ~/.local/bin/claude --resume <sessionId> --print --verbose ..."
+   * Build remote command string from CommandInfo
+   * Example: "cd /opt/containers && claude --resume <sessionId> --print --verbose ..."
    */
-  private buildClaudeCommand(): string {
-    // Use custom claudePath if provided, otherwise default to 'claude'
-    const claudeExecutable = this.irisConfig.claudePath || "claude";
-    const args: string[] = [claudeExecutable];
+  private buildRemoteCommand(commandInfo: CommandInfo): string {
+    // Change to project directory
+    const cdCmd = `cd ${this.escapeShellArg(commandInfo.cwd)}`;
 
-    // Resume existing session (unless in test mode)
-    if (
-      process.env.NODE_ENV !== "test" &&
-      process.env.IRIS_TEST_REMOTE !== "1"
-    ) {
-      args.push("--resume", this.sessionId);
-    }
-
-    args.push(
-      "--print", // Non-interactive headless mode
-      "--verbose", // Required for stream-json output
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-    );
-
-    // Skip permissions if configured
-    if (this.irisConfig.skipPermissions) {
-      args.push("--dangerously-skip-permissions");
-    }
-
-    // Add permission prompt tool for reverse MCP (allows remote Claude to ask for permission via the tunnel)
-    if (this.irisConfig.enableReverseMcp) {
-      args.push("--permission-prompt-tool", "mcp__iris__permissions__approve");
-    }
-
-    // Add MCP config for reverse tunnel if enabled
-    if (this.irisConfig.enableReverseMcp) {
-      const mcpPort = this.irisConfig.reverseMcpPort || 1615;
-      // Use HTTP if explicitly allowed (dev mode), otherwise HTTPS
-      const protocol = this.irisConfig.allowHttp ? "http" : "https";
-
-      // Use sessionId as the unique path identifier
-      const mcpUrl = `${protocol}://localhost:${mcpPort}/mcp/${this.sessionId}`;
-
-      const mcpConfig = {
-        mcpServers: {
-          iris: {
-            type: "http",
-            url: mcpUrl,
-          },
-        },
-      };
-
-      // Pass as JSON string to --mcp-config (single-quoted to prevent shell interpretation)
-      args.push("--mcp-config", `'${JSON.stringify(mcpConfig)}'`);
-
-      this.logger.debug("Adding MCP config to remote Claude command", {
-        teamName: this.teamName,
-        sessionId: this.sessionId,
-        mcpPort,
-        protocol,
-        mcpUrl,
-      });
-    }
-
-    // Change to project directory, then execute Claude
-    const cdCmd = `cd ${this.escapeShellArg(this.irisConfig.path)}`;
-    const claudeCmd = args.join(" ");
+    // Build Claude command
+    const claudeCmd = `${commandInfo.executable} ${commandInfo.args.join(" ")}`;
 
     return `${cdCmd} && ${claudeCmd}`;
   }
@@ -250,13 +199,15 @@ export class SSHTransport implements Transport {
    */
   async spawn(
     spawnCacheEntry: CacheEntry,
+    commandInfo: CommandInfo,
     spawnTimeout = 20000,
   ): Promise<void> {
     this.logger.info("Spawning SSH process", {
       teamName: this.teamName,
       sessionId: this.sessionId,
       remote: this.irisConfig.remote,
-      path: this.irisConfig.path,
+      executable: commandInfo.executable,
+      argsCount: commandInfo.args.length,
     });
 
     // Emit SPAWNING status
@@ -265,13 +216,21 @@ export class SSHTransport implements Transport {
     this.startTime = Date.now();
     this.currentCacheEntry = spawnCacheEntry;
 
-    // Build SSH command
-    const sshCommand = this.buildSSHCommand();
+    // Build SSH command using pre-built CommandInfo
+    const sshCommand = this.buildSSHCommand(commandInfo);
     const [command, ...args] = sshCommand;
 
-    this.logger.debug("SSH command built", {
+    // Capture launch command for debugging
+    this.launchCommand = sshCommand.join(" ");
+
+    // Capture team config snapshot for debugging
+    this.teamConfigSnapshot = this.buildTeamConfigSnapshot();
+
+    this.logger.debug("Captured debug info for SSH session", {
       teamName: this.teamName,
-      command: sshCommand.join(" "),
+      sessionId: this.sessionId,
+      commandLength: this.launchCommand.length,
+      configLength: this.teamConfigSnapshot.length,
     });
 
     // Spawn SSH process
@@ -482,9 +441,8 @@ export class SSHTransport implements Transport {
     for (const line of lines) {
       if (!line.trim()) continue;
 
-      this.logger.warn("SSH stderr", {
+      this.logger.warn(`SSH stderr: ${line}`, {
         teamName: this.teamName,
-        line,
       });
 
       // Detect SSH authentication failures
@@ -717,5 +675,52 @@ export class SSHTransport implements Transport {
       uptime: this.sshProcess ? Date.now() - this.startTime : 0,
       ready: this.ready,
     };
+  }
+
+  /**
+   * Get launch command for debugging
+   */
+  getLaunchCommand(): string | null {
+    return this.launchCommand;
+  }
+
+  /**
+   * Get team config snapshot for debugging
+   */
+  getTeamConfigSnapshot(): string | null {
+    return this.teamConfigSnapshot;
+  }
+
+  /**
+   * Build team config snapshot (server-side parameters not in command)
+   */
+  private buildTeamConfigSnapshot(): string {
+    const snapshot: Record<string, any> = {
+      // Permission handling
+      grantPermission: this.irisConfig.grantPermission || "yes",
+      skipPermissions: this.irisConfig.skipPermissions || false,
+
+      // Timeouts
+      idleTimeout: this.irisConfig.idleTimeout,
+      sessionInitTimeout: this.irisConfig.sessionInitTimeout,
+
+      // MCP Reverse Tunneling
+      enableReverseMcp: this.irisConfig.enableReverseMcp || false,
+      reverseMcpPort: this.irisConfig.reverseMcpPort,
+      allowHttp: this.irisConfig.allowHttp || false,
+
+      // Remote execution
+      remote: this.irisConfig.remote,
+      ssh2: this.irisConfig.ssh2,
+      remoteOptions: this.irisConfig.remoteOptions || {},
+
+      // Project path
+      path: this.irisConfig.path,
+
+      // Description
+      description: this.irisConfig.description,
+    };
+
+    return JSON.stringify(snapshot, null, 2);
   }
 }

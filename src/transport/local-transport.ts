@@ -6,9 +6,6 @@
  */
 
 import { spawn, type ChildProcess } from "child_process";
-import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
 import { BehaviorSubject, Subject, Observable, firstValueFrom } from "rxjs";
 import { filter, take, timeout } from "rxjs/operators";
 import type { CacheEntry } from "../cache/types.js";
@@ -16,6 +13,7 @@ import type {
   Transport,
   TransportMetrics,
   TransportStatus,
+  CommandInfo,
 } from "./transport.interface.js";
 import { TransportStatus as Status } from "./transport.interface.js";
 import type { IrisConfig } from "../process-pool/types.js";
@@ -29,24 +27,6 @@ export class ProcessBusyError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProcessBusyError";
-  }
-}
-
-/**
- * Load and render team identity prompt template
- */
-function loadTeamIdentityPrompt(teamName: string): string {
-  try {
-    const __filename = fileURLToPath(import.meta.url);
-    const __dirname = dirname(__filename);
-    const templatePath = join(__dirname, "..", "team-identity-prompt.txt");
-    const template = readFileSync(templatePath, "utf8");
-
-    // Simple template rendering: replace {{teamName}} with actual team name
-    return template.replace(/\{\{teamName\}\}/g, teamName);
-  } catch (error) {
-    // Fallback if template file not found
-    return `# Iris MCP ${teamName}\n\nThis is the **${teamName}** team configured in the Iris MCP server for cross-project Claude coordination.`;
   }
 }
 
@@ -76,6 +56,10 @@ export class LocalTransport implements Transport {
   private messagesProcessed = 0;
   private lastResponseAt: number | null = null;
 
+  // Debug info (captured during spawn)
+  private launchCommand: string | null = null;
+  private teamConfigSnapshot: string | null = null;
+
   constructor(
     private teamName: string,
     private irisConfig: IrisConfig,
@@ -93,6 +77,7 @@ export class LocalTransport implements Transport {
    */
   async spawn(
     spawnCacheEntry: CacheEntry,
+    commandInfo: CommandInfo,
     spawnTimeout = 20000,
   ): Promise<void> {
     if (this.childProcess) {
@@ -103,6 +88,8 @@ export class LocalTransport implements Transport {
       teamName: this.teamName,
       sessionId: this.sessionId,
       cacheEntryType: spawnCacheEntry.cacheEntryType,
+      executable: commandInfo.executable,
+      argsCount: commandInfo.args.length,
     });
 
     // Emit SPAWNING status
@@ -112,76 +99,27 @@ export class LocalTransport implements Transport {
     this.currentCacheEntry = spawnCacheEntry;
     this.startTime = Date.now();
 
-    // Build args
-    const args: string[] = [];
-
-    // Resume existing session (not in test mode)
-    if (process.env.NODE_ENV !== "test") {
-      args.push("--resume", this.sessionId);
-    }
-
-    // Enable debug mode in test/debug environment
-    if (process.env.NODE_ENV === "test" || process.env.DEBUG) {
-      args.push("--debug");
-    }
-
-    args.push(
-      "--print", // Non-interactive headless mode
-      "--verbose", // Required for stream-json output
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
+    // Capture launch command for debugging
+    const quotedArgs = commandInfo.args.map((arg) =>
+      arg.includes(" ") || arg.includes('"')
+        ? `"${arg.replace(/"/g, '\\"')}"`
+        : arg,
     );
+    this.launchCommand = `${commandInfo.executable} ${quotedArgs.join(" ")}`;
 
-    if (this.irisConfig.skipPermissions) {
-      args.push("--dangerously-skip-permissions");
-    }
+    // Capture team config snapshot for debugging
+    this.teamConfigSnapshot = this.buildTeamConfigSnapshot();
 
-    if (this.irisConfig.allowedTools) {
-      args.push("--allowed-tools", this.irisConfig.allowedTools);
-    }
-
-    if (this.irisConfig.disallowedTools) {
-      args.push("--disallowed-tools", this.irisConfig.disallowedTools);
-    }
-
-    // Build system prompt: team identity + custom append
-    const teamIdentity = loadTeamIdentityPrompt(this.teamName);
-    const systemPrompt = this.irisConfig.appendSystemPrompt
-      ? `${teamIdentity}\n\n${this.irisConfig.appendSystemPrompt}`
-      : teamIdentity;
-
-    args.push("--append-system-prompt", systemPrompt);
-
-    // Add MCP config to override global config with session-specific path
-    // This enables permission detection via sessionId
-    const mcpPort = 1615; // TODO: Get from config
-    const mcpUrl = `http://localhost:${mcpPort}/mcp/${this.sessionId}`;
-
-    const mcpConfig = {
-      mcpServers: {
-        iris: {
-          type: "http",
-          url: mcpUrl,
-        },
-      },
-    };
-
-    args.push("--mcp-config", JSON.stringify(mcpConfig));
-
-    this.logger.debug("Added MCP config to local Claude command", {
+    this.logger.debug("Captured debug info for local transport", {
       teamName: this.teamName,
       sessionId: this.sessionId,
-      mcpUrl,
+      commandLength: this.launchCommand.length,
+      configLength: this.teamConfigSnapshot.length,
     });
 
-    // Use custom claudePath if provided, otherwise default to 'claude'
-    const claudeExecutable = this.irisConfig.claudePath || "claude";
-
-    // Spawn process
-    this.childProcess = spawn(claudeExecutable, args, {
-      cwd: this.irisConfig.path,
+    // Spawn process using pre-built command info
+    this.childProcess = spawn(commandInfo.executable, commandInfo.args, {
+      cwd: commandInfo.cwd,
       stdio: ["pipe", "pipe", "pipe"],
       env: process.env,
     });
@@ -504,5 +442,51 @@ export class LocalTransport implements Transport {
         originalResolve();
       };
     });
+  }
+
+  /**
+   * Get launch command for debugging
+   */
+  getLaunchCommand(): string | null {
+    return this.launchCommand;
+  }
+
+  /**
+   * Get team config snapshot for debugging
+   */
+  getTeamConfigSnapshot(): string | null {
+    return this.teamConfigSnapshot;
+  }
+
+  /**
+   * Build team config snapshot (server-side parameters not in command)
+   */
+  private buildTeamConfigSnapshot(): string {
+    const snapshot: Record<string, any> = {
+      // Permission handling
+      grantPermission: this.irisConfig.grantPermission || "yes",
+      skipPermissions: this.irisConfig.skipPermissions || false,
+
+      // Timeouts
+      idleTimeout: this.irisConfig.idleTimeout,
+      sessionInitTimeout: this.irisConfig.sessionInitTimeout,
+
+      // MCP Reverse Tunneling
+      enableReverseMcp: this.irisConfig.enableReverseMcp || false,
+      reverseMcpPort: this.irisConfig.reverseMcpPort,
+      allowHttp: this.irisConfig.allowHttp || false,
+
+      // Remote execution (should be false for LocalTransport)
+      remote: this.irisConfig.remote || null,
+      ssh2: this.irisConfig.ssh2 || false,
+
+      // Project path
+      path: this.irisConfig.path,
+
+      // Description
+      description: this.irisConfig.description,
+    };
+
+    return JSON.stringify(snapshot, null, 2);
   }
 }

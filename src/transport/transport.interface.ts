@@ -7,6 +7,10 @@
 
 import { Observable } from "rxjs";
 import type { CacheEntry } from "../cache/types.js";
+import type { CommandInfo } from "./command-builder.js";
+
+// Re-export CommandInfo for convenience
+export type { CommandInfo };
 
 /**
  * Transport status enum - represents the lifecycle state of the transport
@@ -70,10 +74,15 @@ export interface Transport {
    * For remote: spawns `ssh user@host 'cd /path && claude ...'`
    *
    * @param spawnCacheEntry - Cache entry for initialization message (type=SPAWN, tellString='ping')
+   * @param commandInfo - Pre-built command information (executable, args, cwd)
    * @param spawnTimeout - Timeout in ms for spawn init (default: 20000)
    * @throws ProcessError if spawn fails
    */
-  spawn(spawnCacheEntry: CacheEntry, spawnTimeout?: number): Promise<void>;
+  spawn(
+    spawnCacheEntry: CacheEntry,
+    commandInfo: CommandInfo,
+    spawnTimeout?: number,
+  ): Promise<void>;
 
   /**
    * Execute tell by writing to stdin
@@ -135,4 +144,24 @@ export interface Transport {
    * @throws ProcessError if stdin not available
    */
   cancel?(): void;
+
+  /**
+   * Get the full command used to launch this session (for debugging)
+   *
+   * Returns the complete command string including executable and all arguments.
+   * Useful for reproducing issues or understanding spawn configuration.
+   *
+   * @returns string | null - Command string or null if not yet spawned
+   */
+  getLaunchCommand?(): string | null;
+
+  /**
+   * Get snapshot of team config at spawn time (for debugging)
+   *
+   * Returns JSON string of server-side configuration that affects process behavior
+   * but isn't visible in the command (e.g., grantPermission, idleTimeout).
+   *
+   * @returns string | null - JSON config snapshot or null if not yet spawned
+   */
+  getTeamConfigSnapshot?(): string | null;
 }

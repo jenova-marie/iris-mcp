@@ -32,6 +32,7 @@ export interface ProcessPoolConfig {
   sessionInitTimeout: number;
   spawnTimeout: number;
   responseTimeout: number;
+  permissionTimeout?: number; // Timeout for dashboard permission approval (default: 30000ms)
   httpPort?: number;
   defaultTransport?: "stdio" | "http";
   wonderLoggerConfig?: string; // Path to wonder-logger.yaml config file

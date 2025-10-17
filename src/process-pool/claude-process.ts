@@ -23,6 +23,7 @@ import { CacheEntry, CacheEntryType, CacheEntryStatus } from "../cache/types.js"
 import { TransportFactory } from "../transport/transport-factory.js";
 import type { Transport } from "../transport/transport.interface.js";
 import { TransportStatus } from "../transport/transport.interface.js";
+import { ClaudeCommandBuilder } from "../transport/command-builder.js";
 import { ProcessBusyError } from "../transport/local-transport.js";
 import { ClaudePrintExecutor } from "../utils/claude-print.js";
 import { CacheEntryImpl } from "../cache/cache-entry.js";
@@ -297,8 +298,22 @@ export class ClaudeProcess extends EventEmitter {
 
     this.spawnTime = Date.now();
 
+    // Build Claude command (process-pool level responsibility)
+    const commandInfo = ClaudeCommandBuilder.build(
+      this.teamName,
+      this.irisConfig,
+      this.sessionId,
+    );
+
+    this.logger.debug("Built Claude command", {
+      teamName: this.teamName,
+      executable: commandInfo.executable,
+      argsCount: commandInfo.args.length,
+      cwd: commandInfo.cwd,
+    });
+
     // Delegate to transport (status updates happen via transport.status$ subscription)
-    await this.transport.spawn(spawnCacheEntry, spawnTimeout);
+    await this.transport.spawn(spawnCacheEntry, commandInfo, spawnTimeout);
 
     this.logger.info("Process ready via transport", {
       teamName: this.teamName,
@@ -408,6 +423,20 @@ export class ClaudeProcess extends EventEmitter {
         transportType: this.transport.constructor.name,
       });
     }
+  }
+
+  /**
+   * Get launch command for debugging (delegates to transport)
+   */
+  getLaunchCommand(): string | null {
+    return this.transport.getLaunchCommand?.() || null;
+  }
+
+  /**
+   * Get team config snapshot for debugging (delegates to transport)
+   */
+  getTeamConfigSnapshot(): string | null {
+    return this.transport.getTeamConfigSnapshot?.() || null;
   }
 
   /**

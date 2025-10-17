@@ -338,6 +338,100 @@ describe("TeamsConfigManager", () => {
       expect(() => manager.load()).toThrow(ConfigurationError);
       expect(() => manager.load()).toThrow("Configuration validation failed");
     });
+
+    it("should accept optional allowedTools configuration", async () => {
+      const { readFileSync, existsSync } = await import("fs");
+
+      const validConfig = {
+        settings: {
+          idleTimeout: 300000,
+          maxProcesses: 10,
+          healthCheckInterval: 30000,
+          sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
+          responseTimeout: 120000,
+        },
+        teams: {
+          "team-alpha": {
+            path: "/absolute/path/team-alpha",
+            description: "Test team alpha",
+            allowedTools: "Read,Write,Bash",
+          },
+        },
+      };
+
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
+
+      manager = new TeamsConfigManager("/test/config.yaml");
+      const config = manager.load();
+
+      expect(config.teams["team-alpha"].allowedTools).toBe("Read,Write,Bash");
+    });
+
+    it("should accept optional disallowedTools configuration", async () => {
+      const { readFileSync, existsSync } = await import("fs");
+
+      const validConfig = {
+        settings: {
+          idleTimeout: 300000,
+          maxProcesses: 10,
+          healthCheckInterval: 30000,
+          sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
+          responseTimeout: 120000,
+        },
+        teams: {
+          "team-alpha": {
+            path: "/absolute/path/team-alpha",
+            description: "Test team alpha",
+            disallowedTools: "Bash(rm -rf),mcp__github",
+          },
+        },
+      };
+
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
+
+      manager = new TeamsConfigManager("/test/config.yaml");
+      const config = manager.load();
+
+      expect(config.teams["team-alpha"].disallowedTools).toBe(
+        "Bash(rm -rf),mcp__github",
+      );
+    });
+
+    it("should accept optional appendSystemPrompt configuration", async () => {
+      const { readFileSync, existsSync } = await import("fs");
+
+      const validConfig = {
+        settings: {
+          idleTimeout: 300000,
+          maxProcesses: 10,
+          healthCheckInterval: 30000,
+          sessionInitTimeout: 30000,
+          spawnTimeout: 20000,
+          responseTimeout: 120000,
+        },
+        teams: {
+          "team-alpha": {
+            path: "/absolute/path/team-alpha",
+            description: "Test team alpha",
+            appendSystemPrompt: "You are a specialized frontend development team.",
+          },
+        },
+      };
+
+      vi.mocked(existsSync).mockReturnValue(true);
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
+
+      manager = new TeamsConfigManager("/test/config.yaml");
+      const config = manager.load();
+
+      expect(config.teams["team-alpha"].appendSystemPrompt).toBe(
+        "You are a specialized frontend development team.",
+      );
+    });
   });
 
   describe("getConfig", () => {

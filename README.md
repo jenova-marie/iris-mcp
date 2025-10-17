@@ -318,7 +318,7 @@ iris-mcp/
 │   ├── iris.ts                  # Business Logic Layer (orchestrator)
 │   ├── config/
 │   │   ├── teams-config.ts      # Configuration loader with Zod validation
-│   │   └── teams.example.json   # Example configuration
+│   │   └── teams.example.yaml   # Example configuration
 │   ├── session/
 │   │   ├── session-manager.ts   # Session database and file management
 │   │   ├── session-store.ts     # SQLite session store
@@ -341,9 +341,11 @@ iris-mcp/
 │   └── utils/
 │       ├── logger.ts            # Structured logging to stderr
 │       ├── errors.ts            # Custom error types
-│       └── validation.ts        # Input validation
+│       ├── validation.ts        # Input validation
+│       └── env-interpolation.ts # Environment variable interpolation
 ├── docs/
 │   ├── ARCHITECTURE.md          # Overall architecture overview
+│   ├── CONFIG.md                # Configuration management deep dive
 │   ├── SESSION.md               # SessionManager deep dive
 │   ├── CLAUDE.md                # ClaudeProcess deep dive
 │   ├── POOL.md                  # ClaudeProcessPool deep dive
@@ -351,7 +353,7 @@ iris-mcp/
 ├── data/
 │   ├── team-sessions.db         # Session database (auto-created)
 │   └── notifications.db         # Notification queue (auto-created)
-├── teams.json                   # Your team configuration
+├── config.yaml                  # Your team configuration
 ├── package.json
 └── README.md
 ```
@@ -463,46 +465,75 @@ All process events are emitted for future Intelligence Layer integration:
 
 ### Settings
 
-```json
-{
-  "settings": {
-    "idleTimeout": 300000,          // 5 minutes in milliseconds
-    "maxProcesses": 10,             // Max concurrent processes
-    "healthCheckInterval": 30000,   // 30 seconds
-    "sessionInitTimeout": 30000     // Session initialization timeout (30s)
-  }
-}
+```yaml
+settings:
+  sessionInitTimeout: 30000     # 30 seconds
+  spawnTimeout: 20000           # 20 seconds
+  responseTimeout: 120000       # 2 minutes
+  idleTimeout: 3600000          # 1 hour
+  maxProcesses: 10              # Max concurrent processes
+  healthCheckInterval: 30000    # 30 seconds
+  httpPort: 1615                # MCP server port
+  defaultTransport: http        # stdio or http
 ```
 
 ### Team Configuration
 
-```json
-{
-  "teams": {
-    "teamName": {
-      "path": "/absolute/path",        // Required: project directory
-      "description": "Team description",
-      "idleTimeout": 600000,           // Optional: override global idle timeout
-      "sessionInitTimeout": 45000,     // Optional: override session init timeout
-      "skipPermissions": true,         // Optional: auto-approve Claude actions
-      "color": "#ff6b6b"              // Optional: hex color for UI (future)
-    }
-  }
-}
+```yaml
+teams:
+  team-frontend:
+    path: /Users/you/projects/frontend  # Absolute path
+    description: React frontend application
+    idleTimeout: 600000                  # Optional: override global (10 min)
+    sessionInitTimeout: 45000            # Optional: override (45s)
+    grantPermission: yes                 # Permission mode: yes/no/ask/forward
+    color: "#61DAFB"                    # Optional: hex color for UI
+```
+
+### Environment Variable Interpolation
+
+Use `${VAR:-default}` syntax for dynamic configuration:
+
+```yaml
+settings:
+  httpPort: ${IRIS_HTTP_PORT:-1615}
+  idleTimeout: ${IRIS_IDLE_TIMEOUT:-3600000}
+  maxProcesses: ${IRIS_MAX_PROCESSES:-10}
+
+teams:
+  team-production:
+    path: ${PROD_PATH}  # Required env var (throws if not set)
+    idleTimeout: ${PROD_TIMEOUT:-1800000}
+```
+
+**Example .env file:**
+```bash
+IRIS_HTTP_PORT=1615
+IRIS_MAX_PROCESSES=20
+PROD_PATH=/opt/production/app
+PROD_TIMEOUT=3600000
 ```
 
 ### Configuration Details
 
 **Global Settings**:
-- `idleTimeout`: How long a process can be idle before termination (default: 5 minutes)
+- `sessionInitTimeout`: Timeout for session file creation (default: 30s)
+- `spawnTimeout`: Timeout for process spawn (default: 20s)
+- `responseTimeout`: Timeout for process response (default: 2min)
+- `idleTimeout`: How long a process can be idle before termination (default: 1hr)
 - `maxProcesses`: Maximum number of concurrent Claude processes (default: 10)
-- `healthCheckInterval`: How often to check process health (default: 30 seconds)
-- `sessionInitTimeout`: Timeout for session file creation (default: 30 seconds)
+- `healthCheckInterval`: How often to check process health (default: 30s)
 
 **Per-Team Overrides**:
 - `idleTimeout`: Override for teams with slower/faster requirements
 - `sessionInitTimeout`: Override for teams with large dependencies (slow startup)
-- `skipPermissions`: Set `true` to auto-approve file operations (use with caution!)
+- `grantPermission`: Permission approval mode (see [CONFIG.md](./docs/CONFIG.md#permission-approval-system))
+  - `yes` - Auto-approve all actions (default)
+  - `no` - Auto-deny all actions (read-only)
+  - `ask` - Prompt user for each action
+  - `forward` - Forward permission request to calling team
+
+See **[docs/CONFIG.md](./docs/CONFIG.md)** for complete configuration reference.
 
 ---
 
@@ -625,9 +656,9 @@ All logs go to stderr in JSON format:
 **Symptom**: `TeamNotFoundError` when using tools
 
 **Solutions**:
-- Check that team name in `teams.json` matches exactly (case-sensitive)
+- Check that team name in `config.yaml` matches exactly (case-sensitive)
 - Verify the path exists and is absolute
-- Restart Iris after modifying `teams.json`
+- Restart Iris after modifying `config.yaml`
 
 ### "Process failed to spawn"
 
@@ -683,7 +714,7 @@ All logs go to stderr in JSON format:
 **Symptom**: All 10 process slots occupied
 
 **Solutions**:
-- Increase `maxProcesses` in `teams.json` settings
+- Increase `maxProcesses` in `config.yaml` settings
 - Reduce `idleTimeout` to free processes faster
 - Check health check logs to see which processes are active
 
@@ -706,7 +737,7 @@ All logs go to stderr in JSON format:
 - 10 MCP tools for team coordination
 - Process pool with LRU eviction
 - SQLite notification queue
-- Hot-reloadable configuration system
+- Hot-reloadable YAML configuration with env var interpolation
 - Session persistence and resumption
 - Event-driven architecture
 
@@ -752,19 +783,21 @@ See `src/intelligence/README.md`
 
 ### Architecture Documentation
 
-- **[Architecture Overview](docs/new/ARCHITECTURE.md)** - System design and component interaction
-- **[Session Management](docs/new/SESSION.md)** - Session database and file management
-- **[Process Pool](docs/new/PROCESS_POOL.md)** - Pool management and LRU eviction
-- **[Cache System](docs/new/CACHE.md)** - Hierarchical cache with RxJS
-- **[MCP Actions](docs/new/ACTIONS.md)** - All 10 MCP tools documentation
-- **[Breaking Changes](docs/BREAKING.md)** - Migration guide for refactorings
+- **[Getting Started](./GETTING_STARTED.md)** - Installation and quick start guide
+- **[Configuration Guide](./docs/CONFIG.md)** - Complete YAML config reference
+- **[Architecture Overview](./docs/ARCHITECTURE.md)** - System design and component interaction
+- **[Session Management](./docs/SESSION.md)** - Session database and file management
+- **[Process Pool](./docs/PROCESS_POOL.md)** - Pool management and LRU eviction
+- **[Cache System](./docs/CACHE.md)** - Hierarchical cache with RxJS
+- **[MCP Actions](./docs/ACTIONS.md)** - All 10 MCP tools documentation
+- **[Breaking Changes](./docs/BREAKING.md)** - Migration guide for refactorings
 
 ### Future Phases (Planned)
 
-- [Dashboard Spec](docs/DASHBOARD.md) - React web UI for monitoring
-- [API Spec](docs/API.md) - RESTful + WebSocket API
-- [CLI Spec](docs/CLI.md) - Ink terminal interface
-- [Intelligence Layer](docs/AGENT.md) - Autonomous coordination
+- [Dashboard Spec](./docs/DASHBOARD.md) - React web UI for monitoring
+- [API Spec](./docs/API.md) - RESTful + WebSocket API
+- [CLI Spec](./docs/CLI.md) - Ink terminal interface
+- [Intelligence Layer](./docs/AGENT.md) - Autonomous coordination
 
 ---
 

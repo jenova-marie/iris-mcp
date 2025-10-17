@@ -111,15 +111,12 @@ The backend Claude will read the message, investigate the code in its project, a
 
 ### Enable Web Dashboard (Optional)
 
-Add to your `~/.iris/config.json`:
+Add to your `~/.iris/config.yaml`:
 
-```json
-{
-  "dashboard": {
-    "enabled": true,
-    "port": 3100
-  }
-}
+```yaml
+dashboard:
+  enabled: true
+  http: 3100  # HTTP port
 ```
 
 Then access the dashboard at `http://localhost:3100` to monitor all your teams visually.
@@ -173,7 +170,7 @@ iris-mcp --help
 
 **Iris won't start**
 - Check if port 1615 is already in use: `lsof -i :1615`
-- Try a different port: Edit `~/.iris/config.json` and set `"httpPort": 1616`
+- Try a different port: Edit `~/.iris/config.yaml` and set `settings.httpPort: 1616`
 
 **Teams not responding**
 - Verify team paths exist: `ls ~/code/my-frontend`

@@ -87,26 +87,34 @@ Both `ClaudeProcess` and `ClaudeProcessPool` extend `EventEmitter` and emit even
 
 ### Configuration with Hot-Reload
 
-`TeamsConfigManager` (`src/config/teams-config.ts`) loads `config.json` (from `$IRIS_HOME/config.json` or `~/.iris/config.json`) with Zod validation. Uses `fs.watchFile()` with 1s interval to hot-reload configuration changes without server restart.
+`TeamsConfigManager` (`src/config/teams-config.ts`) loads `config.yaml` (from `$IRIS_HOME/config.yaml` or `~/.iris/config.yaml`) with Zod validation. Uses `fs.watchFile()` with 1s interval to hot-reload configuration changes without server restart.
 
 Configuration structure:
-```typescript
-{
-  settings: {
-    idleTimeout: 300000,      // 5 minutes
-    maxProcesses: 10,          // LRU eviction when exceeded
-    healthCheckInterval: 30000 // 30 seconds
-  },
-  teams: {
-    [teamName]: {
-      path: string,              // Absolute path to project
-      description: string,
-      idleTimeout?: number,      // Optional override
-      skipPermissions?: boolean, // Auto-approve Claude actions
-      color?: string            // Hex color for future UI
-    }
-  }
-}
+```yaml
+settings:
+  idleTimeout: 300000       # 5 minutes
+  maxProcesses: 10          # LRU eviction when exceeded
+  healthCheckInterval: 30000 # 30 seconds
+
+teams:
+  team-name:
+    path: /absolute/path/to/project  # Absolute path to project
+    description: Team description
+    idleTimeout: 600000               # Optional override
+    skipPermissions: true             # Auto-approve Claude actions (deprecated)
+    grantPermission: yes              # Permission mode: yes/no/ask/forward
+    color: "#FF6B9D"                 # Hex color for future UI
+```
+
+**Environment Variable Interpolation:**
+```yaml
+settings:
+  httpPort: ${IRIS_HTTP_PORT:-1615}  # Use env var or default to 1615
+  idleTimeout: ${IRIS_IDLE_TIMEOUT:-300000}
+
+teams:
+  team-production:
+    path: ${PROD_PATH}  # Required env var (throws if not set)
 ```
 
 ### Notification Queue (SQLite)
@@ -118,7 +126,7 @@ Configuration structure:
 - WAL mode for better concurrency
 - Indexes on `(toTeam, status)` and `(expiresAt)`
 
-Use case: `teams_notify` tool for  messages that persist across server restarts.
+Use case: `teams_notify` tool for messages that persist across server restarts.
 
 ## MCP Tools Implementation
 
@@ -186,6 +194,7 @@ When writing tests, avoid testing private implementation details. Export handler
 - `src/utils/logger.ts` - Structured JSON logging to stderr
 - `src/utils/errors.ts` - Custom error hierarchy
 - `src/utils/validation.ts` - Security-focused input validation
+- `src/utils/env-interpolation.ts` - Environment variable interpolation for YAML config
 
 ## TypeScript Configuration
 

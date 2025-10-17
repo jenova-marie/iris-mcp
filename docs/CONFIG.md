@@ -2,7 +2,7 @@
 
 **Location:** `src/config/`
 **Purpose:** Load, validate, and hot-reload configuration with Zod schemas
-**Technology:** JSON configuration with fs.watchFile hot-reload
+**Technology:** YAML configuration with environment variable interpolation and fs.watchFile hot-reload
 
 ---
 
@@ -11,11 +11,13 @@
 1. [Overview](#overview)
 2. [Configuration Structure](#configuration-structure)
 3. [File Locations](#file-locations)
-4. [Component Details](#component-details)
-5. [Hot-Reload Mechanism](#hot-reload-mechanism)
-6. [Validation with Zod](#validation-with-zod)
-7. [Path Resolution](#path-resolution)
-8. [CLI Integration](#cli-integration)
+4. [Environment Variable Interpolation](#environment-variable-interpolation)
+5. [Component Details](#component-details)
+6. [Hot-Reload Mechanism](#hot-reload-mechanism)
+7. [Validation with Zod](#validation-with-zod)
+8. [Path Resolution](#path-resolution)
+9. [Permission Approval System](#permission-approval-system)
+10. [CLI Integration](#cli-integration)
 
 ---
 
@@ -23,54 +25,53 @@
 
 The Configuration subsystem provides **validated, hot-reloadable settings** using:
 
-- **JSON Configuration File:** `config.json` with settings and team definitions
+- **YAML Configuration File:** `config.yaml` with settings and team definitions
+- **Environment Variable Interpolation:** `${VAR:-default}` syntax for dynamic configuration
 - **Zod Validation:** Type-safe runtime validation with clear error messages
 - **Hot-Reload:** Automatic reload on file changes (1s poll interval)
 - **Path Resolution:** Relative paths resolved relative to config file
-- **Default Config:** Built-in `default.config.json` template
+- **Default Config:** Built-in `default.config.yaml` template with extensive documentation
 
 ---
 
 ## Configuration Structure
 
-### Example config.json
+### Example config.yaml
 
-```json
-{
-  "settings": {
-    "sessionInitTimeout": 30000,
-    "responseTimeout": 120000,
-    "idleTimeout": 30000000,
-    "maxProcesses": 10,
-    "healthCheckInterval": 30000,
-    "httpPort": 1615,
-    "defaultTransport": "http"
-  },
-  "dashboard": {
-    "enabled": true,
-    "port": 3100,
-    "host": "localhost"
-  },
-  "database": {
-    "path": "data/team-sessions.db",
-    "inMemory": false
-  },
-  "teams": {
-    "team-alpha": {
-      "path": "/Users/jenova/projects/alpha",
-      "description": "Alpha team - Frontend development",
-      "idleTimeout": 30000000,
-      "skipPermissions": true,
-      "color": "#FF6B9D"
-    },
-    "team-beta": {
-      "path": "./projects/beta",
-      "description": "Beta team - Backend services",
-      "sessionInitTimeout": 45000,
-      "color": "#4ECDC4"
-    }
-  }
-}
+```yaml
+settings:
+  sessionInitTimeout: 30000
+  responseTimeout: 120000
+  idleTimeout: 3600000
+  maxProcesses: 10
+  healthCheckInterval: 30000
+  httpPort: 1615
+  defaultTransport: http
+
+dashboard:
+  enabled: true
+  http: 3100
+  https: 0
+  host: localhost
+
+database:
+  path: data/team-sessions.db
+  inMemory: false
+
+teams:
+  team-alpha:
+    path: /Users/jenova/projects/alpha
+    description: Alpha team - Frontend development
+    idleTimeout: 3600000
+    grantPermission: yes
+    color: "#FF6B9D"
+
+  team-beta:
+    path: ./projects/beta
+    description: Beta team - Backend services
+    sessionInitTimeout: 45000
+    grantPermission: ask
+    color: "#4ECDC4"
 ```
 
 ---
@@ -81,27 +82,27 @@ The Configuration subsystem provides **validated, hot-reloadable settings** usin
 
 1. **Environment Variable:** `IRIS_CONFIG_PATH`
    ```bash
-   export IRIS_CONFIG_PATH=/custom/path/config.json
+   export IRIS_CONFIG_PATH=/custom/path/config.yaml
    iris start
    ```
 
-2. **IRIS_HOME:** `$IRIS_HOME/config.json`
+2. **IRIS_HOME:** `$IRIS_HOME/config.yaml`
    ```bash
    export IRIS_HOME=/opt/iris
-   # Looks for /opt/iris/config.json
+   # Looks for /opt/iris/config.yaml
    ```
 
-3. **Default:** `~/.iris/config.json`
+3. **Default:** `~/.iris/config.yaml`
    ```bash
    # Default location on macOS/Linux
-   /Users/jenova/.iris/config.json
+   /Users/jenova/.iris/config.yaml
    ```
 
 ### Directory Structure
 
 ```
 ~/.iris/                           # IRIS_HOME (default)
-├── config.json                    # Main configuration
+├── config.yaml                    # Main configuration
 ├── data/
 │   └── team-sessions.db           # SQLite database
 └── logs/                          # Future: log files
@@ -114,7 +115,73 @@ The Configuration subsystem provides **validated, hot-reloadable settings** usin
 iris install
 
 # Or manually copy
-cp src/default.config.json ~/.iris/config.json
+cp src/default.config.yaml ~/.iris/config.yaml
+```
+
+---
+
+## Environment Variable Interpolation
+
+### Syntax
+
+Iris configuration supports environment variable interpolation using the `${VAR}` syntax:
+
+**Required Variable:**
+```yaml
+httpPort: ${IRIS_HTTP_PORT}
+```
+Throws error if `IRIS_HTTP_PORT` is not set.
+
+**Optional Variable with Default:**
+```yaml
+httpPort: ${IRIS_HTTP_PORT:-1615}
+```
+Uses `1615` if `IRIS_HTTP_PORT` is not set.
+
+### Common Use Cases
+
+**Development vs Production:**
+```yaml
+settings:
+  idleTimeout: ${IRIS_IDLE_TIMEOUT:-300000}  # 5 min dev, custom prod
+  maxProcesses: ${IRIS_MAX_PROCESSES:-10}
+
+database:
+  path: ${IRIS_DB_PATH:-data/team-sessions.db}
+```
+
+**Dynamic Port Configuration:**
+```yaml
+settings:
+  httpPort: ${PORT:-1615}
+
+dashboard:
+  http: ${DASHBOARD_PORT:-3100}
+```
+
+**Team-Specific Overrides:**
+```yaml
+teams:
+  team-production:
+    path: ${PROD_PATH:-/opt/app}
+    idleTimeout: ${PROD_TIMEOUT:-1800000}
+```
+
+### Environment File Example
+
+Create `.env` file:
+```bash
+# Iris MCP Configuration
+IRIS_HTTP_PORT=1615
+IRIS_MAX_PROCESSES=20
+IRIS_IDLE_TIMEOUT=600000
+IRIS_DB_PATH=/var/lib/iris/sessions.db
+```
+
+Load before starting:
+```bash
+source .env
+iris-mcp
 ```
 
 ---
@@ -140,7 +207,7 @@ class TeamsConfigManager {
     } else if (process.env.IRIS_CONFIG_PATH) {
       this.configPath = resolve(process.env.IRIS_CONFIG_PATH);
     } else {
-      this.configPath = getConfigPath(); // ~/.iris/config.json
+      this.configPath = getConfigPath(); // ~/.iris/config.yaml
     }
 
     ensureIrisHome(); // Create ~/.iris if doesn't exist
@@ -164,22 +231,29 @@ class TeamsConfigManager {
                      │
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│         2. Read and parse JSON                                  │
+│         2. Read and parse YAML                                  │
 │  content = readFileSync(configPath, 'utf8')                     │
-│  parsed = JSON.parse(content)                                   │
-│  → Catches SyntaxError for invalid JSON                         │
+│  parsed = parseYaml(content)                                    │
+│  → Catches YAMLParseError for invalid syntax                    │
 └────────────────────┬───────────────────────────────────────────┘
                      │
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│         3. Validate with Zod                                    │
-│  validated = TeamsConfigSchema.parse(parsed)                    │
+│         3. Interpolate environment variables                    │
+│  interpolated = interpolateObject(parsed, true)                 │
+│  → Replaces ${VAR:-default} with env values                     │
+└────────────────────┬───────────────────────────────────────────┘
+                     │
+                     ▼
+┌────────────────────────────────────────────────────────────────┐
+│         4. Validate with Zod                                    │
+│  validated = TeamsConfigSchema.parse(interpolated)              │
 │  → Catches ZodError with detailed path/message                  │
 └────────────────────┬───────────────────────────────────────────┘
                      │
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│         4. Check if teams configured                            │
+│         5. Check if teams configured                            │
 │  if (Object.keys(validated.teams).length === 0):                │
 │    Print team configuration instructions                        │
 │    exit(0)                                                       │
@@ -187,7 +261,7 @@ class TeamsConfigManager {
                      │
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│         5. Resolve team paths                                   │
+│         6. Resolve team paths                                   │
 │  configDir = dirname(resolve(configPath))                       │
 │  for each team:                                                 │
 │    if (!isAbsolute(team.path)):                                 │
@@ -196,7 +270,7 @@ class TeamsConfigManager {
                      │
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│         6. Validate team paths exist                            │
+│         7. Validate team paths exist                            │
 │  for each team:                                                 │
 │    if (!existsSync(team.path)):                                 │
 │      logger.warn("Team path does not exist", ...)               │
@@ -204,7 +278,7 @@ class TeamsConfigManager {
                      │
                      ▼
 ┌────────────────────────────────────────────────────────────────┐
-│         7. Store and return                                     │
+│         8. Store and return                                     │
 │  this.config = validated                                        │
 │  logger.info("Configuration loaded successfully")               │
 │  return config                                                  │
@@ -215,7 +289,9 @@ class TeamsConfigManager {
 
 ```typescript
 try {
-  const validated = TeamsConfigSchema.parse(parsed);
+  const parsed = parseYaml(content);
+  const interpolated = interpolateObject(parsed, true);
+  const validated = TeamsConfigSchema.parse(interpolated);
   // ...
 } catch (error) {
   if (error instanceof z.ZodError) {
@@ -228,10 +304,14 @@ try {
     );
   }
 
-  if (error instanceof SyntaxError) {
+  if (error instanceof Error && error.name === 'YAMLParseError') {
     throw new ConfigurationError(
-      `Invalid JSON in configuration file: ${error.message}`
+      `Invalid YAML in configuration file: ${error.message}`
     );
+  }
+
+  if (error instanceof Error && error.message.includes('Environment variable')) {
+    throw new ConfigurationError(error.message);
   }
 
   throw error;
@@ -302,6 +382,7 @@ const IrisConfigSchema = z.object({
   idleTimeout: z.number().positive().optional(),
   sessionInitTimeout: z.number().positive().optional(),
   skipPermissions: z.boolean().optional(),
+  grantPermission: z.enum(["yes", "no", "ask", "forward"]).optional().default("yes"),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
@@ -310,30 +391,29 @@ const IrisConfigSchema = z.object({
 
 const TeamsConfigSchema = z.object({
   settings: z.object({
-    sessionInitTimeout: z.number().positive(),
-    responseTimeout: z.number().positive(),
-    idleTimeout: z.number().positive(),
-    maxProcesses: z.number().int().min(1).max(50),
-    healthCheckInterval: z.number().positive(),
+    sessionInitTimeout: z.number().positive().optional().default(30000),
+    spawnTimeout: z.number().positive().optional().default(20000),
+    responseTimeout: z.number().positive().optional().default(120000),
+    idleTimeout: z.number().positive().optional().default(3600000),
+    maxProcesses: z.number().int().min(1).max(50).optional().default(10),
+    healthCheckInterval: z.number().positive().optional().default(30000),
     httpPort: z.number().int().min(1).max(65535).optional().default(1615),
     defaultTransport: z.enum(["stdio", "http"]).optional().default("stdio"),
+    wonderLoggerConfig: z.string().optional().default("./wonder-logger.yaml"),
   }),
   dashboard: z.object({
     enabled: z.boolean().default(true),
-    port: z.number().int().min(1).max(65535).default(3100),
     host: z.string().default("localhost"),
-  }).optional().default({
-    enabled: true,
-    port: 3100,
-    host: "localhost",
-  }),
+    http: z.number().int().min(0).max(65535).optional().default(0),
+    https: z.number().int().min(0).max(65535).optional().default(3100),
+    selfsigned: z.boolean().optional().default(false),
+    certPath: z.string().optional(),
+    keyPath: z.string().optional(),
+  }).optional(),
   database: z.object({
     path: z.string().optional().default("data/team-sessions.db"),
     inMemory: z.boolean().optional().default(false),
-  }).optional().default({
-    path: "data/team-sessions.db",
-    inMemory: false,
-  }),
+  }).optional(),
   teams: z.record(z.string(), IrisConfigSchema),
 });
 ```
@@ -347,12 +427,9 @@ const config: TeamsConfig = configManager.getConfig();
 ```
 
 **Runtime Validation:**
-```json
-{
-  "settings": {
-    "maxProcesses": "ten"  // ❌ Error: Expected number, received string
-  }
-}
+```yaml
+settings:
+  maxProcesses: "ten"  # ❌ Error: Expected number, received string
 ```
 
 **Clear Error Messages:**
@@ -361,6 +438,7 @@ Configuration validation failed:
 settings.maxProcesses: Expected number, received string
 teams.alpha.path: String must contain at least 1 character(s)
 teams.beta.color: Invalid hex color
+teams.gamma.grantPermission: Invalid enum value. Expected 'yes' | 'no' | 'ask' | 'forward', received 'maybe'
 ```
 
 ---
@@ -370,25 +448,17 @@ teams.beta.color: Invalid hex color
 ### Absolute vs Relative Paths
 
 **Absolute Path (Recommended):**
-```json
-{
-  "teams": {
-    "alpha": {
-      "path": "/Users/jenova/projects/alpha"
-    }
-  }
-}
+```yaml
+teams:
+  alpha:
+    path: /Users/jenova/projects/alpha
 ```
 
 **Relative Path (Resolved from config file location):**
-```json
-{
-  "teams": {
-    "beta": {
-      "path": "../projects/beta"
-    }
-  }
-}
+```yaml
+teams:
+  beta:
+    path: ../projects/beta
 ```
 
 ### Resolution Algorithm
@@ -412,10 +482,124 @@ for (const [name, team] of Object.entries(validated.teams)) {
 **Example:**
 
 ```
-Config file: /Users/jenova/.iris/config.json
+Config file: /Users/jenova/.iris/config.yaml
 Team path:   "./projects/alpha"
 Resolved:    /Users/jenova/.iris/projects/alpha
 ```
+
+---
+
+## Permission Approval System
+
+### grantPermission Field
+
+The `grantPermission` field controls how Claude handles permission requests for file operations and tool usage. This is **Phase 1** (schema only) - the implementation is planned for a future release.
+
+**Type:** `enum ["yes", "no", "ask", "forward"]`
+**Default:** `"yes"` (auto-approve all actions)
+
+### Permission Modes
+
+**`yes` - Auto-Approve (Default)**
+```yaml
+teams:
+  team-dev:
+    grantPermission: yes
+```
+- All Claude actions are automatically approved
+- No user interaction required
+- **Use case:** Trusted development environments
+- **Warning:** Claude has full file system access
+
+**`no` - Auto-Deny**
+```yaml
+teams:
+  team-readonly:
+    grantPermission: no
+```
+- All Claude actions are automatically denied
+- Claude can only read files, not modify
+- **Use case:** Read-only analysis, code review teams
+- **Note:** May limit Claude's effectiveness
+
+**`ask` - Interactive Prompt**
+```yaml
+teams:
+  team-prod:
+    grantPermission: ask
+```
+- User is prompted for each action
+- Interactive approval via terminal/UI
+- **Use case:** Production environments, sensitive codebases
+- **Note:** Requires user presence
+
+**`forward` - Relay to Calling Team**
+```yaml
+teams:
+  team-remote:
+    grantPermission: forward
+```
+- Permission request is forwarded to the calling team
+- Useful for remote execution scenarios
+- **Use case:** Cross-team coordination with delegation
+- **Note:** Requires Reverse MCP to be enabled
+
+### Configuration Examples
+
+**Development Team (Trusted):**
+```yaml
+team-frontend:
+  path: /Users/you/projects/frontend
+  description: Frontend development team
+  grantPermission: yes  # Auto-approve all actions
+  skipPermissions: true  # Legacy field (deprecated, use grantPermission)
+```
+
+**Production Team (Careful):**
+```yaml
+team-prod:
+  path: /opt/production/app
+  description: Production deployment team
+  grantPermission: ask  # Prompt for each action
+```
+
+**Read-Only Analysis:**
+```yaml
+team-security:
+  path: /Users/you/projects/audit
+  description: Security audit team (read-only)
+  grantPermission: no  # Deny all write operations
+```
+
+**Remote Execution with Delegation:**
+```yaml
+team-remote:
+  remote: ssh user@remote-host
+  claudePath: ~/.local/bin/claude
+  path: /home/user/projects/app
+  grantPermission: forward  # Forward to calling team
+  enableReverseMcp: true
+```
+
+### Migration from skipPermissions
+
+The `grantPermission` field replaces the deprecated `skipPermissions` boolean:
+
+**Old (deprecated):**
+```yaml
+teams:
+  team-alpha:
+    skipPermissions: true  # Auto-approve
+```
+
+**New (recommended):**
+```yaml
+teams:
+  team-alpha:
+    grantPermission: yes  # Auto-approve (explicit)
+```
+
+**Compatibility:** Both fields are supported during the transition period. `grantPermission` takes precedence if both are set.
 
 ---
 
@@ -429,7 +613,7 @@ iris install
 
 **Actions:**
 1. Create `~/.iris/` directory
-2. Copy `src/default.config.json` to `~/.iris/config.json`
+2. Copy `src/default.config.yaml` to `~/.iris/config.yaml`
 3. Register Iris with Claude CLI config (`~/.claude/config.json`)
 
 ### Add Team Command
@@ -450,15 +634,12 @@ iris add-team frontend /Users/jenova/projects/frontend
 ```
 
 **Result:**
-```json
-{
-  "teams": {
-    "frontend": {
-      "path": "/Users/jenova/projects/frontend",
-      "description": "frontend team"
-    }
-  }
-}
+```yaml
+teams:
+  frontend:
+    path: /Users/jenova/projects/frontend
+    description: frontend team
+    grantPermission: yes
 ```
 
 ---
@@ -470,12 +651,14 @@ iris add-team frontend /Users/jenova/projects/frontend
 ```typescript
 interface Settings {
   sessionInitTimeout: number;     // 30000ms (30s) - session file creation
+  spawnTimeout: number;           // 20000ms (20s) - process spawn timeout
   responseTimeout: number;        // 120000ms (2min) - process health timeout
-  idleTimeout: number;            // 30000000ms (8.3hr) - idle process cleanup
+  idleTimeout: number;            // 3600000ms (1hr) - idle process cleanup
   maxProcesses: number;           // 10 - pool size limit (LRU eviction)
   healthCheckInterval: number;    // 30000ms (30s) - health check frequency
   httpPort?: number;              // 1615 - HTTP transport port (Phase 3)
   defaultTransport?: "stdio" | "http";  // "stdio" - MCP transport mode
+  wonderLoggerConfig?: string;    // "./wonder-logger.yaml" - observability config
 }
 ```
 
@@ -484,8 +667,12 @@ interface Settings {
 ```typescript
 interface Dashboard {
   enabled: boolean;    // true - enable web dashboard
-  port: number;        // 3100 - dashboard HTTP port
   host: string;        // "localhost" - bind address
+  http: number;        // 3100 - HTTP port (0 = disabled)
+  https: number;       // 0 - HTTPS port (0 = disabled)
+  selfsigned: boolean; // false - use self-signed cert
+  certPath?: string;   // Path to SSL certificate
+  keyPath?: string;    // Path to SSL private key
 }
 ```
 
@@ -513,22 +700,16 @@ Set `inMemory: true` to use SQLite in-memory database. Useful for:
 
 **Example - Custom Path:**
 
-```json
-{
-  "database": {
-    "path": "/var/lib/iris/sessions.db"
-  }
-}
+```yaml
+database:
+  path: /var/lib/iris/sessions.db
 ```
 
 **Example - In-Memory (Testing):**
 
-```json
-{
-  "database": {
-    "inMemory": true
-  }
-}
+```yaml
+database:
+  inMemory: true
 ```
 
 ### Team Configuration
@@ -539,7 +720,8 @@ interface IrisConfig {
   description: string;            // Human-readable description
   idleTimeout?: number;           // Optional override for this team
   sessionInitTimeout?: number;    // Optional override for this team
-  skipPermissions?: boolean;      // Auto-approve all Claude actions
+  skipPermissions?: boolean;      // (Deprecated) Auto-approve all Claude actions
+  grantPermission?: "yes" | "no" | "ask" | "forward";  // Permission approval mode
   color?: string;                 // Hex color for UI (#FF6B9D)
 }
 ```
@@ -548,18 +730,15 @@ interface IrisConfig {
 
 Teams can override global settings:
 
-```json
-{
-  "settings": {
-    "idleTimeout": 30000000
-  },
-  "teams": {
-    "long-running": {
-      "path": "/path/to/project",
-      "idleTimeout": 86400000  // 24 hours (overrides global)
-    }
-  }
-}
+```yaml
+settings:
+  idleTimeout: 3600000
+
+teams:
+  long-running:
+    path: /path/to/project
+    idleTimeout: 86400000  # 24 hours (overrides global)
+    grantPermission: ask   # Require approval for this team
 ```
 
 ---
@@ -573,7 +752,7 @@ Teams can override global settings:
 ║           Iris MCP - Configuration Not Found                      ║
 ╚════════════════════════════════════════════════════════════════════╝
 
-Configuration file not found: /Users/jenova/.iris/config.json
+Configuration file not found: /Users/jenova/.iris/config.yaml
 
 Run the install command to create the default configuration:
 
@@ -591,7 +770,7 @@ This will:
 ║           Iris MCP - No Teams Configured                          ║
 ╚════════════════════════════════════════════════════════════════════╝
 
-Configuration file: /Users/jenova/.iris/config.json
+Configuration file: /Users/jenova/.iris/config.yaml
 
 No teams are configured. Add teams to get started:
 
@@ -613,6 +792,19 @@ settings.maxProcesses: Number must be less than or equal to 50
 settings.sessionInitTimeout: Expected number, received string
 teams.alpha.path: String must contain at least 1 character(s)
 teams.beta.color: Invalid hex color
+teams.gamma.grantPermission: Invalid enum value. Expected 'yes' | 'no' | 'ask' | 'forward', received 'auto'
+```
+
+### Environment Variable Errors
+
+```
+Configuration validation failed:
+Environment variable IRIS_HTTP_PORT is not set (required)
+```
+
+```
+Configuration validation failed:
+Environment variable PROD_PATH is not set and no default provided
 ```
 
 ---
@@ -645,7 +837,7 @@ class TeamsConfigManager {
 ### Helper Functions
 
 ```typescript
-// Get default config path (~/.iris/config.json)
+// Get default config path (~/.iris/config.yaml)
 function getConfigPath(): string;
 
 // Ensure IRIS_HOME directory exists
@@ -664,21 +856,27 @@ function getConfigManager(configPath?: string): TeamsConfigManager;
 ```typescript
 describe("TeamsConfigManager", () => {
   it("should load valid configuration", () => {
-    const manager = new TeamsConfigManager("test-config.json");
+    const manager = new TeamsConfigManager("test-config.yaml");
     const config = manager.load();
     expect(config.settings.maxProcesses).toBe(10);
   });
 
-  it("should reject invalid JSON", () => {
+  it("should reject invalid YAML", () => {
     expect(() => {
       manager.load();
-    }).toThrow("Invalid JSON");
+    }).toThrow("Invalid YAML");
   });
 
   it("should validate with Zod", () => {
     expect(() => {
       manager.load();
     }).toThrow("Expected number, received string");
+  });
+
+  it("should interpolate environment variables", () => {
+    process.env.IRIS_HTTP_PORT = "8080";
+    const config = manager.load();
+    expect(config.settings.httpPort).toBe(8080);
   });
 });
 ```
@@ -712,7 +910,35 @@ iris config schema > schema.json
 
 Export JSON Schema for editor autocomplete
 
+### 4. Permission Approval Implementation
+
+**Current:** Schema only (grantPermission field defined)
+
+**Planned:** Full implementation with:
+- Interactive prompts for `ask` mode
+- Permission forwarding for `forward` mode
+- Audit logging for all permission decisions
+- Dashboard UI for permission management
+
+See [PERMISSION_APPROVAL_PLAN.md](./future/PERMISSION_APPROVAL_PLAN.md) for implementation details.
+
 ---
 
-**Document Version:** 1.0
-**Last Updated:** October 2025
+## Tech Writer Notes
+
+**Coverage Areas:**
+- YAML configuration format and structure
+- Environment variable interpolation syntax (`${VAR:-default}`)
+- Zod schema validation and error handling
+- Hot-reload mechanism with fs.watchFile
+- Path resolution (absolute vs relative)
+- Permission approval system (grantPermission field)
+- CLI integration (install, add-team commands)
+- TeamsConfigManager API and methods
+- Dashboard and database configuration options
+
+**Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, grantPermission, skipPermissions, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration
+
+**Last Updated:** 2025-10-16
+**Change Context:** Migrated from config.json to config.yaml format, added environment variable interpolation with ${VAR:-default} syntax, documented new grantPermission field (enum: yes/no/ask/forward) for permission approval system (Phase 1 schema only)
+**Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design)

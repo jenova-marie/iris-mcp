@@ -41,10 +41,13 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 
 ### Configuration Management
 
+- **YAML Format**: Human-readable `config.yaml` with inline documentation and comments
+- **Environment Variable Interpolation**: `${VAR:-default}` syntax for dynamic configuration across environments
 - **Hot-Reload**: `fs.watchFile()` with 1-second interval reloads configuration without server restart
 - **Zod Validation**: Strict schema validation for all configuration fields with helpful error messages
-- **Team Overrides**: Per-team `idleTimeout`, `sessionInitTimeout`, and `skipPermissions` settings
+- **Team Overrides**: Per-team `idleTimeout`, `sessionInitTimeout`, `skipPermissions`, and `grantPermission` settings
 - **Global Settings**: Configurable `maxProcesses`, `healthCheckInterval`, and default timeouts
+- **Permission Control**: New `grantPermission` field (yes/no/ask/forward) for granular permission approval (schema-only, implementation pending)
 
 ### MCP Tools (15 Total)
 
@@ -174,10 +177,11 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 
 ### Configuration Editor
 
-- **Live Config Editing**: Edit `config.json` directly from web UI with validation
-- **Team Management**: Add, edit, remove teams with path, description, color configuration
+- **Live Config Editing**: Edit `config.yaml` directly from web UI with validation
+- **Team Management**: Add, edit, remove teams with path, description, color, grantPermission configuration
 - **Settings Panel**: Adjust maxProcesses, idleTimeout, healthCheckInterval without restart
 - **Validation Feedback**: Real-time Zod validation errors displayed inline
+- **Environment Variables**: Support for editing environment variable interpolations
 
 ### HTTP/HTTPS Support
 
@@ -403,6 +407,7 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 - **Process Management**: Node.js `child_process` with stdio communication
 - **Database**: `better-sqlite3` for session store and notification queue
 - **Validation**: Zod schemas for configuration and input validation
+- **Configuration**: YAML parsing with `yaml` package, environment variable interpolation
 - **Observability**: `@recoverysky/wonder-logger` with Pino + OpenTelemetry
 - **Tracing**: OpenTelemetry SDK with OTLP, Jaeger exporters
 - **Metrics**: Prometheus pull endpoint + OTLP push
@@ -445,6 +450,7 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 
 - **[GETTING_STARTED.md](../GETTING_STARTED.md)**: Installation and quick start guide
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)**: System design and component interaction
+- **[CONFIG.md](./CONFIG.md)**: Complete configuration reference with YAML format and env vars
 - **[ACTIONS.md](./ACTIONS.md)**: Complete MCP tools API reference
 - **[REMOTE.md](./REMOTE.md)**: Remote execution via SSH documentation
 - **[REVERSE_MCP.md](./REVERSE_MCP.md)**: Bidirectional tunnel architecture and security
@@ -465,6 +471,25 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 
 ---
 
-**Document Version**: 2.0
+## Tech Writer Notes
+
+**Coverage Areas:**
+- All implemented and planned Iris MCP features across 5 phases
+- Configuration management (YAML format, environment variables, grantPermission field)
+- MCP tools inventory and categorization
+- Performance metrics and benchmarks
+- Technology stack breakdown by phase
+- Feature comparison with other frameworks
+- Documentation cross-references
+
+**Keywords:** features, capabilities, MCP tools, configuration, YAML, environment variables, grantPermission, process pool, remote execution, observability, dashboard, API, CLI, intelligence layer, performance metrics, technology stack
+
+**Last Updated:** 2025-10-16
+**Change Context:** Updated Configuration Management section to document YAML format, environment variable interpolation (${VAR:-default}), and new grantPermission field. Added YAML to technology stack. Updated Dashboard configuration editor to mention grantPermission support.
+**Related Files:** CONFIG.md (complete configuration documentation), GETTING_STARTED.md (quick start), README.md (overview), ARCHITECTURE.md (system design)
+
+---
+
+**Document Version**: 2.1
 **Last Updated**: October 2025
 **Status Key**: ✅ Implemented | 🚧 In Progress | 🔮 Planned

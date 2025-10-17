@@ -13,7 +13,7 @@ vi.mock("../../../src/utils/logger.js", () => ({
   }),
 }));
 vi.mock("../../../src/utils/paths.js", () => ({
-  getConfigPath: vi.fn(() => "/default/iris/config.json"),
+  getConfigPath: vi.fn(() => "/default/iris/config.yaml"),
   ensureIrisHome: vi.fn(),
 }));
 
@@ -27,17 +27,17 @@ describe("TeamsConfigManager", () => {
 
   describe("constructor", () => {
     it("should use provided config path", () => {
-      manager = new TeamsConfigManager("/custom/config.json");
-      expect(manager["configPath"]).toBe("/custom/config.json");
+      manager = new TeamsConfigManager("/custom/config.yaml");
+      expect(manager["configPath"]).toBe("/custom/config.yaml");
     });
 
     it("should use IRIS_CONFIG_PATH environment variable", async () => {
-      process.env.IRIS_CONFIG_PATH = "/env/config.json";
+      process.env.IRIS_CONFIG_PATH = "/env/config.yaml";
       const { ensureIrisHome } = await import("../../../src/utils/paths.js");
 
       manager = new TeamsConfigManager();
 
-      expect(manager["configPath"]).toContain("env/config.json");
+      expect(manager["configPath"]).toContain("env/config.yaml");
       expect(vi.mocked(ensureIrisHome)).toHaveBeenCalled();
     });
 
@@ -77,7 +77,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       const config = manager.load();
 
       expect(config.teams["team-alpha"]).toBeDefined();
@@ -107,7 +107,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       const config = manager.load();
 
       // Path should be resolved relative to /test directory
@@ -138,7 +138,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       const config = manager.load();
 
       expect(config.teams["team-alpha"].path).toBe("/absolute/path");
@@ -154,7 +154,7 @@ describe("TeamsConfigManager", () => {
         throw new Error("process.exit called");
       }) as any);
 
-      manager = new TeamsConfigManager("/missing/config.json");
+      manager = new TeamsConfigManager("/missing/config.yaml");
 
       // Should call process.exit(0) with helpful message
       expect(() => manager.load()).toThrow("process.exit called");
@@ -169,7 +169,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue("{ invalid yaml");
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
 
       expect(() => manager.load()).toThrow(ConfigurationError);
       expect(() => manager.load()).toThrow("Invalid YAML");
@@ -191,7 +191,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(invalidConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
 
       expect(() => manager.load()).toThrow(ConfigurationError);
       expect(() => manager.load()).toThrow("Configuration validation failed");
@@ -223,7 +223,7 @@ describe("TeamsConfigManager", () => {
 
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       const config = manager.load();
 
       // Just verify config loaded successfully (logger warning is internal implementation)
@@ -254,7 +254,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       const config = manager.load();
 
       // Default value should be applied by Zod schema
@@ -300,7 +300,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       const config = manager.load();
 
       expect(config.teams["team-yes"].grantPermission).toBe("yes");
@@ -333,7 +333,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(invalidConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
 
       expect(() => manager.load()).toThrow(ConfigurationError);
       expect(() => manager.load()).toThrow("Configuration validation failed");
@@ -364,7 +364,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       manager.load();
       const config = manager.getConfig();
 
@@ -373,7 +373,7 @@ describe("TeamsConfigManager", () => {
     });
 
     it("should throw if configuration not loaded", () => {
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
 
       expect(() => manager.getConfig()).toThrow(ConfigurationError);
       expect(() => manager.getConfig()).toThrow("Configuration not loaded");
@@ -409,7 +409,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       manager.load();
     });
 
@@ -468,7 +468,7 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       manager.load();
       const teamNames = manager.getTeamNames();
 
@@ -500,14 +500,14 @@ describe("TeamsConfigManager", () => {
       vi.mocked(existsSync).mockReturnValue(true);
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify(validConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       manager.load();
 
       const callback = vi.fn();
       manager.watch(callback);
 
       expect(vi.mocked(watchFile)).toHaveBeenCalledWith(
-        "/test/config.json",
+        "/test/config.yaml",
         { interval: 1000 },
         expect.any(Function),
       );
@@ -549,7 +549,7 @@ describe("TeamsConfigManager", () => {
         .mockReturnValueOnce(JSON.stringify(initialConfig))
         .mockReturnValueOnce(JSON.stringify(updatedConfig));
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       manager.load();
 
       const callback = vi.fn();
@@ -593,7 +593,7 @@ describe("TeamsConfigManager", () => {
         .mockReturnValueOnce(JSON.stringify(validConfig))
         .mockReturnValueOnce("{ invalid yaml");
 
-      manager = new TeamsConfigManager("/test/config.json");
+      manager = new TeamsConfigManager("/test/config.yaml");
       manager.load();
 
       const callback = vi.fn();

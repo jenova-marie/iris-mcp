@@ -5,7 +5,7 @@
  * Set IRIS_TEST_REMOTE=1 to enable these tests.
  *
  * Requirements:
- * - SSH access to the remote host configured in tests/config.json
+ * - SSH access to the remote host configured in tests/config.yaml
  * - Claude CLI installed on remote host
  * - SSH keys configured (no password prompts)
  */
@@ -37,7 +37,7 @@ describeRemote.skip("Remote SSH Execution (Integration)", () => {
 
   beforeAll(async () => {
     // Use test config (go up to tests/ directory)
-    const configPath = path.join(__dirname, "../../config.json");
+    const configPath = path.join(__dirname, "../../config.yaml");
     configManager = new TeamsConfigManager(configPath);
     configManager.load();
     const teamsConfig = configManager.getConfig();
@@ -413,7 +413,7 @@ if (!REMOTE_TESTS_ENABLED) {
   console.log("\nTo enable remote SSH integration tests:");
   console.log("  IRIS_TEST_REMOTE=1 pnpm test:integration\n");
   console.log("Requirements:");
-  console.log("  - SSH access to remote host configured in tests/config.json");
+  console.log("  - SSH access to remote host configured in tests/config.yaml");
   console.log("  - Claude CLI installed on remote host");
   console.log("  - SSH keys configured (no password prompts)");
   console.log("  - Remote host: ssh inanna");

@@ -34,7 +34,7 @@ describe("Actions Integration Tests", () => {
   let processPool: ClaudeProcessPool;
   let iris: IrisOrchestrator;
 
-  const testConfigPath = "./tests/config.json";
+  const testConfigPath = "./tests/config.yaml";
   const testDbPath = "./tests/data/test-integration-actions.db";
 
   // Load config early to get timeout value

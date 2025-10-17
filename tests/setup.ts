@@ -1,6 +1,6 @@
 /**
  * Test setup and utilities
- * Ensures tests use isolated IRIS_HOME (tests/) with config.json and tests/data
+ * Ensures tests use isolated IRIS_HOME (tests/) with config.yaml and tests/data
  */
 
 import { resolve } from "path";
@@ -9,7 +9,7 @@ import { beforeAll, afterAll } from "vitest";
 
 // Test environment paths
 export const TEST_IRIS_HOME = resolve(__dirname);
-export const TEST_CONFIG_PATH = resolve(TEST_IRIS_HOME, "config.json");
+export const TEST_CONFIG_PATH = resolve(TEST_IRIS_HOME, "config.yaml");
 export const TEST_DATA_DIR = resolve(TEST_IRIS_HOME, "data");
 export const TEST_DB_PATH = resolve(TEST_DATA_DIR, "team-sessions.db");
 
@@ -44,10 +44,10 @@ export function verifyTestEnvironment(): void {
     );
   }
 
-  // Verify config.json exists
+  // Verify config.yaml exists
   if (!existsSync(TEST_CONFIG_PATH)) {
     throw new Error(
-      `Test environment error: config.json not found at ${TEST_CONFIG_PATH}`,
+      `Test environment error: config.yaml not found at ${TEST_CONFIG_PATH}`,
     );
   }
 

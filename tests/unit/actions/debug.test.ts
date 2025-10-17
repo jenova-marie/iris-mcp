@@ -3,10 +3,10 @@ import { debug } from "../../../src/actions/debug.js";
 import {
   getMemoryLogs,
   getAllMemoryStoreNames,
-} from "@recoverysky/wonder-logger";
+} from "@jenova-marie/wonder-logger";
 
 // Mock wonder-logger BEFORE any imports that use it
-vi.mock("@recoverysky/wonder-logger", () => ({
+vi.mock("@jenova-marie/wonder-logger", () => ({
   getMemoryLogs: vi.fn(),
   getAllMemoryStoreNames: vi.fn(),
 }));

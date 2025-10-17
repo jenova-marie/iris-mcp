@@ -20,7 +20,7 @@ describe("ClaudeProcessPool Integration", () => {
   let pool: ClaudeProcessPool;
   let configManager: TeamsConfigManager;
   let sessionManager: SessionManager;
-  const testConfigPath = "./tests/config.json"; // Use test teams config
+  const testConfigPath = "./tests/config.yaml"; // Use test teams config
   const testSessionDbPath = "./tests/data/test-pool-sessions.db";
 
   // Load config early to get timeout value
@@ -118,7 +118,9 @@ describe("ClaudeProcessPool Integration", () => {
         expect(process).toBeDefined();
         const metrics = process.getBasicMetrics();
         // Process might be PROCESSING (waiting for result) or IDLE (result arrived)
-        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(metrics.status);
+        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
+          metrics.status,
+        );
         expect(metrics.pid).toBeDefined();
       },
       sessionInitTimeout,
@@ -274,7 +276,7 @@ describe("ClaudeProcessPool Integration", () => {
 
       // Should have at least these 2 teams (may have more from previous tests)
       expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
-      expect(status.maxProcesses).toBe(10); // From config.json config
+      expect(status.maxProcesses).toBe(10); // From config.yaml config
       expect(status.processes).toHaveProperty("team-iris->team-alpha");
       expect(status.processes).toHaveProperty("team-iris->team-beta");
       expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(

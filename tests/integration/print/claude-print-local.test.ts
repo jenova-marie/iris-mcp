@@ -17,7 +17,7 @@ describe("ClaudePrintExecutor Integration - Local", () => {
   let sessionFilePath: string;
 
   // Load actual test config
-  const testConfigPath = "./tests/config.json";
+  const testConfigPath = "./tests/config.yaml";
   const configManager = new TeamsConfigManager(testConfigPath);
   configManager.load();
   const config = configManager.getConfig();

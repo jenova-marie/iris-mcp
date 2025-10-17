@@ -8,7 +8,7 @@
  *
  * Requirements:
  * - OpenSSH client installed locally (ssh command available)
- * - SSH access to the remote host configured in tests/config.json
+ * - SSH access to the remote host configured in tests/config.yaml
  * - SSH keys configured (no password prompts - use ssh-agent)
  * - Claude CLI installed on remote host at /opt/containers
  * - Remote host: ssh inanna (configured in ~/.ssh/config)
@@ -71,7 +71,9 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
   let poolManager: ClaudeProcessPool;
   let sessionManager: SessionManager;
   let claudeAvailable = false;
-  let testSession: Awaited<ReturnType<typeof sessionManager.getOrCreateSession>> | null = null;
+  let testSession: Awaited<
+    ReturnType<typeof sessionManager.getOrCreateSession>
+  > | null = null;
 
   const REMOTE_TEAM = "team-inanna";
   const REMOTE_HOST = "inanna"; // SSH config alias
@@ -80,7 +82,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
   beforeAll(async () => {
     // Use test config (go up to tests/ directory)
-    const configPath = path.join(__dirname, "../../config.json");
+    const configPath = path.join(__dirname, "../../config.yaml");
     configManager = new TeamsConfigManager(configPath);
     configManager.load();
     const teamsConfig = configManager.getConfig();
@@ -271,7 +273,9 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         });
 
         // Create CacheEntry for the tell operation
-        const { CacheEntryImpl } = await import("../../../src/cache/cache-entry.js");
+        const { CacheEntryImpl } = await import(
+          "../../../src/cache/cache-entry.js"
+        );
         const { CacheEntryType } = await import("../../../src/cache/types.js");
         const { firstValueFrom, filter, timeout } = await import("rxjs");
 
@@ -319,7 +323,9 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         const messages = ["What is 1+1?", "What is 3+3?", "What is 5+5?"];
 
         // Import required types
-        const { CacheEntryImpl } = await import("../../../src/cache/cache-entry.js");
+        const { CacheEntryImpl } = await import(
+          "../../../src/cache/cache-entry.js"
+        );
         const { CacheEntryType } = await import("../../../src/cache/types.js");
         const { firstValueFrom, filter, timeout } = await import("rxjs");
 
@@ -515,7 +521,9 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         expect(process.getBasicMetrics().isReady).toBe(true);
 
         // Import required types
-        const { CacheEntryImpl } = await import("../../../src/cache/cache-entry.js");
+        const { CacheEntryImpl } = await import(
+          "../../../src/cache/cache-entry.js"
+        );
         const { CacheEntryType } = await import("../../../src/cache/types.js");
         const { firstValueFrom, filter, timeout } = await import("rxjs");
 

@@ -56,12 +56,12 @@ describe("paths utilities", () => {
   });
 
   describe("getConfigPath", () => {
-    it("should return config.json path inside IRIS_HOME", () => {
+    it("should return config.yaml path inside IRIS_HOME", () => {
       process.env.IRIS_HOME = "/custom/iris";
 
       const result = getConfigPath();
 
-      expect(result).toBe(resolve("/custom/iris", "config.json"));
+      expect(result).toBe(resolve("/custom/iris", "config.yaml"));
     });
 
     it("should return default config path when IRIS_HOME not set", () => {
@@ -70,7 +70,7 @@ describe("paths utilities", () => {
 
       const result = getConfigPath();
 
-      expect(result).toBe(resolve("/home/user/.iris", "config.json"));
+      expect(result).toBe(resolve("/home/user/.iris", "config.yaml"));
     });
   });
 
@@ -108,9 +108,7 @@ describe("paths utilities", () => {
 
       const result = getSessionDbPath();
 
-      expect(result).toBe(
-        resolve("/home/user/.iris/data", "team-sessions.db")
-      );
+      expect(result).toBe(resolve("/home/user/.iris/data", "team-sessions.db"));
     });
   });
 
@@ -123,11 +121,11 @@ describe("paths utilities", () => {
 
       expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(
         resolve("/custom/iris"),
-        { recursive: true }
+        { recursive: true },
       );
       expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(
         resolve("/custom/iris/data"),
-        { recursive: true }
+        { recursive: true },
       );
     });
 
@@ -142,7 +140,7 @@ describe("paths utilities", () => {
       expect(vi.mocked(mkdirSync)).toHaveBeenCalledTimes(1);
       expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(
         resolve("/custom/iris/data"),
-        { recursive: true }
+        { recursive: true },
       );
     });
 
@@ -164,11 +162,11 @@ describe("paths utilities", () => {
 
       expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(
         resolve("/home/user/.iris"),
-        { recursive: true }
+        { recursive: true },
       );
       expect(vi.mocked(mkdirSync)).toHaveBeenCalledWith(
         resolve("/home/user/.iris/data"),
-        { recursive: true }
+        { recursive: true },
       );
     });
   });

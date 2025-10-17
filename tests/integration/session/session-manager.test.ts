@@ -17,7 +17,7 @@ import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 describe("SessionManager Integration", () => {
   let manager: SessionManager;
   let configManager: TeamsConfigManager;
-  const testConfigPath = "./tests/config.json"; // Use test teams config
+  const testConfigPath = "./tests/config.yaml"; // Use test teams config
 
   // Load config early to get timeout value
   const tempConfigManager = new TeamsConfigManager(testConfigPath);
@@ -31,7 +31,7 @@ describe("SessionManager Integration", () => {
     configManager.load();
 
     const teamsConfig = configManager.getConfig();
-    // Don't pass dbOptions - let it use inMemory config from tests/config.json
+    // Don't pass dbOptions - let it use inMemory config from tests/config.yaml
     manager = new SessionManager(teamsConfig);
 
     // Initialize (creates sessions for each team)

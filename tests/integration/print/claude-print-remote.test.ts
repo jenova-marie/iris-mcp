@@ -6,7 +6,7 @@
  *
  * Requirements:
  * - OpenSSH client installed locally (ssh command available)
- * - SSH access to the remote host configured in tests/config.json
+ * - SSH access to the remote host configured in tests/config.yaml
  * - SSH keys configured (no password prompts - use ssh-agent)
  * - Claude CLI installed on remote host
  * - Remote host: ssh inanna (configured in ~/.ssh/config)
@@ -88,7 +88,7 @@ describeRemote("ClaudePrintExecutor Integration - Remote", () => {
   const TEST_TIMEOUT = 60000; // 60 seconds for SSH operations
 
   // Load actual test config
-  const testConfigPath = "./tests/config.json";
+  const testConfigPath = "./tests/config.yaml";
   const configManager = new TeamsConfigManager(testConfigPath);
   configManager.load();
   const config = configManager.getConfig();
@@ -442,7 +442,10 @@ describeRemote("ClaudePrintExecutor Integration - Remote", () => {
 
         // Generate fresh session ID for this test
         const multiCmdSessionId = randomUUID();
-        const executor = ClaudePrintExecutor.create(testConfig, multiCmdSessionId);
+        const executor = ClaudePrintExecutor.create(
+          testConfig,
+          multiCmdSessionId,
+        );
 
         // Create session
         const result1 = await executor.execute({
@@ -494,7 +497,10 @@ describeRemote("ClaudePrintExecutor Integration - Remote", () => {
 
         // Generate fresh session ID for this test
         const outputSessionId = randomUUID();
-        const executor = ClaudePrintExecutor.create(testConfig, outputSessionId);
+        const executor = ClaudePrintExecutor.create(
+          testConfig,
+          outputSessionId,
+        );
 
         const result = await executor.execute({
           command: "ping",
@@ -537,7 +543,10 @@ describeRemote("ClaudePrintExecutor Integration - Remote", () => {
 
         // Generate fresh session ID for this test
         const completeOutputSessionId = randomUUID();
-        const executor = ClaudePrintExecutor.create(testConfig, completeOutputSessionId);
+        const executor = ClaudePrintExecutor.create(
+          testConfig,
+          completeOutputSessionId,
+        );
 
         const result = await executor.execute({
           command: "ping",

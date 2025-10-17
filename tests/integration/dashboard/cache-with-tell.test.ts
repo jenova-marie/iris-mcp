@@ -25,12 +25,13 @@ describe("Dashboard Cache with Tell Messages", () => {
   let iris: IrisOrchestrator;
   let stateBridge: DashboardStateBridge;
 
-  const testConfigPath = "./tests/config.json";
+  const testConfigPath = "./tests/config.yaml";
 
   // Load config early to get timeout value (following session-manager.test.ts pattern)
   const tempConfigManager = new TeamsConfigManager(testConfigPath);
   tempConfigManager.load();
-  const sessionInitTimeout = tempConfigManager.getConfig().settings.sessionInitTimeout;
+  const sessionInitTimeout =
+    tempConfigManager.getConfig().settings.sessionInitTimeout;
 
   // Single initialization for ALL tests (following session-manager.test.ts pattern)
   beforeAll(async () => {
@@ -39,7 +40,7 @@ describe("Dashboard Cache with Tell Messages", () => {
     configManager.load();
     const teamsConfig = configManager.getConfig();
 
-    // Don't pass dbOptions - let it use inMemory config from tests/config.json
+    // Don't pass dbOptions - let it use inMemory config from tests/config.yaml
     // This follows the session-manager.test.ts pattern
     sessionManager = new SessionManager(teamsConfig);
 
@@ -54,7 +55,7 @@ describe("Dashboard Cache with Tell Messages", () => {
       processPool,
       sessionManager,
       configManager,
-      iris
+      iris,
     );
 
     // Initialize session manager
@@ -87,7 +88,10 @@ describe("Dashboard Cache with Tell Messages", () => {
 
   describe("Empty cache before messages", () => {
     it("should return empty cache when no messages have been sent", async () => {
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      const report = await stateBridge.getSessionReport(
+        "team-iris",
+        "team-alpha",
+      );
 
       expect(report).toMatchObject({
         team: "team-alpha",
@@ -111,13 +115,16 @@ describe("Dashboard Cache with Tell Messages", () => {
         { team: "team-alpha", fromTeam: "team-iris" },
         iris,
         processPool,
-        sessionManager
+        sessionManager,
       );
 
       expect(result.team).toBe("team-alpha");
 
       // Session might already exist if wake was called before
-      if (result.status === "error" && result.message?.includes("already awake")) {
+      if (
+        result.status === "error" &&
+        result.message?.includes("already awake")
+      ) {
         console.log("Team already awake, continuing...");
         expect(result.sessionId).toBeTruthy();
       } else {
@@ -132,7 +139,10 @@ describe("Dashboard Cache with Tell Messages", () => {
     }, 60000);
 
     it("should show session exists but cache is still empty after wake", async () => {
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      const report = await stateBridge.getSessionReport(
+        "team-iris",
+        "team-alpha",
+      );
 
       console.log("Report after wake:", JSON.stringify(report, null, 2));
 
@@ -143,7 +153,7 @@ describe("Dashboard Cache with Tell Messages", () => {
       if (report.hasSession) {
         expect(report.sessionId).toBeTruthy();
         // Check for spawn entry if cache exists
-        const spawnEntry = report.entries.find(e => e.type === "spawn");
+        const spawnEntry = report.entries.find((e) => e.type === "spawn");
         if (spawnEntry) {
           expect(spawnEntry.type).toBe("spawn");
         }
@@ -162,7 +172,7 @@ describe("Dashboard Cache with Tell Messages", () => {
         { team: "team-alpha", fromTeam: "team-iris" },
         iris,
         processPool,
-        sessionManager
+        sessionManager,
       );
 
       console.log("Wake result:", wakeResult.status);
@@ -174,7 +184,7 @@ describe("Dashboard Cache with Tell Messages", () => {
           message: "Test message for cache viewing",
           timeout: 30000, // Wait for response
         },
-        iris
+        iris,
       );
 
       expect(result).toBeDefined();
@@ -191,7 +201,10 @@ describe("Dashboard Cache with Tell Messages", () => {
 
     it("should show cache entries after sending message", async () => {
       // Get the message cache directly
-      const messageCache = iris.getMessageCacheForTeams("team-iris", "team-alpha");
+      const messageCache = iris.getMessageCacheForTeams(
+        "team-iris",
+        "team-alpha",
+      );
       expect(messageCache).toBeDefined();
 
       if (!messageCache) {
@@ -200,7 +213,9 @@ describe("Dashboard Cache with Tell Messages", () => {
 
       // Wait for the cache entry to complete using status$ observable
       const entries = messageCache.getAllEntries();
-      const tellEntry = entries.find(e => e.tellString === "Test message for cache viewing");
+      const tellEntry = entries.find(
+        (e) => e.tellString === "Test message for cache viewing",
+      );
 
       expect(tellEntry).toBeDefined();
 
@@ -208,39 +223,54 @@ describe("Dashboard Cache with Tell Messages", () => {
         // Wait for completion using the observable
         const completionPromise = firstValueFrom(
           tellEntry.status$.pipe(
-            filter(status =>
-              status === CacheEntryStatus.COMPLETED ||
-              status === CacheEntryStatus.TERMINATED
-            )
-          )
+            filter(
+              (status) =>
+                status === CacheEntryStatus.COMPLETED ||
+                status === CacheEntryStatus.TERMINATED,
+            ),
+          ),
         );
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout waiting for completion")), 10000)
+          setTimeout(
+            () => reject(new Error("Timeout waiting for completion")),
+            10000,
+          ),
         );
 
         try {
           await Promise.race([completionPromise, timeoutPromise]);
         } catch (error) {
-          console.log("Entry did not complete within timeout, checking current state");
+          console.log(
+            "Entry did not complete within timeout, checking current state",
+          );
         }
       }
 
       // Now verify via the dashboard report
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      const report = await stateBridge.getSessionReport(
+        "team-iris",
+        "team-alpha",
+      );
 
       expect(report.hasSession).toBe(true);
       expect(report.entries.length).toBeGreaterThan(0);
 
       // Find the tell entry in report
-      const reportTellEntry = report.entries.find(e => e.type === "tell" && e.tellString === "Test message for cache viewing");
+      const reportTellEntry = report.entries.find(
+        (e) =>
+          e.type === "tell" &&
+          e.tellString === "Test message for cache viewing",
+      );
       expect(reportTellEntry).toBeDefined();
 
       // Check messages within the entry
       expect(reportTellEntry?.messages.length).toBeGreaterThan(0);
 
       // Should have assistant message with Claude's response
-      const assistantMessage = reportTellEntry?.messages.find(m => m.type === "assistant" && m.content);
+      const assistantMessage = reportTellEntry?.messages.find(
+        (m) => m.type === "assistant" && m.content,
+      );
       expect(assistantMessage).toBeDefined();
       expect(assistantMessage?.content).toBeTruthy();
 
@@ -258,11 +288,13 @@ describe("Dashboard Cache with Tell Messages", () => {
         const transport = (process as any).transport;
         if (transport && transport.isBusy()) {
           const idlePromise = firstValueFrom(
-            process.status$.pipe(filter(status => status === ProcessStatus.IDLE))
+            process.status$.pipe(
+              filter((status) => status === ProcessStatus.IDLE),
+            ),
           );
           await Promise.race([
             idlePromise,
-            new Promise(resolve => setTimeout(resolve, 5000))
+            new Promise((resolve) => setTimeout(resolve, 5000)),
           ]);
         }
       }
@@ -274,7 +306,7 @@ describe("Dashboard Cache with Tell Messages", () => {
           message: "Async message test",
           timeout: -1, // Async mode - return immediately
         },
-        iris
+        iris,
       );
 
       expect(result.to).toBe("team-alpha");
@@ -289,16 +321,23 @@ describe("Dashboard Cache with Tell Messages", () => {
 
     it("should show async message in cache while processing", async () => {
       // Get the message cache to access observables
-      const messageCache = iris.getMessageCacheForTeams("team-iris", "team-alpha");
+      const messageCache = iris.getMessageCacheForTeams(
+        "team-iris",
+        "team-alpha",
+      );
 
       if (!messageCache) {
-        console.log("No message cache found, async message might not have been sent");
+        console.log(
+          "No message cache found, async message might not have been sent",
+        );
         return;
       }
 
       // Find the async cache entry
       const entries = messageCache.getAllEntries();
-      const asyncEntry = entries.find(e => e.tellString === "Async message test");
+      const asyncEntry = entries.find(
+        (e) => e.tellString === "Async message test",
+      );
 
       if (asyncEntry) {
         // Subscribe to status$ to observe current status
@@ -306,11 +345,16 @@ describe("Dashboard Cache with Tell Messages", () => {
         console.log("Async entry status via observable:", currentStatus);
 
         // It might be active or already completed depending on timing
-        expect([CacheEntryStatus.ACTIVE, CacheEntryStatus.COMPLETED]).toContain(currentStatus);
+        expect([CacheEntryStatus.ACTIVE, CacheEntryStatus.COMPLETED]).toContain(
+          currentStatus,
+        );
 
         if (currentStatus === CacheEntryStatus.ACTIVE) {
           // Verify via dashboard report too
-          const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+          const report = await stateBridge.getSessionReport(
+            "team-iris",
+            "team-alpha",
+          );
           expect(report.allComplete).toBe(false);
         }
       }
@@ -318,7 +362,10 @@ describe("Dashboard Cache with Tell Messages", () => {
 
     it("should show async message as completed using status observable", async () => {
       // Get the message cache to access the cache entry
-      const messageCache = iris.getMessageCacheForTeams("team-iris", "team-alpha");
+      const messageCache = iris.getMessageCacheForTeams(
+        "team-iris",
+        "team-alpha",
+      );
 
       if (!messageCache) {
         // If no cache, the async message wasn't sent (test dependency issue)
@@ -328,7 +375,9 @@ describe("Dashboard Cache with Tell Messages", () => {
 
       // Find the async cache entry
       const entries = messageCache.getAllEntries();
-      const asyncEntry = entries.find(e => e.tellString === "Async message test");
+      const asyncEntry = entries.find(
+        (e) => e.tellString === "Async message test",
+      );
 
       if (!asyncEntry) {
         console.log("Async entry not found, might not have been sent");
@@ -343,29 +392,47 @@ describe("Dashboard Cache with Tell Messages", () => {
         // This will wait up to 30 seconds for completion
         const completionPromise = firstValueFrom(
           asyncEntry.status$.pipe(
-            filter(status => status === CacheEntryStatus.COMPLETED || status === CacheEntryStatus.TERMINATED)
-          )
+            filter(
+              (status) =>
+                status === CacheEntryStatus.COMPLETED ||
+                status === CacheEntryStatus.TERMINATED,
+            ),
+          ),
         );
 
         // Set a timeout so we don't wait forever
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout waiting for completion")), 30000)
+          setTimeout(
+            () => reject(new Error("Timeout waiting for completion")),
+            30000,
+          ),
         );
 
         try {
-          const finalStatus = await Promise.race([completionPromise, timeoutPromise]);
-          expect([CacheEntryStatus.COMPLETED, CacheEntryStatus.TERMINATED]).toContain(finalStatus);
+          const finalStatus = await Promise.race([
+            completionPromise,
+            timeoutPromise,
+          ]);
+          expect([
+            CacheEntryStatus.COMPLETED,
+            CacheEntryStatus.TERMINATED,
+          ]).toContain(finalStatus);
         } catch (error) {
           // Timeout is acceptable for async messages
-          console.log("Async message did not complete within timeout, which is acceptable");
+          console.log(
+            "Async message did not complete within timeout, which is acceptable",
+          );
           expect(asyncEntry.status).toBe(CacheEntryStatus.ACTIVE);
         }
       }
 
       // Verify through the dashboard report as well
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      const report = await stateBridge.getSessionReport(
+        "team-iris",
+        "team-alpha",
+      );
       const reportEntry = report.entries.find(
-        e => e.type === "tell" && e.tellString === "Async message test"
+        (e) => e.type === "tell" && e.tellString === "Async message test",
       );
       expect(reportEntry).toBeDefined();
     });
@@ -374,11 +441,7 @@ describe("Dashboard Cache with Tell Messages", () => {
   describe("Multiple messages in sequence", () => {
     it("should handle multiple messages and show all in cache", async () => {
       // Send multiple messages
-      const messages = [
-        "First message",
-        "Second message",
-        "Third message",
-      ];
+      const messages = ["First message", "Second message", "Third message"];
 
       for (const msg of messages) {
         await tell(
@@ -388,39 +451,51 @@ describe("Dashboard Cache with Tell Messages", () => {
             message: msg,
             timeout: 30000,
           },
-          iris
+          iris,
         );
       }
 
       // Get the message cache to access cache entries
-      const messageCache = iris.getMessageCacheForTeams("team-iris", "team-alpha");
+      const messageCache = iris.getMessageCacheForTeams(
+        "team-iris",
+        "team-alpha",
+      );
       expect(messageCache).toBeDefined();
 
       if (messageCache) {
         // Wait for all entries to complete using status$ observables
         const entries = messageCache.getAllEntries();
-        const tellEntries = entries.filter(e =>
-          messages.includes(e.tellString)
+        const tellEntries = entries.filter((e) =>
+          messages.includes(e.tellString),
         );
 
         // Wait for each entry to complete
-        const completionPromises = tellEntries.map(async entry => {
+        const completionPromises = tellEntries.map(async (entry) => {
           if (entry.status === CacheEntryStatus.COMPLETED) {
             return; // Already completed
           }
 
           // Wait for completion using status$ observable
           const timeoutPromise = new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error(`Timeout waiting for "${entry.tellString}" to complete`)), 30000)
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `Timeout waiting for "${entry.tellString}" to complete`,
+                  ),
+                ),
+              30000,
+            ),
           );
 
           const completionPromise = firstValueFrom(
             entry.status$.pipe(
-              filter(status =>
-                status === CacheEntryStatus.COMPLETED ||
-                status === CacheEntryStatus.TERMINATED
-              )
-            )
+              filter(
+                (status) =>
+                  status === CacheEntryStatus.COMPLETED ||
+                  status === CacheEntryStatus.TERMINATED,
+              ),
+            ),
           ).then(() => {});
 
           await Promise.race([completionPromise, timeoutPromise]);
@@ -430,14 +505,17 @@ describe("Dashboard Cache with Tell Messages", () => {
       }
 
       // Now verify via the dashboard report
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      const report = await stateBridge.getSessionReport(
+        "team-iris",
+        "team-alpha",
+      );
 
       // Should have multiple tell entries
-      const tellEntries = report.entries.filter(e => e.type === "tell");
+      const tellEntries = report.entries.filter((e) => e.type === "tell");
 
       // Check that all our messages are there and completed
       for (const msg of messages) {
-        const entry = tellEntries.find(e => e.tellString === msg);
+        const entry = tellEntries.find((e) => e.tellString === msg);
         expect(entry).toBeDefined();
         expect(entry?.status).toBe(CacheEntryStatus.COMPLETED);
       }
@@ -452,19 +530,23 @@ describe("Dashboard Cache with Tell Messages", () => {
       const process = processPool.getProcess("team-alpha");
 
       if (!process) {
-        console.log("No process found for team-alpha, test might be running in wrong order");
+        console.log(
+          "No process found for team-alpha, test might be running in wrong order",
+        );
         return;
       }
 
       // Set up promise to wait for "stopped" status
       const stoppedPromise = firstValueFrom(
-        process.status$.pipe(filter(status => status === ProcessStatus.STOPPED))
+        process.status$.pipe(
+          filter((status) => status === ProcessStatus.STOPPED),
+        ),
       );
 
       // Call sleep (which triggers terminate)
       const result = await sleep(
         { fromTeam: "team-iris", team: "team-alpha" },
-        processPool
+        processPool,
       );
 
       expect(result.team).toBe("team-alpha");
@@ -472,7 +554,10 @@ describe("Dashboard Cache with Tell Messages", () => {
 
       // Wait for process to actually stop (with timeout)
       const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout waiting for process to stop")), 10000)
+        setTimeout(
+          () => reject(new Error("Timeout waiting for process to stop")),
+          10000,
+        ),
       );
 
       try {
@@ -480,7 +565,7 @@ describe("Dashboard Cache with Tell Messages", () => {
         console.log("Process stopped successfully");
 
         // Wait an additional moment for session store to be updated
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       } catch (error) {
         console.log("Process did not stop within timeout:", error);
         // Don't fail the test - the next test will verify the state
@@ -488,19 +573,24 @@ describe("Dashboard Cache with Tell Messages", () => {
     });
 
     it("should still show cache entries after process is stopped", async () => {
-      const report = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      const report = await stateBridge.getSessionReport(
+        "team-iris",
+        "team-alpha",
+      );
 
       expect(report.hasSession).toBe(true);
       expect(report.hasProcess).toBe(false); // Process is stopped
       // Note: processState might be "idle" because Iris doesn't listen to process-terminated events yet
       // This will be fixed when Iris fully migrates to observables
-      expect([ProcessStatus.IDLE, ProcessStatus.STOPPED]).toContain(report.processState);
+      expect([ProcessStatus.IDLE, ProcessStatus.STOPPED]).toContain(
+        report.processState,
+      );
 
       // Cache entries should still be there
       expect(report.entries.length).toBeGreaterThan(0);
 
       // All entries should still be completed
-      const tellEntries = report.entries.filter(e => e.type === "tell");
+      const tellEntries = report.entries.filter((e) => e.type === "tell");
       expect(tellEntries.length).toBeGreaterThan(0);
 
       for (const entry of tellEntries) {
@@ -517,7 +607,10 @@ describe("Dashboard Cache with Tell Messages", () => {
   describe("Cross-team cache viewing", () => {
     it("should not show cache for reverse direction", async () => {
       // Try to get cache for team-alpha -> team-iris (reverse direction)
-      const reverseReport = await stateBridge.getSessionReport("team-alpha", "team-iris");
+      const reverseReport = await stateBridge.getSessionReport(
+        "team-alpha",
+        "team-iris",
+      );
 
       expect(reverseReport.hasSession).toBe(false);
       expect(reverseReport.entries).toHaveLength(0);
@@ -530,7 +623,7 @@ describe("Dashboard Cache with Tell Messages", () => {
         { team: "team-iris", fromTeam: "team-alpha" },
         iris,
         processPool,
-        sessionManager
+        sessionManager,
       );
 
       // Send message in reverse direction
@@ -541,24 +634,30 @@ describe("Dashboard Cache with Tell Messages", () => {
           message: "Message from alpha to iris",
           timeout: 30000,
         },
-        iris
+        iris,
       );
 
       // Check reverse direction cache
-      const reverseReport = await stateBridge.getSessionReport("team-alpha", "team-iris");
+      const reverseReport = await stateBridge.getSessionReport(
+        "team-alpha",
+        "team-iris",
+      );
 
       expect(reverseReport.hasSession).toBe(true);
       expect(reverseReport.entries.length).toBeGreaterThan(0);
 
-      const tellEntry = reverseReport.entries.find(e => e.type === "tell");
+      const tellEntry = reverseReport.entries.find((e) => e.type === "tell");
       expect(tellEntry?.tellString).toBe("Message from alpha to iris");
 
       // Original direction cache should still be separate
-      const originalReport = await stateBridge.getSessionReport("team-iris", "team-alpha");
+      const originalReport = await stateBridge.getSessionReport(
+        "team-iris",
+        "team-alpha",
+      );
 
       // Should not contain the reverse message
       const reverseMessage = originalReport.entries.find(
-        e => e.tellString === "Message from alpha to iris"
+        (e) => e.tellString === "Message from alpha to iris",
       );
       expect(reverseMessage).toBeUndefined();
     }, 120000);

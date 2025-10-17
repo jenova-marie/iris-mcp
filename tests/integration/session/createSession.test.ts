@@ -17,7 +17,7 @@ import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 describe("Session Creation Integration", () => {
   let manager: SessionManager;
   let configManager: TeamsConfigManager;
-  const testConfigPath = "./tests/config.json";
+  const testConfigPath = "./tests/config.yaml";
 
   // Load config early to get timeout value
   const tempConfigManager = new TeamsConfigManager(testConfigPath);

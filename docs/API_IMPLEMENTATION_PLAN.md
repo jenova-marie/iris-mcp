@@ -95,30 +95,26 @@ All MCP tools map 1:1 to HTTP endpoints:
 
 **Note:** API key management is now handled via CLI and SQLite storage (see [API_AUTH_IMPLEMENTATION_PLAN.md](./API_AUTH_IMPLEMENTATION_PLAN.md)). Do not store API keys in `config.yaml`.
 
-```json
-{
-  "settings": { /* existing */ },
-  "dashboard": { /* existing */ },
-  "database": { /* existing */ },
-  "api": {
-    "enabled": false,            // Default: disabled for security
-    "port": 1615,
-    "host": "127.0.0.1",         // Default: localhost only
-    "requireAuth": true,         // Default: auth required
-    "keyStorePath": "${IRIS_HOME}/keys.db",
-    "auditLogPath": "${IRIS_HOME}/audit.db",
-    "cors": {
-      "enabled": true,
-      "origins": ["http://localhost:3100"]  // Dashboard only
-    },
-    "rateLimit": {
-      "enabled": true,
-      "windowMs": 900000,        // 15 minutes
-      "maxRequests": 100
-    }
-  },
-  "teams": { /* existing */ }
-}
+```yaml
+settings: # existing
+dashboard: # existing
+database: # existing
+api:
+  enabled: false            # Default: disabled for security
+  port: 1615
+  host: 127.0.0.1          # Default: localhost only
+  requireAuth: true         # Default: auth required
+  keyStorePath: ${IRIS_HOME}/keys.db
+  auditLogPath: ${IRIS_HOME}/audit.db
+  cors:
+    enabled: true
+    origins:
+      - http://localhost:3100  # Dashboard only
+  rateLimit:
+    enabled: true
+    windowMs: 900000        # 15 minutes
+    maxRequests: 100
+teams: # existing
 ```
 
 ### Update `src/config/iris-config.ts`

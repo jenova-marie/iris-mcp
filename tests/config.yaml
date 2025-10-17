@@ -1,0 +1,49 @@
+# ==============================================================================
+# Iris MCP Test Configuration
+# ==============================================================================
+#
+# This configuration is used for unit and integration tests.
+# It uses in-memory database and reduced timeouts for faster test execution.
+#
+# ==============================================================================
+
+settings:
+  sessionInitTimeout: 30000
+  spawnTimeout: 20000
+  responseTimeout: 45000
+  idleTimeout: 300000
+  maxProcesses: 10
+  healthCheckInterval: 5000
+  httpPort: 1616
+  defaultTransport: stdio
+  wonderLoggerConfig: ./wonder-logger.yaml
+
+database:
+  inMemory: true
+
+teams:
+  team-iris:
+    path: /Users/jenova/projects/jenova-marie/iris-mcp
+    description: Iris MCP Team - the calling team for tests
+    skipPermissions: true
+    color: "#9C27B0"
+
+  team-alpha:
+    path: ./teams/team-alpha
+    description: Iris MCP Team Alpha - testing team
+    skipPermissions: true
+    color: "#4CAF50"
+
+  team-beta:
+    path: ./teams/team-beta
+    description: Iris MCP Team Beta - testing team
+    skipPermissions: true
+    color: "#4CAAF0"
+
+  team-inanna:
+    remote: ssh inanna
+    claudePath: ~/.local/bin/claude
+    path: /opt/containers
+    description: Iris MCP Team Inanna - cloud dev team
+    skipPermissions: true
+    color: "#4CAAF0"

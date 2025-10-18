@@ -35,6 +35,8 @@ import type {
 } from "./transport.interface.js";
 import { TransportStatus as Status } from "./transport.interface.js";
 import type { CacheEntry } from "../cache/types.js";
+import { ClaudeCommandBuilder } from "../utils/command-builder.js";
+import { writeMcpConfigRemote } from "../utils/mcp-config-writer.js";
 
 export class SSHTransport implements Transport {
   private sshProcess: ChildProcess | null = null;
@@ -63,6 +65,9 @@ export class SSHTransport implements Transport {
   // Debug info (captured during spawn)
   private launchCommand: string | null = null;
   private teamConfigSnapshot: string | null = null;
+
+  // MCP config file path (for cleanup)
+  private mcpConfigFilePath: string | null = null;
 
   constructor(
     private teamName: string,
@@ -179,8 +184,9 @@ export class SSHTransport implements Transport {
     // Change to project directory
     const cdCmd = `cd ${this.escapeShellArg(commandInfo.cwd)}`;
 
-    // Build Claude command
-    const claudeCmd = `${commandInfo.executable} ${commandInfo.args.join(" ")}`;
+    // Build Claude command with properly escaped arguments
+    const escapedArgs = commandInfo.args.map((arg) => this.escapeShellArg(arg));
+    const claudeCmd = `${commandInfo.executable} ${escapedArgs.join(" ")}`;
 
     return `${cdCmd} && ${claudeCmd}`;
   }
@@ -192,6 +198,17 @@ export class SSHTransport implements Transport {
   private escapeShellArg(arg: string): string {
     // Replace single quotes with '\'' (end quote, escaped quote, start quote)
     return `'${arg.replace(/'/g, "'\\''")}'`;
+  }
+
+  /**
+   * Extract SSH host from remote configuration string
+   * Example: "ssh user@host" -> "user@host"
+   * Example: "ssh -J bastion user@host" -> "user@host"
+   */
+  private extractSshHost(): string {
+    const remoteParts = this.irisConfig.remote!.split(/\s+/);
+    // Last argument is typically the host
+    return remoteParts[remoteParts.length - 1];
   }
 
   /**
@@ -216,6 +233,38 @@ export class SSHTransport implements Transport {
     this.startTime = Date.now();
     this.currentCacheEntry = spawnCacheEntry;
 
+    // Build and write MCP config file if reverse MCP is enabled
+    if (this.irisConfig.enableReverseMcp) {
+      this.logger.debug("Building MCP config for remote transport", {
+        teamName: this.teamName,
+        sessionId: this.sessionId,
+      });
+
+      const mcpConfig = ClaudeCommandBuilder.buildMcpConfig(
+        this.irisConfig,
+        this.sessionId,
+      );
+
+      // Extract SSH host from remote string
+      const sshHost = this.extractSshHost();
+
+      this.mcpConfigFilePath = await writeMcpConfigRemote(
+        mcpConfig,
+        this.sessionId,
+        sshHost,
+        this.irisConfig.mcpConfigScript,
+      );
+
+      this.logger.debug("MCP config file written to remote", {
+        teamName: this.teamName,
+        filePath: this.mcpConfigFilePath,
+        sshHost,
+      });
+
+      // Add --mcp-config to args
+      commandInfo.args.push("--mcp-config", this.mcpConfigFilePath);
+    }
+
     // Build SSH command using pre-built CommandInfo
     const sshCommand = this.buildSSHCommand(commandInfo);
     const [command, ...args] = sshCommand;
@@ -223,15 +272,21 @@ export class SSHTransport implements Transport {
     // Capture launch command for debugging
     this.launchCommand = sshCommand.join(" ");
 
+    // Build remote command for logging
+    const remoteCommand = this.buildRemoteCommand(commandInfo);
+
     // Capture team config snapshot for debugging
     this.teamConfigSnapshot = this.buildTeamConfigSnapshot();
 
-    this.logger.debug("Captured debug info for SSH session", {
-      teamName: this.teamName,
-      sessionId: this.sessionId,
-      commandLength: this.launchCommand.length,
-      configLength: this.teamConfigSnapshot.length,
-    });
+    this.logger.debug(
+      {
+        teamName: this.teamName,
+        sessionId: this.sessionId,
+        sshCommand: this.launchCommand,
+        remoteCommand: remoteCommand,
+      },
+      "Launch command for SSH transport",
+    );
 
     // Spawn SSH process
     try {
@@ -607,9 +662,50 @@ export class SSHTransport implements Transport {
         process.kill("SIGKILL");
       }, 5000);
 
-      process.once("exit", () => {
+      process.once("exit", async () => {
         clearTimeout(timer);
         this.sshProcess = null;
+
+        // Clean up remote MCP config file if it exists
+        if (this.mcpConfigFilePath) {
+          try {
+            const sshHost = this.extractSshHost();
+            const { spawn } = await import("child_process");
+
+            // Use ssh to remove remote file
+            const rmProc = spawn(
+              "ssh",
+              [sshHost, "rm", "-f", this.mcpConfigFilePath],
+              {
+                stdio: "ignore",
+              },
+            );
+
+            rmProc.on("exit", (code) => {
+              if (code === 0) {
+                this.logger.debug("Deleted remote MCP config file", {
+                  teamName: this.teamName,
+                  filePath: this.mcpConfigFilePath,
+                  sshHost,
+                });
+              } else {
+                this.logger.warn("Failed to delete remote MCP config file", {
+                  teamName: this.teamName,
+                  filePath: this.mcpConfigFilePath,
+                  sshHost,
+                  exitCode: code,
+                });
+              }
+            });
+          } catch (error) {
+            this.logger.warn("Error cleaning up remote MCP config file", {
+              teamName: this.teamName,
+              filePath: this.mcpConfigFilePath,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          this.mcpConfigFilePath = null;
+        }
 
         // Emit STOPPED status
         this.statusSubject.next(Status.STOPPED);
@@ -698,7 +794,6 @@ export class SSHTransport implements Transport {
     const snapshot: Record<string, any> = {
       // Permission handling
       grantPermission: this.irisConfig.grantPermission || "yes",
-      skipPermissions: this.irisConfig.skipPermissions || false,
 
       // Timeouts
       idleTimeout: this.irisConfig.idleTimeout,

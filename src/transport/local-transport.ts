@@ -19,6 +19,8 @@ import { TransportStatus as Status } from "./transport.interface.js";
 import type { IrisConfig } from "../process-pool/types.js";
 import { getChildLogger } from "../utils/logger.js";
 import { ProcessError } from "../utils/errors.js";
+import { ClaudeCommandBuilder } from "../utils/command-builder.js";
+import { writeMcpConfigLocal } from "../utils/mcp-config-writer.js";
 
 /**
  * Error thrown when process is busy
@@ -59,6 +61,9 @@ export class LocalTransport implements Transport {
   // Debug info (captured during spawn)
   private launchCommand: string | null = null;
   private teamConfigSnapshot: string | null = null;
+
+  // MCP config file path (for cleanup)
+  private mcpConfigFilePath: string | null = null;
 
   constructor(
     private teamName: string,
@@ -110,12 +115,49 @@ export class LocalTransport implements Transport {
     // Capture team config snapshot for debugging
     this.teamConfigSnapshot = this.buildTeamConfigSnapshot();
 
-    this.logger.debug("Captured debug info for local transport", {
-      teamName: this.teamName,
-      sessionId: this.sessionId,
-      commandLength: this.launchCommand.length,
-      configLength: this.teamConfigSnapshot.length,
-    });
+    // Build and write MCP config file if reverse MCP is enabled
+    if (this.irisConfig.enableReverseMcp) {
+      this.logger.debug("Building MCP config for local transport", {
+        teamName: this.teamName,
+        sessionId: this.sessionId,
+      });
+
+      const mcpConfig = ClaudeCommandBuilder.buildMcpConfig(
+        this.irisConfig,
+        this.sessionId,
+      );
+
+      this.mcpConfigFilePath = await writeMcpConfigLocal(
+        mcpConfig,
+        this.sessionId,
+        this.irisConfig.mcpConfigScript,
+      );
+
+      this.logger.debug("MCP config file written", {
+        teamName: this.teamName,
+        filePath: this.mcpConfigFilePath,
+      });
+
+      // Add --mcp-config to args
+      commandInfo.args.push("--mcp-config", this.mcpConfigFilePath);
+
+      // Update launch command for debugging
+      const updatedQuotedArgs = commandInfo.args.map((arg) =>
+        arg.includes(" ") || arg.includes('"')
+          ? `"${arg.replace(/"/g, '\\"')}"`
+          : arg,
+      );
+      this.launchCommand = `${commandInfo.executable} ${updatedQuotedArgs.join(" ")}`;
+    }
+
+    this.logger.debug(
+      {
+        teamName: this.teamName,
+        sessionId: this.sessionId,
+        command: this.launchCommand,
+      },
+      "Launch command for local transport",
+    );
 
     // Spawn process using pre-built command info
     this.childProcess = spawn(commandInfo.executable, commandInfo.args, {
@@ -208,11 +250,30 @@ export class LocalTransport implements Transport {
       }, 5000);
 
       // Clean up on exit
-      this.childProcess.once("exit", () => {
+      this.childProcess.once("exit", async () => {
         clearTimeout(killTimer);
         this.childProcess = null;
         this.ready = false;
         this.currentCacheEntry = null;
+
+        // Clean up MCP config file if it exists
+        if (this.mcpConfigFilePath) {
+          try {
+            const fs = await import("fs/promises");
+            await fs.unlink(this.mcpConfigFilePath);
+            this.logger.debug("Deleted MCP config file", {
+              teamName: this.teamName,
+              filePath: this.mcpConfigFilePath,
+            });
+          } catch (error) {
+            this.logger.warn("Failed to delete MCP config file", {
+              teamName: this.teamName,
+              filePath: this.mcpConfigFilePath,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+          this.mcpConfigFilePath = null;
+        }
 
         // Emit STOPPED status
         this.statusSubject.next(Status.STOPPED);
@@ -465,7 +526,6 @@ export class LocalTransport implements Transport {
     const snapshot: Record<string, any> = {
       // Permission handling
       grantPermission: this.irisConfig.grantPermission || "yes",
-      skipPermissions: this.irisConfig.skipPermissions || false,
 
       // Timeouts
       idleTimeout: this.irisConfig.idleTimeout,

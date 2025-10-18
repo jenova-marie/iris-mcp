@@ -99,7 +99,6 @@ Add these fields to a team's configuration to enable reverse MCP:
       "enableReverseMcp": true,        // Enable reverse tunnel
       "reverseMcpPort": 1615,          // Port to tunnel (default: 1615)
       "allowHttp": true,               // Use HTTP instead of HTTPS (dev only)
-      "skipPermissions": false         // Skip all permission prompts (use with caution)
     }
   }
 }
@@ -112,7 +111,6 @@ Add these fields to a team's configuration to enable reverse MCP:
 | `enableReverseMcp` | boolean | `false` | Enable SSH reverse tunnel for this team |
 | `reverseMcpPort` | number | `1615` | Port to tunnel (both local and remote) |
 | `allowHttp` | boolean | `false` | Use HTTP instead of HTTPS (for dev/self-signed certs) |
-| `skipPermissions` | boolean | `false` | Use `--dangerously-skip-permissions` flag |
 
 ### Security Considerations
 

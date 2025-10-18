@@ -381,7 +381,6 @@ const IrisConfigSchema = z.object({
   description: z.string(),
   idleTimeout: z.number().positive().optional(),
   sessionInitTimeout: z.number().positive().optional(),
-  skipPermissions: z.boolean().optional(),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
@@ -406,6 +405,7 @@ const IrisConfigSchema = z.object({
   enableReverseMcp: z.boolean().optional(),
   reverseMcpPort: z.number().int().min(1).max(65535).optional(),
   allowHttp: z.boolean().optional(),
+  mcpConfigScript: z.string().optional(),
   // Permission approval mode
   grantPermission: z.enum(["yes", "no", "ask", "forward"]).optional().default("ask"),
   // Tool allowlist/denylist
@@ -592,7 +592,6 @@ team-frontend:
   path: /Users/you/projects/frontend
   description: Frontend development team
   grantPermission: yes  # Auto-approve all actions
-  skipPermissions: true  # Legacy field (deprecated, use grantPermission)
 ```
 
 **Production Team (Careful):**
@@ -621,15 +620,10 @@ team-remote:
   enableReverseMcp: true
 ```
 
-### Migration from skipPermissions
-
-The `grantPermission` field replaces the deprecated `skipPermissions` boolean:
-
 **Old (deprecated):**
 ```yaml
 teams:
   team-alpha:
-    skipPermissions: true  # Auto-approve
 ```
 
 **New (recommended):**
@@ -640,6 +634,204 @@ teams:
 ```
 
 **Compatibility:** Both fields are supported during the transition period. `grantPermission` takes precedence if both are set.
+
+---
+
+## MCP Configuration File System
+
+### Overview
+
+When `enableReverseMcp: true` is set, Iris writes MCP configuration files to enable Claude Code instances to communicate back with the Iris MCP server. The configuration file contains server connection details and must be passed to Claude via the `--mcp-config` flag.
+
+**Architecture:** All filesystem operations are delegated to external shell scripts, keeping TypeScript code free of direct file I/O. TypeScript streams JSON to script stdin, scripts handle file writing and return file paths via stdout.
+
+### Default Scripts
+
+Iris provides four bundled scripts in `examples/scripts/`:
+
+**Local Execution (Unix):**
+- `mcp-cp.sh` - Writes config to local filesystem
+- Default location: `/tmp/iris-mcp-{sessionId}.json`
+- Permissions: `chmod 600` (owner-only read)
+
+**Local Execution (Windows):**
+- `mcp-cp.ps1` - PowerShell version for Windows
+- Default location: `%TEMP%\iris-mcp-{sessionId}.json`
+- Permissions: ACLs set for owner-only access
+
+**Remote Execution via SCP (Unix):**
+- `mcp-scp.sh` - Writes to local temp, SCPs to remote host, cleans up local file
+- Default remote location: `~/.iris/mcp-configs/iris-mcp-{sessionId}.json`
+- Creates remote directory with `chmod 700`, sets file to `chmod 600`
+
+**Remote Execution via SCP (Windows):**
+- `mcp-scp.ps1` - PowerShell version for Windows
+- Uses OpenSSH for Windows (ssh, scp commands)
+- Same remote location as Unix version
+
+### Script Interface
+
+All scripts follow the same contract:
+
+**Input (stdin):** JSON configuration object
+```json
+{
+  "mcpServers": {
+    "iris": {
+      "command": "node",
+      "args": ["/path/to/iris-mcp/dist/index.js"],
+      "env": {
+        "IRIS_REVERSE_MCP_SESSION_ID": "abc123"
+      }
+    }
+  }
+}
+```
+
+**Output (stdout):** File path where config was written
+```
+/tmp/iris-mcp-abc123.json
+```
+
+**Arguments:**
+- **Local scripts**: `<sessionId> [destDir]`
+- **Remote scripts**: `<sessionId> <sshHost> [remoteDir]`
+
+### Custom Scripts
+
+Users can provide custom scripts via the `mcpConfigScript` field:
+
+```yaml
+teams:
+  team-custom:
+    path: /path/to/project
+    enableReverseMcp: true
+    mcpConfigScript: /path/to/custom-mcp-writer.sh
+```
+
+**Requirements:**
+1. Script must accept JSON on stdin
+2. Script must output file path to stdout (last non-empty line)
+3. Script must exit with code 0 on success
+4. For remote teams, script receives `<sessionId> <sshHost> [remoteDir]` args
+5. For local teams, script receives `<sessionId> [destDir]` args
+
+**Example Custom Script:**
+```bash
+#!/usr/bin/env bash
+# custom-mcp-writer.sh - Write to custom location
+
+SESSION_ID="$1"
+CUSTOM_DIR="${2:-/var/iris/configs}"
+
+mkdir -p "$CUSTOM_DIR"
+FILE_PATH="$CUSTOM_DIR/session-${SESSION_ID}.json"
+
+# Read JSON from stdin
+cat > "$FILE_PATH"
+chmod 600 "$FILE_PATH"
+
+# Output file path to stdout
+echo "$FILE_PATH"
+```
+
+### Configuration Examples
+
+**Default (bundled scripts):**
+```yaml
+teams:
+  team-local:
+    path: /path/to/project
+    enableReverseMcp: true
+    # Uses bundled mcp-cp.sh or mcp-cp.ps1
+```
+
+**Custom local directory:**
+```yaml
+teams:
+  team-local:
+    path: /path/to/project
+    enableReverseMcp: true
+    mcpConfigScript: /path/to/scripts/mcp-custom.sh
+```
+
+**Remote execution:**
+```yaml
+teams:
+  team-remote:
+    path: /remote/path/to/project
+    remote: user@remote-host
+    enableReverseMcp: true
+    # Uses bundled mcp-scp.sh or mcp-scp.ps1
+```
+
+**Remote with custom script:**
+```yaml
+teams:
+  team-remote:
+    path: /remote/path/to/project
+    remote: user@remote-host
+    enableReverseMcp: true
+    mcpConfigScript: /path/to/scripts/mcp-custom-scp.sh
+```
+
+### File Lifecycle
+
+1. **Spawn:** Before spawning Claude process, transport writes MCP config file
+2. **Execution:** File path passed to Claude via `--mcp-config <filepath>`
+3. **Termination:** When transport terminates, config file is deleted
+   - **Local:** `fs.unlink()` via Node.js
+   - **Remote:** `ssh <host> rm -f <filepath>` for cleanup
+
+### Security Considerations
+
+**File Permissions:**
+- Config files contain server connection details
+- Default scripts set restrictive permissions (600 / owner-only)
+- Remote directories created with 700 permissions
+
+**Temporary Files:**
+- Local configs written to `/tmp` or `%TEMP%` by default
+- Remote scripts use `mktemp` for secure temp file creation
+- Cleanup on both success and failure (trap EXIT)
+
+**SSH Security:**
+- Remote scripts use existing SSH configuration
+- No passwords or keys stored in config files
+- Relies on user's `~/.ssh/config` and agent
+
+### Troubleshooting
+
+**Script Not Found:**
+```
+Failed to execute MCP config script: ENOENT
+```
+- Verify script path in `mcpConfigScript` is absolute
+- Ensure script has execute permissions (`chmod +x`)
+
+**Permission Denied:**
+```
+MCP config script failed (exit code 1): Permission denied
+```
+- Check script execute permissions
+- For remote: verify SSH key authentication works
+- For remote: ensure remote directory is writable
+
+**Config File Not Created:**
+```
+MCP config script did not output a file path
+```
+- Script must output file path to stdout
+- Check script exits with code 0
+- Verify script's stdout isn't being redirected
+
+**Remote SCP Failures:**
+```
+scp: Connection refused
+```
+- Verify SSH connection works: `ssh <host> echo test`
+- Check `remote` field is correctly formatted
+- Ensure remote host has scp installed
 
 ---
 
@@ -760,7 +952,6 @@ interface IrisConfig {
   description: string;            // Human-readable description
   idleTimeout?: number;           // Optional override for this team
   sessionInitTimeout?: number;    // Optional override for this team
-  skipPermissions?: boolean;      // (Deprecated) Auto-approve all Claude actions
   color?: string;                 // Hex color for UI (#FF6B9D)
   // Remote execution
   remote?: string;                // SSH connection string (e.g., "user@host")
@@ -771,6 +962,7 @@ interface IrisConfig {
   enableReverseMcp?: boolean;     // Enable reverse MCP tunnel for this team
   reverseMcpPort?: number;        // Port to tunnel (default: 1615)
   allowHttp?: boolean;            // Allow HTTP for reverse MCP (dev only)
+  mcpConfigScript?: string;       // Custom script path for writing MCP config files
   // Permission approval mode
   grantPermission?: "yes" | "no" | "ask" | "forward";  // Permission mode (default: "ask")
   // Tool allowlist/denylist
@@ -992,8 +1184,8 @@ See [PERMISSION_APPROVAL_PLAN.md](./future/PERMISSION_APPROVAL_PLAN.md) for impl
 - TeamsConfigManager API and methods
 - Dashboard and database configuration options
 
-**Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, grantPermission, skipPermissions, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration
+**Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, grantPermission, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration, MCP config scripts, mcpConfigScript, mcp-cp.sh, mcp-scp.sh, reverse MCP
 
 **Last Updated:** 2025-10-17
-**Change Context:** Updated grantPermission default from "yes" to "ask" for safer defaults. Added documentation for remote execution fields (remote, ssh2, remoteOptions, claudePath), reverse MCP tunneling (enableReverseMcp, reverseMcpPort, allowHttp), and tool management (allowedTools, disallowedTools, appendSystemPrompt). All schema definitions now match actual implementation in src/config/iris-config.ts.
-**Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design)
+**Change Context:** Added comprehensive documentation for MCP Configuration File System including mcpConfigScript field, bundled shell scripts (mcp-cp.sh, mcp-cp.ps1, mcp-scp.sh, mcp-scp.ps1), script interface contract, custom script requirements, file lifecycle, security considerations, and troubleshooting guide. This documents the new pipe-based architecture where TypeScript streams JSON to external scripts for all filesystem operations related to MCP config files.
+**Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design), src/utils/mcp-config-writer.ts (implementation), examples/scripts/mcp-*.{sh,ps1} (bundled scripts)

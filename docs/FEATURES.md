@@ -45,7 +45,7 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 - **Environment Variable Interpolation**: `${VAR:-default}` syntax for dynamic configuration across environments
 - **Hot-Reload**: `fs.watchFile()` with 1-second interval reloads configuration without server restart
 - **Zod Validation**: Strict schema validation for all configuration fields with helpful error messages
-- **Team Overrides**: Per-team `idleTimeout`, `sessionInitTimeout`, `skipPermissions`, and `grantPermission` settings
+- **Team Overrides**: Per-team `idleTimeout`, `sessionInitTimeout`, and `grantPermission` settings
 - **Global Settings**: Configurable `maxProcesses`, `healthCheckInterval`, and default timeouts
 - **Permission Control**: `grantPermission` field (yes/no/ask/forward) for granular permission approval ✅ (ask mode fully implemented with dashboard UI)
 

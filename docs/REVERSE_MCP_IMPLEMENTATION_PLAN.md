@@ -152,7 +152,6 @@ export interface IrisConfig {
   // Existing fields
   idleTimeout?: number;
   sessionInitTimeout?: number;
-  skipPermissions?: boolean;
   color?: string;
 }
 
@@ -198,7 +197,6 @@ const IrisConfigSchema = z.object({
   // Existing fields
   idleTimeout: z.number().positive().optional(),
   sessionInitTimeout: z.number().positive().optional(),
-  skipPermissions: z.boolean().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color").optional(),
 });
 ```
@@ -369,10 +367,7 @@ function buildRemoteClaudeCommand(
     claudeArgs.push('--resume', sessionId);
   }
 
-  // Skip permissions if configured
-  if (teamConfig.skipPermissions) {
-    claudeArgs.push('--dangerously-skip-permissions');
-  }
+
 
   // NEW: Add MCP config for reverse tunnel
   if (teamConfig.enableReverseMcp) {

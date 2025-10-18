@@ -37,7 +37,6 @@ Flag	Description	Example
 --permission-prompt-tool	Specify an MCP tool to handle permission prompts in non-interactive mode	claude -p --permission-prompt-tool mcp_auth_tool "query"
 --resume	Resume a specific session by ID, or by choosing in interactive mode	claude --resume abc123 "query"
 --continue	Load the most recent conversation in the current directory	claude --continue
---dangerously-skip-permissions	Skip permission prompts (use with caution)	claude --dangerously-skip-permissions
 The --output-format json flag is particularly useful for scripting and automation, allowing you to parse Claude’s responses programmatically.
 ​
 Agents flag format

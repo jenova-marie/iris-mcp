@@ -695,7 +695,6 @@ teams:
     path: /absolute/path/to/project
     description: Human-readable description
     idleTimeout: 30000000       # Optional override
-    skipPermissions: true       # Auto-approve Claude actions (deprecated)
     grantPermission: yes        # Permission mode: yes/no/ask/forward
     color: "#FF6B9D"            # Hex color for future UI
 ```

@@ -734,7 +734,6 @@ team_teams(): Promise<{
     color?: string;
     remote?: string;
     idleTimeout?: number;
-    skipPermissions?: boolean;
   }>;
   totalTeams: number;
   timestamp: number;
@@ -752,7 +751,6 @@ const result = await team_teams();
 //       path: "/Users/jenova/projects/frontend",
 //       description: "React frontend",
 //       color: "#61dafb",
-//       skipPermissions: true
 //     },
 //     {
 //       name: "backend",

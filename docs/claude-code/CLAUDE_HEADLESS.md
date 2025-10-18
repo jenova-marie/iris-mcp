@@ -33,7 +33,6 @@ Headless mode leverages all the CLI options available in Claude Code. Here are t
 | `--disallowedTools` | Space-separated list of denied tools, or string of comma-separated list of denied tools | `claude --disallowedTools mcp__splunk mcp__github` or `claude --disallowedTools "Bash(git commit),mcp__github"` |
 | `--mcp-config` | Load MCP servers from a JSON file | `claude --mcp-config servers.json` |
 | `--permission-prompt-tool` | MCP tool for handling permission prompts (only with `--print`) | `claude --permission-prompt-tool mcp__auth__prompt` |
-| `--dangerously-skip-permissions` | Skip all permission prompts (dangerous!) | `claude --dangerously-skip-permissions` |
 
 ## statistics
 

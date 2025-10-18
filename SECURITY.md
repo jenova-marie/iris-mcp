@@ -49,11 +49,6 @@ To help us better understand and resolve the issue, please include:
 - Has appropriate file permissions (read/write for owner only)
 - Does not contain sensitive credentials
 
-**skipPermissions flag**: When set to `true`, Claude automatically approves file operations. Use with caution:
-- Only enable for trusted, non-production environments
-- Understand that Claude can read/write files without confirmation
-- Consider security implications for your specific use case
-
 ### Input Validation
 
 Iris MCP implements multiple layers of security:

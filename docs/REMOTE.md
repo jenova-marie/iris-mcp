@@ -363,7 +363,6 @@ interface IrisConfig {
   // Existing optional fields
   idleTimeout?: number;
   sessionInitTimeout?: number;
-  skipPermissions?: boolean;
   color?: string;
 }
 ```
@@ -1012,7 +1011,6 @@ const IrisConfigSchema = z.object({
   // Existing fields
   idleTimeout: z.number().positive().optional(),
   sessionInitTimeout: z.number().positive().optional(),
-  skipPermissions: z.boolean().optional(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
 });
 ```

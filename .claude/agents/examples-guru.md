@@ -111,20 +111,6 @@ settings:
   maxProcesses: 10  # Default changed from 5 to 10 in v2.0
 ```
 
-### Removing Deprecated Options
-```yaml
-# Before
-teams:
-  frontend:
-    skipPermissions: true  # Auto-approve permissions
-
-# After
-teams:
-  frontend:
-    grantPermission: "yes"  # Replaced skipPermissions in v2.0
-    # Migration note: skipPermissions:true -> grantPermission:"yes"
-```
-
 ### Adding Complex Nested Configuration
 ```yaml
 # After schema adds new dashboard configuration
@@ -192,13 +178,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - New dashboard configuration section in [full-config.yaml]
 - TODO request for reverse MCP example configuration
-
-### Removed
-- Deprecated skipPermissions field from all examples (replaced with grantPermission)
-
-**Trigger:** [Brief description of source code changes]
-**Files:** [count] example files updated, [count] TODO items added
-```
 
 ## Example Files Guidelines
 

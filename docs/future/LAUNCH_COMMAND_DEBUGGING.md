@@ -92,9 +92,6 @@ const args = [
   // ... more args
 ];
 
-if (this.irisConfig.skipPermissions) {
-  args.push('--dangerously-skip-permissions');
-}
 
 // Spawn process
 this.process = spawn('claude', args, { ... });

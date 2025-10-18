@@ -447,7 +447,6 @@ class StdioManager {
     const claude = spawn('claude', [
       '--input-format', 'stream-json',
       '--output-format', 'stream-json',
-      '--dangerously-skip-permissions' // Optional: auto-approve actions
     ], {
       cwd: irisConfig.path,
       stdio: ['pipe', 'pipe', 'pipe']

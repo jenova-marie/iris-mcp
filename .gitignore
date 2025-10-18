@@ -42,3 +42,4 @@ data/
 *.db
 *.db-wal
 *.db-shm
+.git-commit.log*

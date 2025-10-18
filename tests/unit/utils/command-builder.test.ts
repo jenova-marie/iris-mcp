@@ -98,7 +98,7 @@ describe("ClaudeCommandBuilder", () => {
       expect(toolsValue).toContain("tool2");
       expect(toolsValue).toContain("tool3");
 
-      // Should also include Iris MCP tools
+      // Should also include Iris MCP tools (when grantPermission defaults to "yes")
       expect(toolsValue).toContain("mcp__iris__team_tell");
     });
 
@@ -192,9 +192,10 @@ describe("ClaudeCommandBuilder", () => {
       expect(toolCount).toBe(1);
     });
 
-    it("should not add --permission-prompt-tool when enableReverseMcp is false", () => {
+    it("should add permission-prompt-tool when grantPermission is 'yes' (default)", () => {
       const config: IrisConfig = {
         ...baseConfig,
+        grantPermission: "yes",
       };
 
       const result = ClaudeCommandBuilder.build(
@@ -203,7 +204,54 @@ describe("ClaudeCommandBuilder", () => {
         "session-123",
       );
 
+      // Default grantPermission="yes" adds permission-prompt-tool
+      expect(result.args).toContain("--permission-prompt-tool");
+      expect(result.args).toContain("mcp__iris__permissions__approve");
+
+      // Should also auto-approve all Iris MCP tools
+      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
+      const allowedTools = result.args[allowedToolsIndex + 1];
+      expect(allowedTools).toContain("mcp__iris__team_tell");
+      expect(allowedTools).toContain("mcp__iris__team_wake");
+    });
+
+    it("should add permission-prompt-tool when grantPermission is 'ask'", () => {
+      const config: IrisConfig = {
+        ...baseConfig,
+        grantPermission: "ask",
+      };
+
+      const result = ClaudeCommandBuilder.build(
+        "team-test",
+        config,
+        "session-123",
+      );
+
+      // grantPermission="ask" requires approval for everything
+      expect(result.args).toContain("--permission-prompt-tool");
+      expect(result.args).toContain("mcp__iris__permissions__approve");
+
+      // Should only allow the permission tool itself
+      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
+      const allowedTools = result.args[allowedToolsIndex + 1];
+      expect(allowedTools).toBe("mcp__iris__permissions__approve");
+    });
+
+    it("should not add permission-prompt-tool when grantPermission is 'no'", () => {
+      const config: IrisConfig = {
+        ...baseConfig,
+        grantPermission: "no",
+      };
+
+      const result = ClaudeCommandBuilder.build(
+        "team-test",
+        config,
+        "session-123",
+      );
+
+      // grantPermission="no" blocks everything
       expect(result.args).not.toContain("--permission-prompt-tool");
+      expect(result.args).not.toContain("--allowed-tools");
     });
 
     it("should use interactive mode when interactive=true (no stream-json)", () => {
@@ -408,6 +456,42 @@ describe("ClaudeCommandBuilder", () => {
     });
   });
 
+  describe("getMcpConfigPath()", () => {
+    it("should return correct path in team .claude/iris/mcp directory", () => {
+      const teamPath = "/Users/test/projects/team-alpha";
+      const sessionId = "session-123";
+
+      const path = ClaudeCommandBuilder.getMcpConfigPath(teamPath, sessionId);
+
+      expect(path).toBe(
+        "/Users/test/projects/team-alpha/.claude/iris/mcp/iris-mcp-session-123.json",
+      );
+    });
+
+    it("should handle Windows-style paths", () => {
+      const teamPath = "C:\\Users\\test\\projects\\team-alpha";
+      const sessionId = "session-456";
+
+      const path = ClaudeCommandBuilder.getMcpConfigPath(teamPath, sessionId);
+
+      expect(path).toContain(".claude");
+      expect(path).toContain("iris");
+      expect(path).toContain("mcp");
+      expect(path).toContain("iris-mcp-session-456.json");
+    });
+
+    it("should handle session IDs with special characters", () => {
+      const teamPath = "/path/to/project";
+      const sessionId = "session-abc_def.123";
+
+      const path = ClaudeCommandBuilder.getMcpConfigPath(teamPath, sessionId);
+
+      expect(path).toBe(
+        "/path/to/project/.claude/iris/mcp/iris-mcp-session-abc_def.123.json",
+      );
+    });
+  });
+
   describe("command structure consistency", () => {
     it("should maintain consistent arg order", () => {
       const result = ClaudeCommandBuilder.build(
@@ -521,12 +605,10 @@ describe("ClaudeCommandBuilder", () => {
       expect(result.args).toContain("--disallowed-tools");
       expect(result.args).toContain("--permission-prompt-tool");
 
-      // Verify permission tool is in allowed tools when enableReverseMcp is true
+      // With grantPermission="ask", only permission tool should be allowed
       const allowedToolsIndex = result.args.indexOf("--allowed-tools");
       const allowedTools = result.args[allowedToolsIndex + 1];
-      expect(allowedTools).toContain("tool1");
-      expect(allowedTools).toContain("tool2");
-      expect(allowedTools).toContain("mcp__iris__permissions__approve");
+      expect(allowedTools).toBe("mcp__iris__permissions__approve");
     });
   });
 });

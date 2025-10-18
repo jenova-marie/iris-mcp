@@ -46,6 +46,25 @@ function loadTeamIdentityPrompt(teamName: string): string {
   }
 }
 
+const irisTools = [
+  "mcp__iris__team_tell",
+  "mcp__iris__team_quick_tell",
+  "mcp__iris__team_cancel",
+  "mcp__iris__team_reboot",
+  "mcp__iris__team_delete",
+  "mcp__iris__team_compact",
+  "mcp__iris__team_fork",
+  "mcp__iris__team_isAwake",
+  "mcp__iris__team_wake",
+  "mcp__iris__team_sleep",
+  "mcp__iris__team_wake_all",
+  "mcp__iris__team_report",
+  "mcp__iris__team_teams",
+  "mcp__iris__team_debug",
+  "mcp__iris__permissions__approve",
+  "mcp__iris__team_date",
+];
+
 /**
  * ClaudeCommandBuilder - Builds Claude CLI commands based on configuration
  *
@@ -94,32 +113,33 @@ export class ClaudeCommandBuilder {
       );
     }
 
-    // 5. Build tool allowlist, ensuring permission tool is included when needed
-    let allowedToolsList = irisConfig.allowedTools || "";
+    // 5. Build tool allowlist based on grantPermission setting
+    const allowedTools = new Set<string>();
+    const grantPermission = irisConfig.grantPermission || "yes"; // Default to "yes" for backwards compatibility
+    const permissionTool = "mcp__iris__permissions__approve";
 
-    // 6. Permission prompt tool (for reverse MCP)
-    // IMPORTANT: When using --permission-prompt-tool, that tool MUST be in --allowed-tools
-    // Otherwise Claude will reject it with "MCP tool X not found. Available MCP tools: none"
-    if (irisConfig.enableReverseMcp) {
-      const permissionTool = "mcp__iris__permissions__approve";
+    if (grantPermission === "yes") {
+      // Auto-approve all Iris MCP tools
+      irisTools.forEach((tool) => allowedTools.add(tool));
 
-      // Ensure permission tool is in allowed list
-      if (allowedToolsList) {
-        // Parse existing tools (handle comma or space separators)
-        const existingTools = allowedToolsList.split(/[,\s]+/).filter((t) => t);
-        if (!existingTools.includes(permissionTool)) {
-          allowedToolsList = `${allowedToolsList},${permissionTool}`;
-        }
-      } else {
-        allowedToolsList = permissionTool;
+      // Add user-specified tools from config
+      if (irisConfig.allowedTools) {
+        const userTools = irisConfig.allowedTools.split(/[,\s]+/).filter((t) => t);
+        userTools.forEach((tool) => allowedTools.add(tool));
       }
 
+      // Still use permission-prompt-tool for tools not in allowed-tools
+      args.push("--permission-prompt-tool", permissionTool);
+    } else if (grantPermission === "ask") {
+      // Only add permission approval tool, require approval for everything
+      allowedTools.add(permissionTool);
       args.push("--permission-prompt-tool", permissionTool);
     }
+    // else grantPermission === "no": no tools allowed, no permission-prompt-tool (block everything)
 
     // Add allowedTools if we have any
-    if (allowedToolsList) {
-      args.push("--allowed-tools", allowedToolsList);
+    if (allowedTools.size > 0) {
+      args.push("--allowed-tools", Array.from(allowedTools).join(","));
     }
 
     if (irisConfig.disallowedTools) {
@@ -182,5 +202,18 @@ export class ClaudeCommandBuilder {
         },
       },
     };
+  }
+
+  /**
+   * Get the MCP config file path for a team session
+   *
+   * Returns: <team-path>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+   *
+   * @param teamPath - Absolute path to team's project directory
+   * @param sessionId - Session ID
+   * @returns Absolute path to MCP config file
+   */
+  static getMcpConfigPath(teamPath: string, sessionId: string): string {
+    return join(teamPath, ".claude", "iris", "mcp", `iris-mcp-${sessionId}.json`);
   }
 }

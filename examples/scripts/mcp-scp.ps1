@@ -1,12 +1,12 @@
 # mcp-scp.ps1 - Write MCP config file to remote host via SCP (Windows PowerShell)
 #
-# Usage: Get-Content config.json | .\mcp-scp.ps1 <sessionId> <ssh-host> [remote-dir]
+# Usage: Get-Content config.json | .\mcp-scp.ps1 <sessionId> <ssh-host> <remote-team-path>
 #
 # Reads MCP config JSON from stdin, writes to local temp file, SCPs to remote host,
 # outputs the remote file path to stdout, then cleans up local temp file.
 #
 # Requires: OpenSSH for Windows or pscp (PuTTY)
-# Default remote directory: ~/.iris/mcp-configs/
+# Destination: <remote-team-path>/.claude/iris/mcp/iris-mcp-<sessionId>.json
 #
 
 param(
@@ -16,11 +16,14 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$SshHost,
 
-    [Parameter(Mandatory=$false)]
-    [string]$RemoteDir = "~/.iris/mcp-configs"
+    [Parameter(Mandatory=$true)]
+    [string]$RemoteTeamPath
 )
 
 $ErrorActionPreference = "Stop"
+
+# Build remote MCP directory path
+$RemoteMcpDir = "$RemoteTeamPath/.claude/iris/mcp"
 
 # Create local temp file
 $LocalTemp = [System.IO.Path]::GetTempFileName()
@@ -31,11 +34,11 @@ try {
     # Read JSON from stdin and write to local temp file
     $input | Out-File -FilePath $LocalTempJson -Encoding UTF8 -NoNewline
 
-    # Ensure remote directory exists
-    ssh $SshHost "mkdir -p '$RemoteDir' && chmod 700 '$RemoteDir'"
+    # Ensure remote MCP directory exists
+    ssh $SshHost "mkdir -p '$RemoteMcpDir' && chmod 700 '$RemoteMcpDir'"
 
     # Build remote file path
-    $RemoteFile = "$RemoteDir/iris-mcp-$SessionId.json"
+    $RemoteFile = "$RemoteMcpDir/iris-mcp-$SessionId.json"
 
     # SCP file to remote host
     scp -q $LocalTempJson "${SshHost}:${RemoteFile}"

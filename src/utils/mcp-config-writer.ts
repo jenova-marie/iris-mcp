@@ -144,20 +144,22 @@ export async function writeMcpConfig(
 /**
  * Write MCP config for local execution
  *
+ * Writes to: <teamPath>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+ *
  * @param mcpConfig - MCP configuration object
  * @param sessionId - Session ID
+ * @param teamPath - Absolute path to team's project directory
  * @param scriptPath - Optional custom script path (defaults to bundled mcp-cp script)
- * @param destDir - Optional destination directory (defaults to /tmp or $TEMP)
  * @returns Promise resolving to the file path where config was written
  */
 export async function writeMcpConfigLocal(
   mcpConfig: object,
   sessionId: string,
+  teamPath: string,
   scriptPath?: string,
-  destDir?: string,
 ): Promise<string> {
   const script = scriptPath || DEFAULT_LOCAL_SCRIPT;
-  const args = destDir ? [sessionId, destDir] : [sessionId];
+  const args = [sessionId, teamPath];
 
   return writeMcpConfig(script, mcpConfig, ...args);
 }
@@ -165,22 +167,24 @@ export async function writeMcpConfigLocal(
 /**
  * Write MCP config for remote execution (via SCP)
  *
+ * Writes to: <remoteTeamPath>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+ *
  * @param mcpConfig - MCP configuration object
  * @param sessionId - Session ID
  * @param sshHost - SSH host (e.g., "user@example.com" or "remote-alias")
+ * @param remoteTeamPath - Absolute path to team's project directory on remote host
  * @param scriptPath - Optional custom script path (defaults to bundled mcp-scp script)
- * @param remoteDir - Optional remote directory (defaults to ~/.iris/mcp-configs)
  * @returns Promise resolving to the remote file path where config was written
  */
 export async function writeMcpConfigRemote(
   mcpConfig: object,
   sessionId: string,
   sshHost: string,
+  remoteTeamPath: string,
   scriptPath?: string,
-  remoteDir?: string,
 ): Promise<string> {
   const script = scriptPath || DEFAULT_REMOTE_SCRIPT;
-  const args = remoteDir ? [sessionId, sshHost, remoteDir] : [sessionId, sshHost];
+  const args = [sessionId, sshHost, remoteTeamPath];
 
   return writeMcpConfig(script, mcpConfig, ...args);
 }

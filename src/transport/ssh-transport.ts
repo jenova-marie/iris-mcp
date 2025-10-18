@@ -252,6 +252,7 @@ export class SSHTransport implements Transport {
         mcpConfig,
         this.sessionId,
         sshHost,
+        this.irisConfig.path,
         this.irisConfig.mcpConfigScript,
       );
 

@@ -130,6 +130,7 @@ export class LocalTransport implements Transport {
       this.mcpConfigFilePath = await writeMcpConfigLocal(
         mcpConfig,
         this.sessionId,
+        this.irisConfig.path,
         this.irisConfig.mcpConfigScript,
       );
 

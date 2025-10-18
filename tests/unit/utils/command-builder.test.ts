@@ -87,7 +87,19 @@ describe("ClaudeCommandBuilder", () => {
       );
 
       expect(result.args).toContain("--allowed-tools");
-      expect(result.args).toContain("tool1,tool2,tool3");
+
+      // Find the value after --allowed-tools
+      const toolsIndex = result.args.indexOf("--allowed-tools");
+      expect(toolsIndex).toBeGreaterThan(-1);
+      const toolsValue = result.args[toolsIndex + 1];
+
+      // Should include user's tools (plus all Iris MCP tools)
+      expect(toolsValue).toContain("tool1");
+      expect(toolsValue).toContain("tool2");
+      expect(toolsValue).toContain("tool3");
+
+      // Should also include Iris MCP tools
+      expect(toolsValue).toContain("mcp__iris__team_tell");
     });
 
     it("should add --disallowed-tools when specified", () => {

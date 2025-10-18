@@ -78,19 +78,6 @@ const IrisConfigSchema = z
       message: "claudePath is required when remote is specified",
       path: ["claudePath"],
     },
-  )
-  .refine(
-    (data) => {
-      // enableReverseMcp requires remote execution to be configured
-      if (data.enableReverseMcp && !data.remote) {
-        return false;
-      }
-      return true;
-    },
-    {
-      message: "enableReverseMcp requires remote execution to be configured",
-      path: ["enableReverseMcp"],
-    },
   );
 
 const TeamsConfigSchema = z.object({
@@ -185,17 +172,18 @@ export class TeamsConfigManager {
   }
 
   /**
-   * Detect fork script in IRIS_HOME directory
+   * Detect fork script in IRIS_HOME/scripts directory
    */
   private detectForkScript(): string | undefined {
     const configDir = dirname(resolve(this.configPath));
+    const scriptsDir = resolve(configDir, "scripts");
 
     // Platform-specific script names
     const scriptNames =
-      process.platform === "win32" ? ["fork.bat", "fork.ps1"] : ["fork.sh"];
+      process.platform === "win32" ? ["spawn.ps1"] : ["spawn.sh"];
 
     for (const scriptName of scriptNames) {
-      const scriptPath = resolve(configDir, scriptName);
+      const scriptPath = resolve(scriptsDir, scriptName);
       if (existsSync(scriptPath)) {
         getLogger().info({ scriptPath }, "Fork script detected");
         return scriptPath;

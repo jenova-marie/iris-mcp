@@ -84,7 +84,7 @@ export interface DashboardConfig {
   selfsigned: boolean; // Use self-signed certificate for HTTPS
   certPath?: string; // Path to SSL certificate file (required if https enabled and selfsigned=false)
   keyPath?: string; // Path to SSL private key file (required if https enabled and selfsigned=false)
-  forkScriptPath?: string; // Path to fork.sh/bat script (runtime detected)
+  forkScriptPath?: string; // Path to spawn.sh/bat script (runtime detected)
 }
 
 export interface DatabaseConfig {

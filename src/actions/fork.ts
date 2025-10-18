@@ -2,7 +2,7 @@
  * Iris MCP Module: fork
  * Fork a session by launching a new terminal with claude --resume --fork-session
  *
- * Executes the user-configured fork script (fork.sh/bat/ps1) to open a new terminal
+ * Executes the user-configured fork script (spawn.sh/bat/ps1) to open a new terminal
  * window/tab with the Claude CLI resumed to a specific session. This allows the user
  * to interact with the session manually.
  *
@@ -23,6 +23,11 @@ import { execSync } from "child_process";
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { getIrisHome } from "../utils/paths.js";
+import { ClaudeCommandBuilder } from "../utils/command-builder.js";
+import {
+  writeMcpConfigLocal,
+  writeMcpConfigRemote,
+} from "../utils/mcp-config-writer.js";
 
 const logger = getChildLogger("action:fork");
 
@@ -68,15 +73,15 @@ export interface ForkOutput {
 
 /**
  * Get the path to the fork script
- * Looks for: ~/.iris/fork.sh (macOS/Linux) or ~/.iris/fork.bat|fork.ps1 (Windows)
+ * Looks for: ~/.iris/scripts/spawn.sh (macOS/Linux) or ~/.iris/scripts/spawn.ps1 (Windows)
  */
 function getForkScriptPath(): string | null {
   const irisHome = getIrisHome();
+  const scriptsDir = resolve(irisHome, "scripts");
 
   const candidates = [
-    resolve(irisHome, "fork.sh"),
-    resolve(irisHome, "fork.bat"),
-    resolve(irisHome, "fork.ps1"),
+    resolve(scriptsDir, "spawn.sh"),
+    resolve(scriptsDir, "spawn.ps1"),
   ];
 
   for (const path of candidates) {
@@ -135,7 +140,7 @@ export async function fork(
 
   if (!forkScriptPath) {
     throw new Error(
-      "Fork script not found. Create fork.sh (or fork.bat/ps1 on Windows) in your IRIS_HOME directory (~/.iris/fork.sh)",
+      "Fork script not found. Create spawn.sh (or ps1 on Windows) in your IRIS_HOME scripts directory (~/.iris/scripts/spawn.sh)",
     );
   }
 
@@ -154,51 +159,98 @@ export async function fork(
   }
 
   const teamPath = teamConfig.path;
-  const claudePath = teamConfig.claudePath || "claude"; // Default to "claude" if not specified
-
-  // Check if team is remote
   const isRemote = !!teamConfig.remote;
+
+  // Build the exact Claude command using ClaudeCommandBuilder
+  // Use interactive=true, fork=true for interactive terminal fork
+  const commandInfo = ClaudeCommandBuilder.build(
+    toTeam,
+    teamConfig,
+    session.sessionId,
+    true, // interactive (no stream-json)
+    true, // fork (appends --fork-session)
+  );
+
+  // Write MCP config file if enableReverseMcp is configured
+  let mcpConfigPath: string | undefined;
+  if (teamConfig.enableReverseMcp) {
+    const mcpConfig = ClaudeCommandBuilder.buildMcpConfig(
+      teamConfig,
+      session.sessionId,
+    );
+
+    if (isRemote) {
+      // Remote: use remote config writer
+      // Signature: writeMcpConfigRemote(mcpConfig, sessionId, sshHost, scriptPath?, remoteDir?)
+      mcpConfigPath = await writeMcpConfigRemote(
+        mcpConfig,
+        session.sessionId,
+        teamConfig.remote!,
+        teamConfig.mcpConfigScript,
+      );
+    } else {
+      // Local: use local config writer
+      // Signature: writeMcpConfigLocal(mcpConfig, sessionId, scriptPath?, destDir?)
+      mcpConfigPath = await writeMcpConfigLocal(
+        mcpConfig,
+        session.sessionId,
+        teamConfig.mcpConfigScript,
+      );
+    }
+
+    // Add --mcp-config to args
+    commandInfo.args.push("--mcp-config", mcpConfigPath);
+  }
+
+  // Build full command string (--fork-session already included by command builder)
+  const claudeArgs = commandInfo.args.join(" ");
+  const fullClaudeCommand = `${commandInfo.executable} ${claudeArgs}`;
+
+  // Parse remote connection if needed
   let sshHost: string | undefined;
   let sshOptions: string | undefined;
 
   if (isRemote) {
     const remoteInfo = parseRemoteConnection(teamConfig.remote!);
-
     if (remoteInfo) {
       sshHost = remoteInfo.sshHost;
       sshOptions = remoteInfo.sshOptions || undefined;
     }
   }
 
-  // Build command
+  // Build fork script command
+  // New signature: spawn.sh <teamPath> <fullClaudeCommand> [sshHost] [sshOptions]
   let command: string;
   if (isRemote && sshHost) {
-    // Remote team: pass sessionId, teamPath, claudePath, sshHost, sshOptions
     logger.info(
       {
         sessionId: session.sessionId,
         toTeam,
         teamPath,
-        claudePath,
         forkScriptPath,
         sshHost,
-        sshOptions,
+        fullClaudeCommand,
       },
       "Launching remote fork for session",
     );
 
-    command = `"${forkScriptPath}" "${session.sessionId}" "${teamPath}" "${claudePath}" "${sshHost}"`;
+    command = `"${forkScriptPath}" "${teamPath}" "${fullClaudeCommand}" "${sshHost}"`;
     if (sshOptions) {
       command += ` "${sshOptions}"`;
     }
   } else {
-    // Local team: pass sessionId, teamPath, claudePath
     logger.info(
-      { sessionId: session.sessionId, toTeam, teamPath, claudePath, forkScriptPath },
+      {
+        sessionId: session.sessionId,
+        toTeam,
+        teamPath,
+        forkScriptPath,
+        fullClaudeCommand,
+      },
       "Launching local fork for session",
     );
 
-    command = `"${forkScriptPath}" "${session.sessionId}" "${teamPath}" "${claudePath}"`;
+    command = `"${forkScriptPath}" "${teamPath}" "${fullClaudeCommand}"`;
   }
 
   try {
@@ -230,7 +282,8 @@ export async function fork(
   } catch (execError: any) {
     logger.error(
       {
-        err: execError instanceof Error ? execError : new Error(String(execError)),
+        err:
+          execError instanceof Error ? execError : new Error(String(execError)),
         sessionId: session.sessionId,
         toTeam,
         forkScriptPath,

@@ -110,6 +110,22 @@ program
         "Initializing Iris MCP...",
       );
 
+      // Enable hot reload of config.yaml if configured
+      // Config changes will be applied to subsequent session creation
+      // Existing sessions are not affected
+      if (config.settings.hotReloadConfig) {
+        logger.info("Hot reload enabled - watching config.yaml for changes");
+        configManager.watch((newConfig) => {
+          logger.info(
+            {
+              teams: Object.keys(newConfig.teams),
+              maxProcesses: newConfig.settings.maxProcesses,
+            },
+            "Configuration reloaded - changes will apply to new sessions",
+          );
+        });
+      }
+
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);
 
@@ -276,6 +292,22 @@ if (process.argv.length === 2) {
         },
         "Initializing Iris MCP...",
       );
+
+      // Enable hot reload of config.yaml if configured
+      // Config changes will be applied to subsequent session creation
+      // Existing sessions are not affected
+      if (config.settings.hotReloadConfig) {
+        logger.info("Hot reload enabled - watching config.yaml for changes");
+        configManager.watch((newConfig) => {
+          logger.info(
+            {
+              teams: Object.keys(newConfig.teams),
+              maxProcesses: newConfig.settings.maxProcesses,
+            },
+            "Configuration reloaded - changes will apply to new sessions",
+          );
+        });
+      }
 
       const sessionManager = new SessionManager(config);
       const processPool = new ClaudeProcessPool(configManager, config.settings);

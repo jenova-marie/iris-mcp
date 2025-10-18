@@ -47,6 +47,7 @@ settings:
   healthCheckInterval: 30000
   httpPort: 1615
   defaultTransport: http
+  hotReloadConfig: true  # Enable automatic config reload
 
 dashboard:
   enabled: true
@@ -322,6 +323,31 @@ try {
 
 ## Hot-Reload Mechanism
 
+### Overview
+
+Hot reload allows Iris to automatically detect and apply configuration changes without restarting the server. This is controlled by the `hotReloadConfig` setting in your configuration file.
+
+**Key Behavior:**
+- Configuration changes are applied to **new sessions only**
+- Existing sessions and running processes are **not affected**
+- Hot reload is **opt-in** (disabled by default for safety)
+
+### Enabling Hot Reload
+
+Add `hotReloadConfig: true` to your settings:
+
+```yaml
+settings:
+  hotReloadConfig: true  # Enable automatic config reload
+  sessionInitTimeout: 30000
+  maxProcesses: 10
+```
+
+When enabled, Iris will log:
+```
+[iris:cli] Hot reload enabled - watching config.yaml for changes
+```
+
 ### Implementation
 
 ```typescript
@@ -354,18 +380,131 @@ watch(callback: (config: TeamsConfig) => void): void {
 ### Usage in index.ts
 
 ```typescript
-// Watch for config changes
-configManager.watch((newConfig) => {
-  logger.info('Configuration reloaded', {
-    teams: Object.keys(newConfig.teams),
-    maxProcesses: newConfig.settings.maxProcesses,
+// Enable hot reload if configured
+if (config.settings.hotReloadConfig) {
+  logger.info("Hot reload enabled - watching config.yaml for changes");
+  configManager.watch((newConfig) => {
+    logger.info(
+      {
+        teams: Object.keys(newConfig.teams),
+        maxProcesses: newConfig.settings.maxProcesses,
+      },
+      "Configuration reloaded - changes will apply to new sessions",
+    );
   });
-
-  // Future: Reload process pool, update settings
-});
+}
 ```
 
-**Current Limitation:** Config reload doesn't yet update running processes. Future enhancement will apply changes dynamically.
+### What Gets Reloaded?
+
+When the config file changes, Iris reloads:
+- ✅ Team definitions (added, removed, or modified teams)
+- ✅ Team paths and descriptions
+- ✅ Permission modes (`grantPermission`)
+- ✅ Timeout values (`sessionInitTimeout`, `idleTimeout`, etc.)
+- ✅ Process pool limits (`maxProcesses`)
+- ✅ Tool allowlists/denylists (`allowedTools`, `disallowedTools`)
+- ✅ System prompt customizations (`appendSystemPrompt`)
+
+### What Doesn't Get Reloaded?
+
+The following require a server restart:
+- ❌ Dashboard settings (`dashboard.http`, `dashboard.https`)
+- ❌ Database path (`database.path`)
+- ❌ HTTP port (`settings.httpPort`)
+- ❌ Transport mode (`settings.defaultTransport`)
+- ❌ Wonder Logger configuration (`settings.wonderLoggerConfig`)
+
+### Example: Adding a Team Without Restart
+
+**Before** (config.yaml):
+```yaml
+settings:
+  hotReloadConfig: true
+
+teams:
+  team-alpha:
+    path: /path/to/alpha
+    description: Alpha team
+```
+
+**Edit config.yaml** (while server is running):
+```yaml
+settings:
+  hotReloadConfig: true
+
+teams:
+  team-alpha:
+    path: /path/to/alpha
+    description: Alpha team
+
+  team-beta:  # Add new team
+    path: /path/to/beta
+    description: Beta team
+    grantPermission: ask
+```
+
+**Server logs:**
+```
+[config:teams] Configuration file changed, reloading...
+[config:teams] Configuration loaded successfully { teams: ['team-alpha', 'team-beta'], maxProcesses: 10 }
+[iris:cli] Configuration reloaded - changes will apply to new sessions { teams: ['team-alpha', 'team-beta'], maxProcesses: 10 }
+```
+
+**Result:**
+- `team-beta` is immediately available for new sessions
+- Existing `team-alpha` sessions continue unaffected
+
+### Security Considerations
+
+**Why Disabled by Default?**
+
+Hot reload is disabled by default because:
+1. **Unexpected Changes:** Configuration changes may not be immediately visible if processes are cached
+2. **Permission Changes:** A team's permission mode could change mid-session
+3. **Production Safety:** Production environments often want explicit restart for config changes
+
+**When to Enable:**
+
+Enable hot reload when:
+- ✅ Actively developing or testing
+- ✅ Frequently adding/removing teams
+- ✅ Experimenting with timeout values
+- ✅ Non-critical environments
+
+**When to Disable:**
+
+Keep hot reload disabled when:
+- ❌ Production deployments
+- ❌ You want explicit control over when config changes take effect
+- ❌ Running in CI/CD environments
+- ❌ Stability is critical
+
+### Error Handling
+
+**Invalid Configuration:**
+
+If you save an invalid config while hot reload is enabled, the error is logged but the server continues with the last valid configuration:
+
+```
+[config:teams] Configuration file changed, reloading...
+[config:teams] Failed to reload configuration {
+  err: ConfigurationError: Configuration validation failed:
+    teams.beta.path: String must contain at least 1 character(s)
+}
+```
+
+The server continues running with the previous valid configuration.
+
+**YAML Syntax Errors:**
+
+```
+[config:teams] Failed to reload configuration {
+  err: ConfigurationError: Invalid YAML in configuration file: bad indentation
+}
+```
+
+Fix the YAML syntax and save again - the watcher will retry automatically.
 
 ---
 
@@ -650,18 +789,18 @@ When `enableReverseMcp: true` is set, Iris writes MCP configuration files to ena
 Iris provides four bundled scripts in `examples/scripts/`:
 
 **Local Execution (Unix):**
-- `mcp-cp.sh` - Writes config to local filesystem
-- Default location: `/tmp/iris-mcp-{sessionId}.json`
-- Permissions: `chmod 600` (owner-only read)
+- `mcp-cp.sh` - Writes config to team's `.claude/iris/mcp` directory
+- Location: `<team-path>/.claude/iris/mcp/iris-mcp-{sessionId}.json`
+- Creates directory with `chmod 700`, sets file to `chmod 600` (owner-only)
 
 **Local Execution (Windows):**
 - `mcp-cp.ps1` - PowerShell version for Windows
-- Default location: `%TEMP%\iris-mcp-{sessionId}.json`
-- Permissions: ACLs set for owner-only access
+- Location: `<team-path>\.claude\iris\mcp\iris-mcp-{sessionId}.json`
+- Creates directory and sets ACLs for owner-only access
 
 **Remote Execution via SCP (Unix):**
 - `mcp-scp.sh` - Writes to local temp, SCPs to remote host, cleans up local file
-- Default remote location: `~/.iris/mcp-configs/iris-mcp-{sessionId}.json`
+- Remote location: `<remote-team-path>/.claude/iris/mcp/iris-mcp-{sessionId}.json`
 - Creates remote directory with `chmod 700`, sets file to `chmod 600`
 
 **Remote Execution via SCP (Windows):**
@@ -690,12 +829,12 @@ All scripts follow the same contract:
 
 **Output (stdout):** File path where config was written
 ```
-/tmp/iris-mcp-abc123.json
+/path/to/team/.claude/iris/mcp/iris-mcp-abc123.json
 ```
 
 **Arguments:**
-- **Local scripts**: `<sessionId> [destDir]`
-- **Remote scripts**: `<sessionId> <sshHost> [remoteDir]`
+- **Local scripts**: `<sessionId> <team-path>`
+- **Remote scripts**: `<sessionId> <sshHost> <remote-team-path>`
 
 ### Custom Scripts
 
@@ -713,19 +852,28 @@ teams:
 1. Script must accept JSON on stdin
 2. Script must output file path to stdout (last non-empty line)
 3. Script must exit with code 0 on success
-4. For remote teams, script receives `<sessionId> <sshHost> [remoteDir]` args
-5. For local teams, script receives `<sessionId> [destDir]` args
+4. For remote teams, script receives `<sessionId> <sshHost> <remote-team-path>` args
+5. For local teams, script receives `<sessionId> <team-path>` args
 
 **Example Custom Script:**
 ```bash
 #!/usr/bin/env bash
-# custom-mcp-writer.sh - Write to custom location
+# custom-mcp-writer.sh - Write to team's .claude/iris/mcp directory
 
 SESSION_ID="$1"
-CUSTOM_DIR="${2:-/var/iris/configs}"
+TEAM_PATH="$2"
 
-mkdir -p "$CUSTOM_DIR"
-FILE_PATH="$CUSTOM_DIR/session-${SESSION_ID}.json"
+if [ -z "$SESSION_ID" ] || [ -z "$TEAM_PATH" ]; then
+  echo "ERROR: Session ID and team path required" >&2
+  exit 1
+fi
+
+# Create .claude/iris/mcp directory
+MCP_DIR="${TEAM_PATH}/.claude/iris/mcp"
+mkdir -p "$MCP_DIR"
+chmod 700 "$MCP_DIR"
+
+FILE_PATH="$MCP_DIR/iris-mcp-${SESSION_ID}.json"
 
 # Read JSON from stdin
 cat > "$FILE_PATH"
@@ -891,6 +1039,7 @@ interface Settings {
   httpPort?: number;              // 1615 - HTTP transport port (Phase 3)
   defaultTransport?: "stdio" | "http";  // "stdio" - MCP transport mode
   wonderLoggerConfig?: string;    // "./wonder-logger.yaml" - observability config
+  hotReloadConfig?: boolean;      // false - enable automatic config reload
 }
 ```
 
@@ -1184,8 +1333,8 @@ See [PERMISSION_APPROVAL_PLAN.md](./future/PERMISSION_APPROVAL_PLAN.md) for impl
 - TeamsConfigManager API and methods
 - Dashboard and database configuration options
 
-**Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, grantPermission, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration, MCP config scripts, mcpConfigScript, mcp-cp.sh, mcp-scp.sh, reverse MCP
+**Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, hotReloadConfig, grantPermission, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration, MCP config scripts, mcpConfigScript, mcp-cp.sh, mcp-scp.sh, reverse MCP, ClaudeCommandBuilder, getMcpConfigPath
 
-**Last Updated:** 2025-10-17
-**Change Context:** Added comprehensive documentation for MCP Configuration File System including mcpConfigScript field, bundled shell scripts (mcp-cp.sh, mcp-cp.ps1, mcp-scp.sh, mcp-scp.ps1), script interface contract, custom script requirements, file lifecycle, security considerations, and troubleshooting guide. This documents the new pipe-based architecture where TypeScript streams JSON to external scripts for all filesystem operations related to MCP config files.
-**Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design), src/utils/mcp-config-writer.ts (implementation), examples/scripts/mcp-*.{sh,ps1} (bundled scripts)
+**Last Updated:** 2025-10-18
+**Change Context:** Updated MCP config file location from temporary directories to team-specific `.claude/iris/mcp` directory. All MCP config scripts (mcp-cp.sh, mcp-cp.ps1, mcp-scp.sh, mcp-scp.ps1) now write to `<team-path>/.claude/iris/mcp/iris-mcp-{sessionId}.json` instead of `/tmp` or `~/.iris/mcp-configs`. Added `ClaudeCommandBuilder.getMcpConfigPath()` helper method to generate the MCP config file path. Scripts now create the `.claude/iris/mcp` directory if it doesn't exist. Updated script interfaces to require team path as a mandatory argument instead of optional destination directory.
+**Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design), src/config/iris-config.ts (schema), src/index.ts (implementation), src/utils/command-builder.ts (getMcpConfigPath method), examples/scripts/mcp-*.sh (script implementations)

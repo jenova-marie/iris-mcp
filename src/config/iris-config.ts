@@ -91,6 +91,7 @@ const TeamsConfigSchema = z.object({
     httpPort: z.number().int().min(1).max(65535).optional().default(1615),
     defaultTransport: z.enum(["stdio", "http"]).optional().default("stdio"),
     wonderLoggerConfig: z.string().optional().default("./wonder-logger.yaml"),
+    hotReloadConfig: z.boolean().optional().default(false),
   }),
   dashboard: z
     .object({
@@ -172,9 +173,10 @@ export class TeamsConfigManager {
   }
 
   /**
-   * Detect fork script in IRIS_HOME/scripts directory
+   * Detect spawn script in IRIS_HOME/scripts directory
+   * The spawn script handles both fork and spawn operations
    */
-  private detectForkScript(): string | undefined {
+  private detectSpawnScript(): string | undefined {
     const configDir = dirname(resolve(this.configPath));
     const scriptsDir = resolve(configDir, "scripts");
 
@@ -185,12 +187,12 @@ export class TeamsConfigManager {
     for (const scriptName of scriptNames) {
       const scriptPath = resolve(scriptsDir, scriptName);
       if (existsSync(scriptPath)) {
-        getLogger().info({ scriptPath }, "Fork script detected");
+        getLogger().info({ scriptPath }, "Spawn script detected");
         return scriptPath;
       }
     }
 
-    getLogger().debug("No fork script found - Fork feature will be disabled");
+    getLogger().debug("No spawn script found - Spawn/Fork feature will be disabled");
     return undefined;
   }
 
@@ -280,11 +282,11 @@ export class TeamsConfigManager {
         }
       }
 
-      // Cast to TeamsConfig and detect fork script for Fork feature
+      // Cast to TeamsConfig and detect spawn script for Spawn/Fork feature
       const config: TeamsConfig = validated as TeamsConfig;
-      const forkScriptPath = this.detectForkScript();
-      if (config.dashboard && forkScriptPath) {
-        config.dashboard.forkScriptPath = forkScriptPath;
+      const spawnScriptPath = this.detectSpawnScript();
+      if (config.dashboard && spawnScriptPath) {
+        config.dashboard.spawnScriptPath = spawnScriptPath;
       }
 
       this.config = config;

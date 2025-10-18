@@ -6,6 +6,7 @@
  * - BasicProcessMetrics API
  * - LRU eviction
  * - Health checks
+ * - Session registration timing
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -206,6 +207,33 @@ describe("ClaudeProcessPool", () => {
       expect(process1).not.toBe(process2);
       expect(process1.teamName).toBe("team-alpha");
       expect(process2.teamName).toBe("team-alpha");
+    });
+
+    it("should register session BEFORE spawning process", async () => {
+      // CRITICAL FIX: Session must be registered BEFORE spawn for HTTP/MCP routing
+      // This test verifies the fix from commit 9622107
+      //
+      // The fix ensures that when Claude tries to connect to the HTTP MCP endpoint
+      // immediately after spawn, the session is already registered in the pool.
+
+      const sessionId = "test-session-timing";
+
+      // Start creating the process (this is async)
+      const createPromise = pool.getOrCreateProcess("team-alpha", sessionId, "team-beta");
+
+      // Immediately check if session is registered (synchronously after the call)
+      // If the fix is in place, the session should be findable right away
+      const processRegisteredImmediately = pool.getProcessBySessionId(sessionId);
+
+      // Session should be registered even before spawn completes
+      expect(processRegisteredImmediately).toBeDefined();
+      expect(processRegisteredImmediately?.sessionId).toBe(sessionId);
+
+      // Wait for spawn to complete
+      await createPromise;
+
+      // Verify session is still registered after spawn
+      expect(pool.getProcessBySessionId(sessionId)).toBeDefined();
     });
   });
 

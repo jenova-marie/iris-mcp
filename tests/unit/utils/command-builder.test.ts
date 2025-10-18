@@ -192,6 +192,70 @@ describe("ClaudeCommandBuilder", () => {
 
       expect(result.args).not.toContain("--permission-prompt-tool");
     });
+
+    it("should use interactive mode when interactive=true (no stream-json)", () => {
+      const result = ClaudeCommandBuilder.build(
+        "team-test",
+        baseConfig,
+        "session-123",
+        true, // interactive
+      );
+
+      // Should NOT include headless mode flags
+      expect(result.args).not.toContain("--print");
+      expect(result.args).not.toContain("--verbose");
+      expect(result.args).not.toContain("--input-format");
+      expect(result.args).not.toContain("stream-json");
+      expect(result.args).not.toContain("--output-format");
+
+      // Should still include session management
+      expect(result.args).toContain("--resume");
+      expect(result.args).toContain("session-123");
+    });
+
+    it("should add --fork-session when fork=true", () => {
+      const result = ClaudeCommandBuilder.build(
+        "team-test",
+        baseConfig,
+        "session-123",
+        false, // not interactive (headless)
+        true,  // fork
+      );
+
+      expect(result.args).toContain("--fork-session");
+    });
+
+    it("should not add --fork-session when fork=false (default)", () => {
+      const result = ClaudeCommandBuilder.build(
+        "team-test",
+        baseConfig,
+        "session-123",
+      );
+
+      expect(result.args).not.toContain("--fork-session");
+    });
+
+    it("should support both interactive=true and fork=true together", () => {
+      const result = ClaudeCommandBuilder.build(
+        "team-test",
+        baseConfig,
+        "session-123",
+        true,  // interactive (no stream-json)
+        true,  // fork
+      );
+
+      // Should have fork flag
+      expect(result.args).toContain("--fork-session");
+
+      // Should NOT have headless flags
+      expect(result.args).not.toContain("--print");
+      expect(result.args).not.toContain("--verbose");
+      expect(result.args).not.toContain("stream-json");
+
+      // Should still have session management
+      expect(result.args).toContain("--resume");
+      expect(result.args).toContain("session-123");
+    });
   });
 
   describe("test mode behavior", () => {

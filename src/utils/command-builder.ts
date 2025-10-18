@@ -58,12 +58,16 @@ export class ClaudeCommandBuilder {
    * @param teamName - Team name (for identity prompt)
    * @param irisConfig - Team configuration
    * @param sessionId - Session ID for --resume
+   * @param interactive - If true, build for interactive mode (default: false for headless)
+   * @param fork - If true, append --fork-session flag (default: false)
    * @returns CommandInfo with executable, args, and cwd
    */
   static build(
     teamName: string,
     irisConfig: IrisConfig,
     sessionId: string,
+    interactive = false,
+    fork = false,
   ): CommandInfo {
     const args: string[] = [];
 
@@ -80,15 +84,17 @@ export class ClaudeCommandBuilder {
       args.push("--debug");
     }
 
-    // 3. Headless mode with stream-json I/O
-    args.push(
-      "--print", // Non-interactive headless mode
-      "--verbose", // Required for stream-json output
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-    );
+    // 3. Headless mode with stream-json I/O (only for non-interactive)
+    if (!interactive) {
+      args.push(
+        "--print", // Non-interactive headless mode
+        "--verbose", // Required for stream-json output
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+      );
+    }
 
     // 5. Build tool allowlist, ensuring permission tool is included when needed
     let allowedToolsList = irisConfig.allowedTools || "";
@@ -122,7 +128,12 @@ export class ClaudeCommandBuilder {
       args.push("--disallowed-tools", irisConfig.disallowedTools);
     }
 
-    // 7. System prompt (team identity + custom append)
+    // 7. Fork session flag (for interactive terminal forks)
+    if (fork) {
+      args.push("--fork-session");
+    }
+
+    // 8. System prompt (team identity + custom append)
     // Currently commented out - uncomment when ready to enable
     // const teamIdentity = loadTeamIdentityPrompt(teamName);
     // const systemPrompt = irisConfig.appendSystemPrompt
@@ -130,11 +141,11 @@ export class ClaudeCommandBuilder {
     //   : teamIdentity;
     // args.push("--append-system-prompt", systemPrompt);
 
-    // 8. MCP configuration will be handled by transports
+    // 9. MCP configuration will be handled by transports
     // They will write the config to a file and add --mcp-config <filepath>
     // Note: --mcp-config expects a file path, NOT stringified JSON
 
-    // 9. Determine executable
+    // 10. Determine executable
     const executable = irisConfig.claudePath || "claude";
 
     return {

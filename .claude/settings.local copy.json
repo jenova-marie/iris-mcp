@@ -78,16 +78,16 @@
       "Bash(REUSE_DB=1 pnpm vitest run:*)",
       "WebSearch",
       "Bash(echo:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(git rm:*)",
       "mcp__iris__team_wake",
       "mcp__iris__team_tell",
       "mcp__iris__team_report",
-      "WebFetch(domain:localhost)",
       "mcp__iris__team_isAwake",
       "mcp__iris__team_cache_read",
       "mcp__iris__team_cache_clear",
       "mcp__iris__team_wake_all",
-      "mcp__iris__team_getTeamName",
-      "Bash(git rm:*)"
+      "mcp__iris__team_getTeamName"
     ],
     "deny": [],
     "ask": []

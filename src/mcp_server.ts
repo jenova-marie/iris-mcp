@@ -129,7 +129,7 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_clear",
+    name: "team_reboot",
     description:
       "Create a fresh new session for a team pair. Use this to start over with a clean slate, " +
       "restart the conversation, or reset when you want a fresh beginning without prior message history. " +
@@ -145,7 +145,7 @@ const TOOLS: Tool[] = [
         },
         fromTeam: {
           type: "string",
-          description: "Name of the team requesting the clear/reset",
+          description: "Name of the team requesting the reboot",
         },
       },
       required: ["toTeam", "fromTeam"],

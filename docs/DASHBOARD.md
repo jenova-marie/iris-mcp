@@ -127,7 +127,7 @@ Color-coded status badges:
 
 **Fork Terminal** (Terminal icon):
 - Launches new terminal window with `claude --resume --fork-session`
-- Requires fork script configured at `~/.iris/fork.sh` (or `.bat`/`.ps1` on Windows)
+- Requires fork script configured at `~/.iris/spawn.sh` (or `.bat`/`.ps1` on Windows)
 - Uses MCP fork action for consistency
 - Shows loading state → success → resets to idle
 - Only visible if `dashboard.forkScriptPath` is configured
@@ -394,7 +394,7 @@ dashboard:
   selfsigned: true
   certPath: /path/to/cert.pem
   keyPath: /path/to/key.pem
-  forkScriptPath: ~/.iris/fork.sh
+  forkScriptPath: ~/.iris/spawn.sh
 teams:
   backend:
     path: /absolute/path/to/backend
@@ -444,7 +444,7 @@ The dashboard supports three HTTPS modes:
 
 ### Fork Script
 
-To enable the **Fork Terminal** button, create `~/.iris/fork.sh`:
+To enable the **Fork Terminal** button, create `~/.iris/spawn.sh`:
 
 ```bash
 #!/bin/bash
@@ -467,10 +467,10 @@ fi
 
 Make it executable:
 ```bash
-chmod +x ~/.iris/fork.sh
+chmod +x ~/.iris/spawn.sh
 ```
 
-For Windows, create `fork.bat` or `fork.ps1`.
+For Windows, create `spawn.ps1`.
 
 ---
 
@@ -708,7 +708,7 @@ Launch terminal with forked session.
 ```json
 {
   "success": false,
-  "error": "Fork script not found at ~/.iris/fork.sh"
+  "error": "Fork script not found at ~/.iris/spawn.sh"
 }
 ```
 
@@ -1381,7 +1381,7 @@ server {
 - Add to `config.yaml`:
   ```yaml
   dashboard:
-    forkScriptPath: ~/.iris/fork.sh
+    forkScriptPath: ~/.iris/spawn.sh
   ```
 - Create fork script (see [Fork Script](#fork-script))
 
@@ -1390,7 +1390,7 @@ server {
 **Error**: "Fork script not found"
 
 - Ensure script exists at configured path
-- Make it executable: `chmod +x ~/.iris/fork.sh`
+- Make it executable: `chmod +x ~/.iris/spawn.sh`
 - Check script syntax (test manually)
 
 **Error**: "Failed to launch terminal"

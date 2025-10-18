@@ -335,7 +335,7 @@ const result = await team_compact({
 
 **Purpose:** Fork a session to an interactive terminal
 
-Launches a new terminal window with `claude --resume --fork-session` so you can interact with the session manually. Executes user-configured fork script (`~/.iris/fork.sh` or `fork.bat/ps1`).
+Launches a new terminal window with `claude --resume --fork-session` so you can interact with the session manually. Executes user-configured fork script (`~/.iris/spawn.sh` or `ps1`).
 
 **Signature:**
 ```typescript
@@ -363,7 +363,7 @@ team_fork(input: {
 4. `sshHost` - SSH host (if remote team)
 5. `sshOptions` - SSH options (if remote team)
 
-**Example Fork Script (`~/.iris/fork.sh`):**
+**Example Fork Script (`~/.iris/spawn.sh`):**
 ```bash
 #!/bin/bash
 SESSION_ID="$1"
@@ -398,8 +398,8 @@ const result = await team_fork({
 ```
 
 **Requirements:**
-- Fork script must exist at `~/.iris/fork.sh` (or `.bat`/`.ps1` on Windows)
-- Script must be executable (`chmod +x ~/.iris/fork.sh`)
+- Fork script must exist at `~/.iris/spawn.sh` (or `.bat`/`.ps1` on Windows)
+- Script must be executable (`chmod +x ~/.iris/spawn.sh`)
 - Session must exist (wake team first if needed)
 
 ---

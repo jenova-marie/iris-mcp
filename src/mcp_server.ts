@@ -207,7 +207,7 @@ const TOOLS: Tool[] = [
     description:
       "Fork a session by launching a new terminal window with claude --resume --fork-session. " +
       "This allows you to manually interact with a session in a separate terminal. " +
-      "Executes the user-configured fork script (~/.iris/fork.sh or fork.bat/ps1) to open a new terminal. " +
+      "Executes the user-configured fork script (~/.iris/spawn.sh or ps1) to open a new terminal. " +
       "The fork script receives: sessionId, teamPath, claudePath, and optionally sshHost and sshOptions for remote teams.",
     inputSchema: {
       type: "object",
@@ -403,7 +403,8 @@ const TOOLS: Tool[] = [
       properties: {
         tool_name: {
           type: "string",
-          description: "The name of the tool requesting permission (e.g., 'mcp__iris__team_teams')",
+          description:
+            "The name of the tool requesting permission (e.g., 'mcp__iris__team_teams')",
         },
         input: {
           type: "object",
@@ -411,7 +412,8 @@ const TOOLS: Tool[] = [
         },
         reason: {
           type: "string",
-          description: "Optional reason provided by Claude for why it needs permission",
+          description:
+            "Optional reason provided by Claude for why it needs permission",
         },
       },
       required: ["tool_name", "input"],

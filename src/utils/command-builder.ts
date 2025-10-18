@@ -79,10 +79,8 @@ export class ClaudeCommandBuilder {
       args.push("--resume", sessionId);
     }
 
-    // 2. Debug mode (for test/debug environments)
-    if (process.env.NODE_ENV === "test" || process.env.DEBUG) {
-      args.push("--debug");
-    }
+    // 2. Debug mode (always enabled for all sessions)
+    args.push("--debug");
 
     // 3. Headless mode with stream-json I/O (only for non-interactive)
     if (!interactive) {

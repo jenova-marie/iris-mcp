@@ -45,6 +45,7 @@ describe("ClaudeCommandBuilder", () => {
       expect(result.cwd).toBe("/path/to/project");
       expect(result.args).toContain("--resume");
       expect(result.args).toContain("session-123");
+      expect(result.args).toContain("--debug");
       expect(result.args).toContain("--print");
       expect(result.args).toContain("--verbose");
       expect(result.args).toContain("--input-format");
@@ -285,21 +286,7 @@ describe("ClaudeCommandBuilder", () => {
       expect(result.args).not.toContain("session-123");
     });
 
-    it("should add --debug in test mode", () => {
-      process.env.NODE_ENV = "test";
-
-      const result = ClaudeCommandBuilder.build(
-        "team-test",
-        baseConfig,
-        "session-123",
-      );
-
-      expect(result.args).toContain("--debug");
-    });
-
-    it("should add --debug when DEBUG env var is set", () => {
-      process.env.DEBUG = "1";
-
+    it("should include --debug (always enabled)", () => {
       const result = ClaudeCommandBuilder.build(
         "team-test",
         baseConfig,

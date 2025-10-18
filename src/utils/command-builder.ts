@@ -90,11 +90,6 @@ export class ClaudeCommandBuilder {
       "stream-json",
     );
 
-    // 4. Permission handling (deprecated skipPermissions)
-    if (irisConfig.skipPermissions) {
-      args.push("--dangerously-skip-permissions");
-    }
-
     // 5. Build tool allowlist, ensuring permission tool is included when needed
     let allowedToolsList = irisConfig.allowedTools || "";
 
@@ -107,9 +102,7 @@ export class ClaudeCommandBuilder {
       // Ensure permission tool is in allowed list
       if (allowedToolsList) {
         // Parse existing tools (handle comma or space separators)
-        const existingTools = allowedToolsList
-          .split(/[,\s]+/)
-          .filter((t) => t);
+        const existingTools = allowedToolsList.split(/[,\s]+/).filter((t) => t);
         if (!existingTools.includes(permissionTool)) {
           allowedToolsList = `${allowedToolsList},${permissionTool}`;
         }
@@ -159,10 +152,7 @@ export class ClaudeCommandBuilder {
    *
    * NOTE: This is now public so transports can use it to generate MCP config files
    */
-  static buildMcpConfig(
-    irisConfig: IrisConfig,
-    sessionId: string,
-  ): object {
+  static buildMcpConfig(irisConfig: IrisConfig, sessionId: string): object {
     // Determine MCP port (from config or env var or default)
     const mcpPort = irisConfig.enableReverseMcp
       ? irisConfig.reverseMcpPort || 1615

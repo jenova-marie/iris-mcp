@@ -22,7 +22,6 @@ export interface TeamInfo {
     description?: string;
     color?: string;
     idleTimeout?: number;
-    skipPermissions?: boolean;
   };
 }
 
@@ -56,7 +55,6 @@ export async function teams(
           description: irisConfig.description,
           color: irisConfig.color,
           idleTimeout: irisConfig.idleTimeout,
-          skipPermissions: irisConfig.skipPermissions,
         },
       };
 

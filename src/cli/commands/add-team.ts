@@ -14,7 +14,6 @@ const logger = getChildLogger("cli:add-team");
 export interface AddTeamOptions {
   description?: string;
   idleTimeout?: number;
-  skipPermissions?: boolean;
   color?: string;
 }
 
@@ -61,19 +60,19 @@ export async function addTeam(
   }
 
   // Get the teams node (or create if doesn't exist)
-  const teams = doc.get('teams');
+  const teams = doc.get("teams");
 
   // Check if team already exists
   if (teams && teams.has(name)) {
     logger.error(`Team "${name}" already exists in configuration.`);
     const existingTeam = teams.get(name);
-    logger.info(`Existing team path: ${existingTeam.get('path')}`);
+    logger.info(`Existing team path: ${existingTeam.get("path")}`);
     process.exit(1);
   }
 
   // Ensure teams node exists
   if (!teams) {
-    doc.set('teams', doc.createNode({}));
+    doc.set("teams", doc.createNode({}));
   }
 
   // Build team configuration object
@@ -87,16 +86,12 @@ export async function addTeam(
     irisConfig.idleTimeout = options.idleTimeout;
   }
 
-  if (options.skipPermissions !== undefined) {
-    irisConfig.skipPermissions = options.skipPermissions;
-  }
-
   if (options.color) {
     irisConfig.color = options.color;
   }
 
   // Add team to config (this preserves existing comments!)
-  const teamsNode = doc.get('teams');
+  const teamsNode = doc.get("teams");
   teamsNode.set(name, doc.createNode(irisConfig));
 
   // Write updated config (preserves comments and formatting)

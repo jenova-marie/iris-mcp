@@ -169,17 +169,12 @@ program
   .option("-t, --idle-timeout <ms>", "Idle timeout in milliseconds", (value) =>
     parseInt(value, 10),
   )
-  .option(
-    "-s, --skip-permissions",
-    "Auto-approve Claude actions (dangerously-skip-permissions)",
-  )
   .option("-c, --color <hex>", "Team color for UI (hex format)")
   .action(async (name, path, options) => {
     try {
       await addTeam(name, path, {
         description: options.description,
         idleTimeout: options.idleTimeout,
-        skipPermissions: options.skipPermissions,
         color: options.color,
       });
     } catch (error) {

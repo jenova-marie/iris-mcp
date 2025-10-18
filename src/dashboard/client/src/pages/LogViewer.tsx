@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useWebSocket, type ParsedLogEntry, type LogBatchData } from '../hooks/useWebSocket';
 
 const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const;
@@ -32,6 +33,7 @@ export function LogViewer() {
   const [selectedLevels, setSelectedLevels] = useState<string[]>([]);
   const [autoScroll, setAutoScroll] = useState(true);
   const [filter, setFilter] = useState('');
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
   const logsEndRef = useRef<HTMLDivElement>(null);
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
@@ -81,6 +83,19 @@ export function LogViewer() {
 
   const handleClearLogs = () => {
     setLogs([]);
+    setExpandedLogs(new Set());
+  };
+
+  const toggleLogExpanded = (logId: string) => {
+    setExpandedLogs((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(logId)) {
+        newSet.delete(logId);
+      } else {
+        newSet.add(logId);
+      }
+      return newSet;
+    });
   };
 
   const handleToggleLevel = (level: string) => {
@@ -245,54 +260,82 @@ export function LogViewer() {
           </div>
         ) : (
           <>
-            {filteredLogs.map((log, index) => (
-              <div
-                key={`${log.timestamp}-${index}`}
-                className={`mb-1 p-2 rounded ${LEVEL_BG_COLORS[log.level] || 'bg-gray-800'}`}
-              >
-                <div className="flex items-start gap-3">
-                  {/* Timestamp */}
-                  <span className="text-gray-500 flex-shrink-0 text-xs">
-                    {formatTime(log.timestamp)}
-                  </span>
+            {filteredLogs.map((log, index) => {
+              const logId = `${log.timestamp}-${index}`;
+              const isExpanded = expandedLogs.has(logId);
 
-                  {/* Level */}
-                  <span
-                    className={`${LEVEL_COLORS[log.level] || 'text-gray-400'} flex-shrink-0 font-bold uppercase text-xs w-12`}
-                  >
-                    {log.level}
-                  </span>
+              return (
+                <div
+                  key={logId}
+                  className={`mb-1 p-2 rounded ${LEVEL_BG_COLORS[log.level] || 'bg-gray-800'}`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Expand/Collapse Button */}
+                    <button
+                      onClick={() => toggleLogExpanded(logId)}
+                      className="flex-shrink-0 text-gray-400 hover:text-gray-200 transition-colors mt-0.5"
+                      title={isExpanded ? 'Collapse' : 'Expand raw log'}
+                    >
+                      {isExpanded ? (
+                        <ChevronDown size={14} />
+                      ) : (
+                        <ChevronRight size={14} />
+                      )}
+                    </button>
 
-                  {/* Context */}
-                  {log.context && (
-                    <span className="text-purple-400 flex-shrink-0 text-xs">
-                      [{log.context}]
+                    {/* Timestamp */}
+                    <span className="text-gray-500 flex-shrink-0 text-xs">
+                      {formatTime(log.timestamp)}
                     </span>
+
+                    {/* Level */}
+                    <span
+                      className={`${LEVEL_COLORS[log.level] || 'text-gray-400'} flex-shrink-0 font-bold uppercase text-xs w-12`}
+                    >
+                      {log.level}
+                    </span>
+
+                    {/* Context */}
+                    {log.context && (
+                      <span className="text-purple-400 flex-shrink-0 text-xs">
+                        [{log.context}]
+                      </span>
+                    )}
+
+                    {/* Message */}
+                    <span className="text-gray-200 flex-1 break-words">{log.message}</span>
+                  </div>
+
+                  {/* Expanded Raw Log */}
+                  {isExpanded && (
+                    <div className="mt-2 ml-5 border-l-2 border-gray-600 pl-3">
+                      <div className="text-xs text-gray-400 mb-1 font-semibold">Raw Log Entry:</div>
+                      <pre className="bg-gray-950 p-3 rounded text-xs overflow-x-auto text-green-400 border border-gray-700">
+                        {JSON.stringify(log, null, 2)}
+                      </pre>
+                    </div>
                   )}
 
-                  {/* Message */}
-                  <span className="text-gray-200 flex-1 break-words">{log.message}</span>
+                  {/* Additional Fields (only show when not expanded) */}
+                  {!isExpanded && Object.keys(log).filter(
+                    (key) => !['timestamp', 'level', 'context', 'message'].includes(key)
+                  ).length > 0 && (
+                    <div className="mt-1 ml-5 text-gray-400 text-xs">
+                      {Object.entries(log)
+                        .filter(([key]) => !['timestamp', 'level', 'context', 'message'].includes(key))
+                        .map(([key, value]) => (
+                          <div key={key} className="truncate">
+                            <span className="text-gray-500">{key}:</span>{' '}
+                            {typeof value === 'object'
+                              ? JSON.stringify(value)
+                              : String(value)}
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
-
-                {/* Additional Fields */}
-                {Object.keys(log).filter(
-                  (key) => !['timestamp', 'level', 'context', 'message'].includes(key)
-                ).length > 0 && (
-                  <div className="mt-1 ml-14 text-gray-400 text-xs">
-                    {Object.entries(log)
-                      .filter(([key]) => !['timestamp', 'level', 'context', 'message'].includes(key))
-                      .map(([key, value]) => (
-                        <div key={key} className="truncate">
-                          <span className="text-gray-500">{key}:</span>{' '}
-                          {typeof value === 'object'
-                            ? JSON.stringify(value)
-                            : String(value)}
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
             <div ref={logsEndRef} />
           </>
         )}

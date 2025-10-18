@@ -20,7 +20,6 @@ const IrisConfigSchema = z.object({
   description: z.string(),
   idleTimeout: z.number().positive().optional(),
   sessionInitTimeout: z.number().positive().optional(),
-  skipPermissions: z.boolean().optional(),
   color: z
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")
@@ -111,8 +110,8 @@ export function createConfigRouter(bridge: DashboardStateBridge): Router {
       // Note: This is a simple implementation - in production we'd want to
       // surgically update only changed values to preserve all formatting
       const yamlContent = stringify(newConfig, {
-        defaultStringType: 'QUOTE_DOUBLE',
-        defaultKeyType: 'PLAIN'
+        defaultStringType: "QUOTE_DOUBLE",
+        defaultKeyType: "PLAIN",
       });
 
       // For now, just write the new YAML (will lose comments)

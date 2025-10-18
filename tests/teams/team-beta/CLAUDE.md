@@ -17,7 +17,6 @@ always set `fromTeam: "team-beta"` to identify yourself in inter-team communicat
 - **Purpose**: Testing and validation target for Iris MCP communication tools
 - **Project Path**: `/Users/jenova/projects/jenova-marie/iris-mcp/teams/team-beta`
 - **Configuration**: Defined in `../../teams.json` as "team-beta"
-- **Status**: Testing environment with `skipPermissions: true` enabled
 
 ## Role in Iris MCP Ecosystem
 
@@ -231,7 +230,6 @@ claude mcp add iris --scope user -- node /path/to/iris-mcp/dist/index.js
 
 ## Important Notes
 
-1. **Permissions**: `skipPermissions: true` is enabled for automated testing - actions auto-approve
 2. **Isolation**: Your context is isolated to this directory only
 3. **Ephemeral**: This is a test environment - data may be cleared between tests
 4. **Stdio Protocol**: All communication happens via JSON-RPC stdio streaming

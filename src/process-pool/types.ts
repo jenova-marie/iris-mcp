@@ -56,7 +56,6 @@ export interface IrisConfig {
   description: string;
   idleTimeout?: number;
   sessionInitTimeout?: number;
-  skipPermissions?: boolean;
   color?: string;
   // Phase 2: Remote execution via SSH
   remote?: string; // SSH connection string (e.g., "user@host" or "ssh inanna")
@@ -67,6 +66,7 @@ export interface IrisConfig {
   enableReverseMcp?: boolean; // Enable reverse MCP tunnel for this team
   reverseMcpPort?: number; // Port to tunnel (default: 1615)
   allowHttp?: boolean; // Allow HTTP for reverse MCP (dev only, default: false)
+  mcpConfigScript?: string; // Custom script path for writing MCP config files (default: bundled mcp-cp.sh or mcp-scp.sh)
   // Permission approval mode
   grantPermission?: "yes" | "no" | "ask" | "forward"; // How to handle permission requests (default: "yes" for auto-approve)
   // Tool allowlist/denylist

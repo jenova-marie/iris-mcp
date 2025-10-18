@@ -77,12 +77,9 @@ teams:
   # ------------------------------------------------------------------------------
   # Example 3: Local Team with Auto-Approve
   # ------------------------------------------------------------------------------
-  # Mobile team with skipPermissions=true for faster iteration.
-  # WARNING: Claude has full file access - use only in trusted environments!
   team-mobile:
     path: /Users/jenova/projects/myapp/mobile
     description: React Native mobile app - auto-approve actions
-    skipPermissions: true
 
   # ------------------------------------------------------------------------------
   # Example 4: Local Team with UI Color
@@ -108,9 +105,6 @@ teams:
 
     # Override timeouts for remote (network latency consideration)
     idleTimeout: 1800000 # 30 minutes
-
-    # Permission handling
-    skipPermissions: false # Require approval for file operations
 
     # Reverse MCP: Allow remote Claude to call back to local Iris
     enableReverseMcp: true # Enable SSH reverse tunnel

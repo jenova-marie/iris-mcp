@@ -17,22 +17,22 @@ settings:
   # Session initialization timeout (milliseconds)
   # How long to wait for Claude session files to be created
   # Increase this if teams have slow startup (large dependencies, slow disk, etc.)
-  sessionInitTimeout: ${IRIS_SESSION_INIT_TIMEOUT:-30000}  # 30 seconds
+  sessionInitTimeout: ${IRIS_SESSION_INIT_TIMEOUT:-30000} # 30 seconds
 
   # Process spawn timeout (milliseconds)
   # How long to wait for Claude process to start responding
-  spawnTimeout: ${IRIS_SPAWN_TIMEOUT:-20000}  # 20 seconds
+  spawnTimeout: ${IRIS_SPAWN_TIMEOUT:-20000} # 20 seconds
 
   # Message response timeout (milliseconds)
   # Maximum time to wait for Claude to respond to a message
   # Increase for complex tasks that take longer to process
-  responseTimeout: ${IRIS_RESPONSE_TIMEOUT:-120000}  # 2 minutes
+  responseTimeout: ${IRIS_RESPONSE_TIMEOUT:-120000} # 2 minutes
 
   # Idle timeout (milliseconds)
   # How long a Claude process can be idle before being terminated
   # Set higher if you want processes to stay warm longer
   # Set lower to free resources faster
-  idleTimeout: ${IRIS_IDLE_TIMEOUT:-3600000}  # 1 hour
+  idleTimeout: ${IRIS_IDLE_TIMEOUT:-3600000} # 1 hour
 
   # Maximum concurrent Claude processes
   # When this limit is reached, least-recently-used processes are terminated
@@ -41,7 +41,7 @@ settings:
 
   # Health check interval (milliseconds)
   # How often to check if Claude processes are healthy
-  healthCheckInterval: ${IRIS_HEALTH_CHECK_INTERVAL:-30000}  # 30 seconds
+  healthCheckInterval: ${IRIS_HEALTH_CHECK_INTERVAL:-30000} # 30 seconds
 
   # HTTP port for MCP server
   # This is the port Claude CLI will connect to
@@ -137,10 +137,6 @@ teams:
   #   # Override global idle timeout for this team (optional)
   #   # Useful for teams with slower/faster requirements
   #   # idleTimeout: 600000  # 10 minutes
-  #
-  #   # Skip permission prompts (auto-approve all actions)
-  #   # WARNING: Use with caution! Claude will have full access to files
-  #   # skipPermissions: true
   #
   #   # Team color for dashboard UI (hex color, optional)
   #   # color: "#61DAFB"  # React blue

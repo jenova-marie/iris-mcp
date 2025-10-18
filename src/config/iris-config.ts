@@ -29,7 +29,6 @@ const IrisConfigSchema = z
     description: z.string(),
     idleTimeout: z.number().positive().optional(),
     sessionInitTimeout: z.number().positive().optional(),
-    skipPermissions: z.boolean().optional(),
     color: z
       .string()
       .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color")

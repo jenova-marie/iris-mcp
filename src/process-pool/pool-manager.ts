@@ -179,16 +179,18 @@ export class ClaudeProcessPool extends EventEmitter {
     // Set up RxJS subscriptions to process observables
     this.setupProcessSubscriptions(process, poolKey, sessionId);
 
+    // Register session BEFORE spawning so HTTP/MCP server can route requests
+    // This is critical for remote teams with reverse tunnels - Claude tries to
+    // connect immediately after spawn and needs the session to be registered
+    this.processes.set(poolKey, process);
+    this.sessionToProcess.set(sessionId, poolKey);
+    this.updateAccessOrder(poolKey);
+
     // Spawn the process with a temporary cache entry for init ping
     try {
       const spawnCacheEntry = new CacheEntryImpl(CacheEntryType.SPAWN, "ping");
       const spawnTimeout = this.config.spawnTimeout || 20000;
       await process.spawn(spawnCacheEntry, spawnTimeout);
-
-      // Add to pool with pool key
-      this.processes.set(poolKey, process);
-      this.sessionToProcess.set(sessionId, poolKey);
-      this.updateAccessOrder(poolKey);
 
       this.logger.info("Process successfully added to pool", {
         poolKey,
@@ -210,6 +212,11 @@ export class ClaudeProcessPool extends EventEmitter {
         },
         "Process spawn failed, cleaning up",
       );
+
+      // Remove from pool and session maps (since we registered before spawn)
+      this.processes.delete(poolKey);
+      this.sessionToProcess.delete(sessionId);
+      this.accessOrder = this.accessOrder.filter((key) => key !== poolKey);
 
       // Terminate the zombie process to clean up any resources
       await process.terminate().catch((termError) => {

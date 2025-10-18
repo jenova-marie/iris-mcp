@@ -40,9 +40,8 @@ describe("Dashboard Cache with Tell Messages", () => {
     configManager.load();
     const teamsConfig = configManager.getConfig();
 
-    // Don't pass dbOptions - let it use inMemory config from tests/config.yaml
-    // This follows the session-manager.test.ts pattern
-    sessionManager = new SessionManager(teamsConfig);
+    // Use in-memory database for testing
+    sessionManager = new SessionManager(teamsConfig, { inMemory: true });
 
     // Setup process pool
     processPool = new ClaudeProcessPool(configManager, teamsConfig.settings);

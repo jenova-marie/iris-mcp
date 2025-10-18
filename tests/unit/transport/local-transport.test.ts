@@ -20,7 +20,6 @@ describe("LocalTransport", () => {
   const testConfig: IrisConfig = {
     path: process.cwd(),
     description: "Test team",
-    skipPermissions: true,
   };
 
   let transport: LocalTransport;
@@ -140,7 +139,6 @@ describe("LocalTransport", () => {
         path: "/path",
         description: "Test",
         idleTimeout: 60000,
-        skipPermissions: true,
         color: "#ff0000",
       };
 

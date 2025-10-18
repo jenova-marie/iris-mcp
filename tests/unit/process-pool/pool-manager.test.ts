@@ -114,17 +114,14 @@ describe("ClaudeProcessPool", () => {
         "team-alpha": {
           path: "/path/to/alpha",
           description: "Alpha team",
-          skipPermissions: true,
         },
         "team-beta": {
           path: "/path/to/beta",
           description: "Beta team",
-          skipPermissions: true,
         },
         "team-gamma": {
           path: "/path/to/gamma",
           description: "Gamma team",
-          skipPermissions: true,
         },
       },
     };
@@ -321,7 +318,6 @@ describe("ClaudeProcessPool", () => {
           return {
             path: "/path/to/delta",
             description: "Delta team",
-            skipPermissions: true,
           };
         }
         return testConfig.teams[teamName] || null;
@@ -442,7 +438,6 @@ describe("ClaudeProcessPool", () => {
           return {
             path: "/path/to/delta",
             description: "Delta team",
-            skipPermissions: true,
           };
         }
         return testConfig.teams[teamName] || null;

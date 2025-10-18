@@ -18,7 +18,9 @@ vi.mock("../../../src/utils/logger.js", () => ({
 
 // Create mock transport factory with RxJS observables
 const { BehaviorSubject, Subject } = await import("rxjs");
-const { TransportStatus } = await import("../../../src/transport/transport.interface.js");
+const { TransportStatus } = await import(
+  "../../../src/transport/transport.interface.js"
+);
 
 const createMockTransport = () => {
   const statusSubject = new BehaviorSubject(TransportStatus.STOPPED);
@@ -54,14 +56,16 @@ vi.mock("../../../src/transport/transport-factory.js", () => ({
 }));
 
 // Import ClaudeProcess AFTER mocks
-import { ClaudeProcess, ProcessStatus } from "../../../src/process-pool/claude-process.js";
+import {
+  ClaudeProcess,
+  ProcessStatus,
+} from "../../../src/process-pool/claude-process.js";
 import { TransportFactory } from "../../../src/transport/transport-factory.js";
 
 describe("ClaudeProcess Transport Delegation", () => {
   const testConfig: IrisConfig = {
     path: process.cwd(),
     description: "Test team",
-    skipPermissions: true,
   };
 
   let claudeProcess: ClaudeProcess;
@@ -85,25 +89,29 @@ describe("ClaudeProcess Transport Delegation", () => {
 
   describe("getBasicMetrics()", () => {
     it("should delegate to transport.getMetrics()", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       claudeProcess.getBasicMetrics();
       expect(transport?.getMetrics).toHaveBeenCalled();
     });
 
     it("should delegate to transport.isReady()", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       claudeProcess.getBasicMetrics();
       expect(transport?.isReady).toHaveBeenCalled();
     });
 
     it("should delegate to transport.isBusy()", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       claudeProcess.getBasicMetrics();
       expect(transport?.isBusy).toHaveBeenCalled();
     });
 
     it("should delegate to transport.getPid()", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       claudeProcess.getBasicMetrics();
       expect(transport?.getPid).toHaveBeenCalled();
     });
@@ -111,15 +119,19 @@ describe("ClaudeProcess Transport Delegation", () => {
     it("should derive status from transport state", () => {
       const metrics = claudeProcess.getBasicMetrics();
       expect(metrics.status).toBeDefined();
-      expect([ProcessStatus.STOPPED, ProcessStatus.SPAWNING, ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
-        metrics.status,
-      );
+      expect([
+        ProcessStatus.STOPPED,
+        ProcessStatus.SPAWNING,
+        ProcessStatus.IDLE,
+        ProcessStatus.PROCESSING,
+      ]).toContain(metrics.status);
     });
   });
 
   describe("terminate()", () => {
     it("should delegate to transport.terminate()", async () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       await claudeProcess.terminate();
       expect(transport?.terminate).toHaveBeenCalled();
     });
@@ -127,7 +139,8 @@ describe("ClaudeProcess Transport Delegation", () => {
 
   describe("cancel()", () => {
     it("should delegate to transport.cancel() if supported", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       claudeProcess.cancel();
       expect(transport?.cancel).toHaveBeenCalled();
     });
@@ -151,7 +164,8 @@ describe("ClaudeProcess Transport Delegation", () => {
 
   describe("status derivation", () => {
     it("should return stopped when uptime is 0", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       vi.mocked(transport!.getMetrics).mockReturnValue({
         uptime: 0,
         messagesProcessed: 0,
@@ -164,7 +178,8 @@ describe("ClaudeProcess Transport Delegation", () => {
     });
 
     it("should return spawning when not ready and uptime > 0 with PID", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value as any;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value as any;
       vi.mocked(transport!.getMetrics).mockReturnValue({
         uptime: 1000,
         messagesProcessed: 0,
@@ -182,7 +197,8 @@ describe("ClaudeProcess Transport Delegation", () => {
     });
 
     it("should return stopped when PID is null and process had messages", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       vi.mocked(transport!.getMetrics).mockReturnValue({
         uptime: 1000,
         messagesProcessed: 5,
@@ -197,7 +213,8 @@ describe("ClaudeProcess Transport Delegation", () => {
     });
 
     it("should return processing when busy", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value as any;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value as any;
       vi.mocked(transport!.getMetrics).mockReturnValue({
         uptime: 1000,
         messagesProcessed: 5,
@@ -215,7 +232,8 @@ describe("ClaudeProcess Transport Delegation", () => {
     });
 
     it("should return idle when ready and not busy", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value as any;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value as any;
       vi.mocked(transport!.getMetrics).mockReturnValue({
         uptime: 5000,
         messagesProcessed: 10,
@@ -235,7 +253,8 @@ describe("ClaudeProcess Transport Delegation", () => {
 
   describe("metrics integration", () => {
     it("should correctly map transport metrics to process metrics", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       const transportMetrics: TransportMetrics = {
         uptime: 12345,
         messagesProcessed: 42,
@@ -259,7 +278,8 @@ describe("ClaudeProcess Transport Delegation", () => {
     });
 
     it("should handle null lastResponseAt", () => {
-      const transport = vi.mocked(TransportFactory.create).mock.results[0]?.value;
+      const transport = vi.mocked(TransportFactory.create).mock.results[0]
+        ?.value;
       vi.mocked(transport!.getMetrics).mockReturnValue({
         uptime: 1000,
         messagesProcessed: 0,

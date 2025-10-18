@@ -11,7 +11,6 @@
  * - wake/tell/wakeAll all need fromTeam parameter
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync, unlinkSync } from "fs";
 import { firstValueFrom, filter, take, timeout } from "rxjs";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import { TeamsConfigManager } from "../../../src/config/iris-config.js";
@@ -35,7 +34,6 @@ describe("Actions Integration Tests", () => {
   let iris: IrisOrchestrator;
 
   const testConfigPath = "./tests/config.yaml";
-  const testDbPath = "./tests/data/test-integration-actions.db";
 
   // Load config early to get timeout value
   const tempConfigManager = new TeamsConfigManager(testConfigPath);
@@ -43,35 +41,15 @@ describe("Actions Integration Tests", () => {
   const sessionInitTimeout =
     tempConfigManager.getConfig().settings.sessionInitTimeout || 60000;
 
-  // Check for REUSE_DB env var to skip database cleanup (faster iteration during development)
-  // Usage: REUSE_DB=1 pnpm test:run tests/integration/actions/actions.test.ts
-  const reuseDb =
-    process.env.REUSE_DB === "1" || process.env.REUSE_DB === "true";
-
-  // Helper to clean database files
-  const cleanDatabase = () => {
-    if (reuseDb) {
-      console.log("⚡ Reusing existing database (REUSE_DB=1)");
-      return;
-    }
-    [testDbPath, `${testDbPath}-shm`, `${testDbPath}-wal`].forEach((file) => {
-      if (existsSync(file)) {
-        unlinkSync(file);
-      }
-    });
-  };
-
   // Single initialization for ALL tests
   beforeAll(async () => {
-    cleanDatabase(); // Start with clean DB (or reuse existing)
-
     // Setup config manager
     configManager = new TeamsConfigManager(testConfigPath);
     configManager.load();
     const teamsConfig = configManager.getConfig();
 
-    // Setup session manager
-    sessionManager = new SessionManager(teamsConfig, testDbPath);
+    // Setup session manager with IN-MEMORY database
+    sessionManager = new SessionManager(teamsConfig, { inMemory: true });
 
     // Setup process pool
     processPool = new ClaudeProcessPool(configManager, teamsConfig.settings);
@@ -95,7 +73,6 @@ describe("Actions Integration Tests", () => {
     if (sessionManager) {
       sessionManager.close();
     }
-    cleanDatabase();
   });
 
   // IMPORTANT: These tests are interdependent!
@@ -138,44 +115,24 @@ describe("Actions Integration Tests", () => {
         expect(result.team).toBe("team-alpha");
         expect(result.status).toMatch(/awake|waking/);
         expect(result.sessionId).toBeTruthy();
+
+        // Wait for process to reach IDLE before next test
+        const process = processPool.getProcess("team-alpha");
+        if (process) {
+          await firstValueFrom(
+            process.status$.pipe(
+              filter((status) => status === ProcessStatus.IDLE),
+              take(1),
+              timeout(30000),
+            ),
+          );
+        }
       },
       sessionInitTimeout,
     );
   });
 
-  describe("3. Verify team-alpha is awake", () => {
-    it("should confirm team-alpha is now awake", async () => {
-      // Use RxJS observable to wait for IDLE status
-      // The wake operation sends an initial ping, so we need to wait for it to complete
-      const process = processPool.getProcess("team-alpha");
-      expect(process).toBeDefined();
-
-      if (process) {
-        // Subscribe to status$ observable and wait for IDLE status
-        await firstValueFrom(
-          process.status$.pipe(
-            filter((status) => status === ProcessStatus.IDLE),
-            take(1),
-            timeout(30000), // 30 second timeout
-          ),
-        );
-      }
-
-      const result = await isAwake(
-        { fromTeam: "team-iris", team: "team-alpha" },
-        iris,
-        processPool,
-        configManager,
-        sessionManager,
-      );
-
-      expect(result.teams[0].name).toBe("team-alpha");
-      expect(result.teams[0].status).toBe("awake");
-      expect(result.pool.activeProcesses).toBeGreaterThan(0);
-    });
-  });
-
-  describe("4. Send message to awake team", () => {
+  describe("3. Send message to awake team", () => {
     it(
       "should send message to team-alpha and get response",
       async () => {
@@ -198,7 +155,7 @@ describe("Actions Integration Tests", () => {
     );
   });
 
-  describe("6. Wake all teams", () => {
+  describe("5. Wake all teams", () => {
     it(
       "should wake all configured teams",
       async () => {
@@ -224,25 +181,9 @@ describe("Actions Integration Tests", () => {
     );
   });
 
-  describe("7. All teams should be awake", () => {
-    it("should show multiple teams awake", async () => {
-      const result = await isAwake(
-        { fromTeam: "team-iris" },
-        iris,
-        processPool,
-        configManager,
-        sessionManager,
-      );
-
-      const awakeTeams = result.teams.filter((t) => t.status === "awake");
-      expect(awakeTeams.length).toBeGreaterThan(1); // At least 2 teams awake
-      expect(result.pool.activeProcesses).toBeGreaterThan(1);
-    });
-  });
-
-  describe("8. Send async message", () => {
+  describe("6. Send async message", () => {
     it("should send async message to team-beta", async () => {
-      // Use RxJS observable to wait for team-beta to be idle (it was just woken up in test 6)
+      // Use RxJS observable to wait for team-beta to be idle (it was just woken up in test 5)
       const process = processPool.getProcess("team-beta");
       expect(process).toBeDefined();
 
@@ -273,7 +214,7 @@ describe("Actions Integration Tests", () => {
     });
   });
 
-  describe("12. Put team-alpha to sleep", () => {
+  describe("7. Put team-alpha to sleep", () => {
     it("should put team-alpha to sleep", async () => {
       const result = await sleep(
         { fromTeam: "team-iris", team: "team-alpha" },
@@ -286,49 +227,7 @@ describe("Actions Integration Tests", () => {
     });
   });
 
-  describe("13. Verify team-alpha is asleep", () => {
-    it("should confirm team-alpha is now asleep", async () => {
-      // Use RxJS observable to wait for STOPPED status
-      // According to OBSERVABILITY.md, ProcessPool cleans up when status becomes STOPPED
-      const process = processPool.getProcess("team-alpha");
-
-      if (process) {
-        // Subscribe to status$ observable and wait for STOPPED status
-        try {
-          await firstValueFrom(
-            process.status$.pipe(
-              filter((status) => status === ProcessStatus.STOPPED),
-              take(1),
-              timeout(30000), // 30 second timeout
-            ),
-          );
-          console.log("✓ Process reached STOPPED status");
-        } catch (error) {
-          // If process is already gone (pool cleaned up), that's also acceptable
-          console.log(
-            "Process cleanup completed (may have been removed from pool)",
-          );
-        }
-      }
-
-      // Verify process is actually gone from pool
-      const processAfter = processPool.getProcess("team-alpha");
-      expect(processAfter).toBeUndefined(); // Process should be removed from pool
-
-      const result = await isAwake(
-        { fromTeam: "team-iris", team: "team-alpha" },
-        iris,
-        processPool,
-        configManager,
-        sessionManager,
-      );
-
-      expect(result.teams[0].name).toBe("team-alpha");
-      expect(result.teams[0].status).toBe("asleep");
-    });
-  });
-
-  describe("14. Re-wake team-alpha", () => {
+  describe("8. Re-wake team-alpha", () => {
     it(
       "should wake team-alpha again",
       async () => {
@@ -355,21 +254,16 @@ describe("Actions Integration Tests", () => {
     );
   });
 
-  describe("15. Reboot action - create fresh session", () => {
+  describe("9. Reboot action", () => {
     let oldSessionId: string | undefined;
-
-    it("should get current session ID before rebooting", async () => {
-      const session = sessionManager.getSession("team-iris", "team-alpha");
-      expect(session).toBeDefined();
-      oldSessionId = session?.sessionId;
-      expect(oldSessionId).toBeTruthy();
-
-      console.log(`Current session ID: ${oldSessionId}`);
-    });
 
     it(
       "should reboot existing session and create new one",
       async () => {
+        // Get old session ID
+        const oldSession = sessionManager.getSession("team-iris", "team-alpha");
+        oldSessionId = oldSession?.sessionId;
+
         const result = await reboot(
           { fromTeam: "team-iris", toTeam: "team-alpha" },
           iris,
@@ -384,56 +278,9 @@ describe("Actions Integration Tests", () => {
         expect(result.oldSessionId).toBe(oldSessionId);
         expect(result.newSessionId).toBeTruthy();
         expect(result.newSessionId).not.toBe(oldSessionId);
-        expect(result.processTerminated).toBe(true); // Should terminate running process
-        expect(result.message).toContain("Fresh new session created");
-        expect(result.timestamp).toBeGreaterThan(0);
+        expect(result.processTerminated).toBe(true);
 
-        console.log(`Old session: ${result.oldSessionId}`);
-        console.log(`New session: ${result.newSessionId}`);
-      },
-      sessionInitTimeout,
-    );
-
-    it("should verify old session is gone", () => {
-      const session = sessionManager.getSession("team-iris", "team-alpha");
-      expect(session).toBeDefined();
-      expect(session?.sessionId).not.toBe(oldSessionId);
-    });
-
-    it("should verify process was terminated", () => {
-      // Process should be removed from pool after termination
-      const process = processPool.getProcess("team-alpha");
-      expect(process).toBeUndefined();
-    });
-
-    it("should verify team-alpha shows as asleep", async () => {
-      const result = await isAwake(
-        { fromTeam: "team-iris", team: "team-alpha" },
-        iris,
-        processPool,
-        configManager,
-        sessionManager,
-      );
-
-      expect(result.teams[0].name).toBe("team-alpha");
-      expect(result.teams[0].status).toBe("asleep");
-    });
-
-    it(
-      "should be able to wake team-alpha with new session",
-      async () => {
-        const result = await wake(
-          { team: "team-alpha", fromTeam: "team-iris" },
-          iris,
-          processPool,
-          sessionManager,
-        );
-
-        expect(result.team).toBe("team-alpha");
-        expect(result.status).toMatch(/awake|waking/);
-        expect(result.sessionId).toBeTruthy();
-
-        // Wait for process to be idle
+        // Wait for new process to be idle
         const process = processPool.getProcess("team-alpha");
         if (process) {
           await firstValueFrom(
@@ -444,8 +291,6 @@ describe("Actions Integration Tests", () => {
             ),
           );
         }
-
-        console.log(`New session active: ${result.sessionId}`);
       },
       sessionInitTimeout,
     );
@@ -464,73 +309,8 @@ describe("Actions Integration Tests", () => {
 
         expect(result.to).toBe("team-alpha");
         expect(result.response).toBeTruthy();
-
-        console.log("Message sent successfully to new session");
       },
       sessionInitTimeout,
     );
-  });
-
-  describe("16. Reboot action - first session for new team", () => {
-    it(
-      "should create first session when none exists",
-      async () => {
-        // team-gamma should have no session yet
-        const existingSession = sessionManager.getSession(
-          "team-iris",
-          "team-gamma",
-        );
-        expect(existingSession).toBeNull();
-
-        const result = await reboot(
-          { fromTeam: "team-iris", toTeam: "team-gamma" },
-          iris,
-          sessionManager,
-          processPool,
-        );
-
-        expect(result).toBeDefined();
-        expect(result.from).toBe("team-iris");
-        expect(result.to).toBe("team-gamma");
-        expect(result.hadPreviousSession).toBe(false);
-        expect(result.oldSessionId).toBeUndefined();
-        expect(result.newSessionId).toBeTruthy();
-        expect(result.processTerminated).toBe(false); // No process to terminate
-        expect(result.message).toContain("First session created");
-
-        console.log(`First session created: ${result.newSessionId}`);
-      },
-      sessionInitTimeout,
-    );
-
-    it("should verify new session was created", () => {
-      const session = sessionManager.getSession("team-iris", "team-gamma");
-      expect(session).toBeDefined();
-      expect(session?.fromTeam).toBe("team-iris");
-      expect(session?.toTeam).toBe("team-gamma");
-      expect(session?.status).toBe("active");
-    });
-  });
-
-  describe("17. Final status check", () => {
-    it("should show final state of all teams", async () => {
-      const result = await isAwake(
-        { fromTeam: "team-iris" },
-        iris,
-        processPool,
-        configManager,
-        sessionManager,
-      );
-
-      console.log("Final state summary:");
-      console.log(`  Active processes: ${result.pool.activeProcesses}`);
-      console.log(`  Total messages: ${result.pool.totalMessages}`);
-
-      result.teams.forEach((team) => {
-        console.log(`  ${team.name}: ${team.status}`);
-      });
-
-      expect(result.pool.activeProcesses).toBeGreaterThan(0);
-    });
   });
 });

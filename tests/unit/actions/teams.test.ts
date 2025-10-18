@@ -25,7 +25,6 @@ describe("teams", () => {
             description: "Alpha team",
             color: "#FF0000",
             idleTimeout: 300000,
-            skipPermissions: true,
           },
           "team-beta": {
             path: "/path/to/beta",
@@ -67,7 +66,6 @@ describe("teams", () => {
         description: "Alpha team",
         color: "#FF0000",
         idleTimeout: 300000,
-        skipPermissions: true,
       });
     });
 
@@ -98,7 +96,6 @@ describe("teams", () => {
         description: "Beta team",
         color: "#00FF00",
         idleTimeout: undefined,
-        skipPermissions: undefined,
       });
     });
 
@@ -111,7 +108,6 @@ describe("teams", () => {
         description: "Gamma team",
         color: undefined,
         idleTimeout: undefined,
-        skipPermissions: undefined,
       });
     });
   });

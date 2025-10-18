@@ -84,7 +84,6 @@ describe("TransportFactory", () => {
         path: "/path",
         description: "No remote field",
         idleTimeout: 30000,
-        skipPermissions: true,
       };
 
       const transport = TransportFactory.create(

@@ -80,13 +80,11 @@ export function getTestIrisConfig() {
       "team-alpha": {
         path: resolve(TEST_IRIS_HOME, "../teams/team-alpha"),
         description: "Iris MCP Team Alpha - testing team",
-        skipPermissions: true,
         color: "#4CAF50",
       },
       "team-beta": {
         path: resolve(TEST_IRIS_HOME, "../teams/team-beta"),
         description: "Iris MCP Team Beta - testing team",
-        skipPermissions: true,
         color: "#4CAAF0",
       },
     },

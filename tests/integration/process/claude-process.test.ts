@@ -19,7 +19,6 @@ describe("ClaudeProcess Integration", () => {
   const testIrisConfig: IrisConfig = {
     path: process.cwd(),
     description: "Test team for integration tests",
-    skipPermissions: true,
   };
 
   // Load config early to get timeout value
@@ -97,7 +96,6 @@ describe("ClaudeProcess Integration", () => {
       const invalidConfig: IrisConfig = {
         path: "/nonexistent/path",
         description: "Invalid path",
-        skipPermissions: true,
       };
 
       claudeProcess = new ClaudeProcess(
@@ -224,7 +222,6 @@ describe("ClaudeProcess Integration", () => {
       const invalidConfig: IrisConfig = {
         path: "/nonexistent/path",
         description: "Invalid path",
-        skipPermissions: true,
       };
 
       claudeProcess = new ClaudeProcess(

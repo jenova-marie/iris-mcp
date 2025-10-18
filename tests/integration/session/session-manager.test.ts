@@ -31,8 +31,8 @@ describe("SessionManager Integration", () => {
     configManager.load();
 
     const teamsConfig = configManager.getConfig();
-    // Don't pass dbOptions - let it use inMemory config from tests/config.yaml
-    manager = new SessionManager(teamsConfig);
+    // Use in-memory database for testing
+    manager = new SessionManager(teamsConfig, { inMemory: true });
 
     // Initialize (creates sessions for each team)
     try {

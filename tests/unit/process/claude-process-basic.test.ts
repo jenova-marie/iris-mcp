@@ -23,7 +23,6 @@ describe("ClaudeProcess Unit Tests", () => {
   const testIrisConfig: IrisConfig = {
     path: process.cwd(),
     description: "Test team for unit tests",
-    skipPermissions: true,
   };
 
   beforeEach(() => {
@@ -129,13 +128,11 @@ describe("ClaudeProcess Unit Tests", () => {
       const config1: IrisConfig = {
         path: "/path/1",
         description: "Team 1",
-        skipPermissions: true,
       };
 
       const config2: IrisConfig = {
         path: "/path/2",
         description: "Team 2",
-        skipPermissions: false,
         color: "#ff0000",
       };
 

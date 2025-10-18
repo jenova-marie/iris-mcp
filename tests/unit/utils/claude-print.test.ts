@@ -30,7 +30,6 @@ describe("ClaudePrintExecutor", () => {
   const localConfig: IrisConfig = {
     path: "/test/project",
     description: "Test team",
-    skipPermissions: true,
   };
 
   const remoteConfig: IrisConfig = {
@@ -38,7 +37,6 @@ describe("ClaudePrintExecutor", () => {
     description: "Remote team",
     remote: "ssh inanna",
     claudePath: "~/.local/bin/claude",
-    skipPermissions: true,
   };
 
   let mockProcess: EventEmitter & {
@@ -276,10 +274,7 @@ describe("ClaudePrintExecutor", () => {
 
   describe("Remote execution", () => {
     it("should execute command via SSH", async () => {
-      const executor = ClaudePrintExecutor.create(
-        remoteConfig,
-        "session-123",
-      );
+      const executor = ClaudePrintExecutor.create(remoteConfig, "session-123");
 
       const resultPromise = executor.execute({
         command: "/compact",
@@ -365,10 +360,7 @@ describe("ClaudePrintExecutor", () => {
     });
 
     it("should use --session-id for remote when resume=false", async () => {
-      const executor = ClaudePrintExecutor.create(
-        remoteConfig,
-        "session-new",
-      );
+      const executor = ClaudePrintExecutor.create(remoteConfig, "session-new");
 
       const resultPromise = executor.execute({
         command: "ping",

@@ -14,14 +14,12 @@ import { TeamsConfigManager } from "../../../src/config/iris-config.js";
 import { SessionManager } from "../../../src/session/session-manager.js";
 import type { ProcessPoolConfig } from "../../../src/process-pool/types.js";
 import { PoolEvent } from "../../../src/process-pool/types.js";
-import { unlinkSync, existsSync } from "fs";
 
 describe("ClaudeProcessPool Integration", () => {
   let pool: ClaudeProcessPool;
   let configManager: TeamsConfigManager;
   let sessionManager: SessionManager;
   const testConfigPath = "./tests/config.yaml"; // Use test teams config
-  const testSessionDbPath = "./tests/data/test-pool-sessions.db";
 
   // Load config early to get timeout value
   const tempConfigManager = new TeamsConfigManager(testConfigPath);
@@ -29,35 +27,15 @@ describe("ClaudeProcessPool Integration", () => {
   const sessionInitTimeout =
     tempConfigManager.getConfig().settings.sessionInitTimeout;
 
-  // NOTE: This test file does NOT honor REUSE_DB environment variable
-  // These tests specifically verify process pool behavior from a clean state
-  // Having stale session state causes mismatches between database session IDs
-  // and actual spawned processes in test mode
-
-  // Helper to clean database before tests
-  const cleanDatabase = () => {
-    [
-      testSessionDbPath,
-      `${testSessionDbPath}-shm`,
-      `${testSessionDbPath}-wal`,
-    ].forEach((file) => {
-      if (existsSync(file)) {
-        unlinkSync(file);
-      }
-    });
-  };
-
   // Single initialization for ALL tests (much faster!)
   beforeAll(async () => {
-    cleanDatabase(); // Always start with clean DB for these tests
-
     // Load test teams config
     configManager = new TeamsConfigManager(testConfigPath);
     configManager.load();
 
-    // Create and initialize session manager (single instance for all tests)
+    // Create and initialize session manager with IN-MEMORY database
     const teamsConfig = configManager.getConfig();
-    sessionManager = new SessionManager(teamsConfig, testSessionDbPath);
+    sessionManager = new SessionManager(teamsConfig, { inMemory: true });
 
     // Try to initialize, but continue even if it fails partially
     try {
@@ -95,9 +73,6 @@ describe("ClaudeProcessPool Integration", () => {
     if (sessionManager) {
       sessionManager.close();
     }
-
-    // Clean up session database
-    cleanDatabase();
   });
 
   describe("basic process pooling", () => {

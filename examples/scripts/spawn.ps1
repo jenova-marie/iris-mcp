@@ -1,9 +1,9 @@
 # Iris MCP Fork Script for Windows PowerShell - Opens new terminal with Claude session
-# For local teams: fork.ps1 <sessionId> <teamPath>
-# For remote teams: fork.ps1 <sessionId> <teamPath> <sshHost> [sshOptions]
+# For local teams: spawn.ps1 <sessionId> <teamPath>
+# For remote teams: spawn.ps1 <sessionId> <teamPath> <sshHost> [sshOptions]
 #
-# Copy this to $env:IRIS_HOME\fork.ps1:
-#   Copy-Item src\example.fork.ps1 "$env:USERPROFILE\.iris\fork.ps1"
+# Copy this to $env:IRIS_HOME\spawn.ps1:
+#   Copy-Item src\example.spawn.ps1 "$env:USERPROFILE\.iris\spawn.ps1"
 #
 # Arguments:
 # $args[0] = sessionId (required)
@@ -27,7 +27,7 @@ param(
 
 if (-not $SessionId -or -not $TeamPath) {
     Write-Error "Error: sessionId and teamPath are required"
-    Write-Host "Usage: .\fork.ps1 <sessionId> <teamPath> [sshHost] [sshOptions]"
+    Write-Host "Usage: .\spawn.ps1 <sessionId> <teamPath> [sshHost] [sshOptions]"
     exit 1
 }
 

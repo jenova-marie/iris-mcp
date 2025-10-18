@@ -43,3 +43,4 @@ data/
 *.db-wal
 *.db-shm
 .git-commit.log*
+**/iris-mcp-*

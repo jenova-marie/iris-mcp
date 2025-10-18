@@ -8,7 +8,7 @@
 # ==============================================================================
 
 settings:
-  sessionInitTimeout: 30000
+  sessionInitTimeout: 45000  # Increased from 30s - wake can take 30+ seconds
   spawnTimeout: 20000
   responseTimeout: 45000
   idleTimeout: 300000
@@ -26,16 +26,19 @@ teams:
     path: /Users/jenova/projects/jenova-marie/iris-mcp
     description: Iris MCP Team - the calling team for tests
     color: "#9C27B0"
+    grantPermission: "no"  # Don't use permission-prompt-tool in tests
 
   team-alpha:
     path: ./teams/team-alpha
     description: Iris MCP Team Alpha - testing team
     color: "#4CAF50"
+    grantPermission: "no"  # Don't use permission-prompt-tool in tests
 
   team-beta:
     path: ./teams/team-beta
     description: Iris MCP Team Beta - testing team
     color: "#4CAAF0"
+    grantPermission: "no"  # Don't use permission-prompt-tool in tests
 
   team-inanna:
     remote: ssh inanna
@@ -43,3 +46,4 @@ teams:
     path: /opt/containers
     description: Iris MCP Team Inanna - cloud dev team
     color: "#4CAAF0"
+    grantPermission: "no"  # Don't use permission-prompt-tool in tests

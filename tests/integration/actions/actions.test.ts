@@ -123,7 +123,7 @@ describe("Actions Integration Tests", () => {
             process.status$.pipe(
               filter((status) => status === ProcessStatus.IDLE),
               take(1),
-              timeout(30000),
+              timeout(45000), // Match sessionInitTimeout
             ),
           );
         }

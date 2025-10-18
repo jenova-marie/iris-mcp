@@ -1,0 +1,45 @@
+===== Git Commit Session [2025-10-17 $(date +%H:%M:%S)] =====
+Session ID: mcp-config-refactor-$(date +%s)
+Current Branch: main
+Total Commits Created: 8
+
+--- Commits Created ---
+1. 8b8f6cb - refactor(transport): move command-builder to utils
+2. 1bfa743 - feat(utils): add MCP config file writer with shell scripts
+3. 5da7f6c - fix(transport): refactor command-builder for file-based MCP config
+4. 31a63a3 - feat(config): add mcpConfigScript field for custom MCP config writers
+5. e08dfcf - feat(transport): implement file-based MCP config for local and SSH
+6. 6b4bf51 - test: update tests for command-builder relocation and MCP config
+7. 6a054d5 - docs: document MCP config file system and architecture changes
+8. 8f9e59d - chore: remove deprecated files and update slash command
+
+--- Summary ---
+This session refactored the MCP configuration system to use file-based configs
+instead of stringified JSON, fixing a critical bug where --mcp-config flag
+expected a file path but was receiving JSON strings.
+
+Key Changes:
+- Moved command-builder.ts from src/transport/ to src/utils/
+- Created mcp-config-writer.ts utility for file operations
+- Added 4 shell scripts (mcp-cp.sh/ps1, mcp-scp.sh/ps1)
+- Updated both local and SSH transports to write config files
+- Added mcpConfigScript field to IrisConfig
+- Updated all tests and documentation
+
+Architecture: Pipe-based design where TypeScript streams JSON to shell scripts
+via stdin, scripts handle filesystem operations, and return file paths via stdout.
+
+--- Source Changes (src/ only) ---
+Files Modified: 13
+Files Created: 5 (mcp-config-writer.ts, 4 shell scripts)
+Files Relocated: 1 (command-builder.ts)
+
+--- Git Diff Summary ---
+$(git diff HEAD~8..HEAD --stat)
+
+--- Agent Processing ---
+Unit Test Agent: Skipped (tests already updated in commit 6)
+Tech Writer Agent: Skipped (docs already updated in commit 7)
+Examples Guru Agent: Not applicable
+
+===== End Session [2025-10-17 $(date +%H:%M:%S)] =====

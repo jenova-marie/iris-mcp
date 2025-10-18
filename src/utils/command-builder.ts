@@ -95,18 +95,38 @@ export class ClaudeCommandBuilder {
       args.push("--dangerously-skip-permissions");
     }
 
-    // 5. Tool allowlist/denylist
-    if (irisConfig.allowedTools) {
-      args.push("--allowed-tools", irisConfig.allowedTools);
+    // 5. Build tool allowlist, ensuring permission tool is included when needed
+    let allowedToolsList = irisConfig.allowedTools || "";
+
+    // 6. Permission prompt tool (for reverse MCP)
+    // IMPORTANT: When using --permission-prompt-tool, that tool MUST be in --allowed-tools
+    // Otherwise Claude will reject it with "MCP tool X not found. Available MCP tools: none"
+    if (irisConfig.enableReverseMcp) {
+      const permissionTool = "mcp__iris__permissions__approve";
+
+      // Ensure permission tool is in allowed list
+      if (allowedToolsList) {
+        // Parse existing tools (handle comma or space separators)
+        const existingTools = allowedToolsList
+          .split(/[,\s]+/)
+          .filter((t) => t);
+        if (!existingTools.includes(permissionTool)) {
+          allowedToolsList = `${allowedToolsList},${permissionTool}`;
+        }
+      } else {
+        allowedToolsList = permissionTool;
+      }
+
+      args.push("--permission-prompt-tool", permissionTool);
+    }
+
+    // Add allowedTools if we have any
+    if (allowedToolsList) {
+      args.push("--allowed-tools", allowedToolsList);
     }
 
     if (irisConfig.disallowedTools) {
       args.push("--disallowed-tools", irisConfig.disallowedTools);
-    }
-
-    // 6. Permission prompt tool (for reverse MCP)
-    if (irisConfig.enableReverseMcp) {
-      args.push("--permission-prompt-tool", "mcp__iris__permissions__approve");
     }
 
     // 7. System prompt (team identity + custom append)
@@ -117,9 +137,9 @@ export class ClaudeCommandBuilder {
     //   : teamIdentity;
     // args.push("--append-system-prompt", systemPrompt);
 
-    // 8. MCP configuration (session-specific URL)
-    const mcpConfig = this.buildMcpConfig(irisConfig, sessionId);
-    args.push("--mcp-config", JSON.stringify(mcpConfig));
+    // 8. MCP configuration will be handled by transports
+    // They will write the config to a file and add --mcp-config <filepath>
+    // Note: --mcp-config expects a file path, NOT stringified JSON
 
     // 9. Determine executable
     const executable = irisConfig.claudePath || "claude";
@@ -136,8 +156,10 @@ export class ClaudeCommandBuilder {
    *
    * For local: Uses direct HTTP connection to localhost
    * For remote: Uses reverse tunnel with configurable protocol
+   *
+   * NOTE: This is now public so transports can use it to generate MCP config files
    */
-  private static buildMcpConfig(
+  static buildMcpConfig(
     irisConfig: IrisConfig,
     sessionId: string,
   ): object {

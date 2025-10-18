@@ -23,7 +23,7 @@ import { CacheEntry, CacheEntryType, CacheEntryStatus } from "../cache/types.js"
 import { TransportFactory } from "../transport/transport-factory.js";
 import type { Transport } from "../transport/transport.interface.js";
 import { TransportStatus } from "../transport/transport.interface.js";
-import { ClaudeCommandBuilder } from "../transport/command-builder.js";
+import { ClaudeCommandBuilder } from "../utils/command-builder.js";
 import { ProcessBusyError } from "../transport/local-transport.js";
 import { ClaudePrintExecutor } from "../utils/claude-print.js";
 import { CacheEntryImpl } from "../cache/cache-entry.js";

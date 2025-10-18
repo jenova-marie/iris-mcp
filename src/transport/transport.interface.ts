@@ -7,7 +7,7 @@
 
 import { Observable } from "rxjs";
 import type { CacheEntry } from "../cache/types.js";
-import type { CommandInfo } from "./command-builder.js";
+import type { CommandInfo } from "../utils/command-builder.js";
 
 // Re-export CommandInfo for convenience
 export type { CommandInfo };

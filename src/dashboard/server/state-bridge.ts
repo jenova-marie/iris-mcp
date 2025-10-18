@@ -419,11 +419,12 @@ export class DashboardStateBridge extends EventEmitter {
   }
 
   /**
-   * Get the fork script path (if configured)
+   * Get the spawn script path (if configured)
+   * The spawn script handles both fork and spawn operations
    */
   getForkScriptPath(): string | null {
     const config = this.getConfig();
-    return config.dashboard?.forkScriptPath || null;
+    return config.dashboard?.spawnScriptPath || null;
   }
 
   /**

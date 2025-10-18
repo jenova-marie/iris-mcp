@@ -347,7 +347,7 @@ team_fork(input: {
   from: string;
   to: string;
   sessionId: string;
-  forkScriptPath?: string;
+  spawnScriptPath?: string;
   teamPath?: string;
   remote: boolean;
   sshHost?: string;

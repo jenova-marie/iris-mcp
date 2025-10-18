@@ -53,7 +53,7 @@ export interface ForkOutput {
   sessionId: string;
 
   /** The fork script that was executed */
-  forkScriptPath?: string;
+  spawnScriptPath?: string;
 
   /** The team path */
   teamPath?: string;
@@ -136,9 +136,9 @@ export async function fork(
   logger.info({ fromTeam, toTeam }, "Forking session");
 
   // Check if fork script is configured
-  const forkScriptPath = getForkScriptPath();
+  const spawnScriptPath = getForkScriptPath();
 
-  if (!forkScriptPath) {
+  if (!spawnScriptPath) {
     throw new Error(
       "Fork script not found. Create spawn.sh (or ps1 on Windows) in your IRIS_HOME scripts directory (~/.iris/scripts/spawn.sh)",
     );
@@ -181,19 +181,21 @@ export async function fork(
 
     if (isRemote) {
       // Remote: use remote config writer
-      // Signature: writeMcpConfigRemote(mcpConfig, sessionId, sshHost, scriptPath?, remoteDir?)
+      // Signature: writeMcpConfigRemote(mcpConfig, sessionId, sshHost, remoteTeamPath, scriptPath?)
       mcpConfigPath = await writeMcpConfigRemote(
         mcpConfig,
         session.sessionId,
         teamConfig.remote!,
+        teamConfig.path,
         teamConfig.mcpConfigScript,
       );
     } else {
       // Local: use local config writer
-      // Signature: writeMcpConfigLocal(mcpConfig, sessionId, scriptPath?, destDir?)
+      // Signature: writeMcpConfigLocal(mcpConfig, sessionId, teamPath, scriptPath?)
       mcpConfigPath = await writeMcpConfigLocal(
         mcpConfig,
         session.sessionId,
+        teamConfig.path,
         teamConfig.mcpConfigScript,
       );
     }
@@ -227,14 +229,14 @@ export async function fork(
         sessionId: session.sessionId,
         toTeam,
         teamPath,
-        forkScriptPath,
+        spawnScriptPath,
         sshHost,
         fullClaudeCommand,
       },
       "Launching remote fork for session",
     );
 
-    command = `"${forkScriptPath}" "${teamPath}" "${fullClaudeCommand}" "${sshHost}"`;
+    command = `"${spawnScriptPath}" "${teamPath}" "${fullClaudeCommand}" "${sshHost}"`;
     if (sshOptions) {
       command += ` "${sshOptions}"`;
     }
@@ -244,13 +246,13 @@ export async function fork(
         sessionId: session.sessionId,
         toTeam,
         teamPath,
-        forkScriptPath,
+        spawnScriptPath,
         fullClaudeCommand,
       },
       "Launching local fork for session",
     );
 
-    command = `"${forkScriptPath}" "${teamPath}" "${fullClaudeCommand}"`;
+    command = `"${spawnScriptPath}" "${teamPath}" "${fullClaudeCommand}"`;
   }
 
   try {
@@ -270,7 +272,7 @@ export async function fork(
       from: fromTeam,
       to: toTeam,
       sessionId: session.sessionId,
-      forkScriptPath,
+      spawnScriptPath,
       teamPath,
       remote: isRemote,
       sshHost,
@@ -286,7 +288,7 @@ export async function fork(
           execError instanceof Error ? execError : new Error(String(execError)),
         sessionId: session.sessionId,
         toTeam,
-        forkScriptPath,
+        spawnScriptPath,
         command,
       },
       "Failed to execute fork script",

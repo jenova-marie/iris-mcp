@@ -130,7 +130,7 @@ Color-coded status badges:
 - Requires fork script configured at `~/.iris/spawn.sh` (or `.bat`/`.ps1` on Windows)
 - Uses MCP fork action for consistency
 - Shows loading state → success → resets to idle
-- Only visible if `dashboard.forkScriptPath` is configured
+- Only visible if `dashboard.spawnScriptPath` is configured
 
 **Dropdown Menu** (MoreVertical icon):
 - **Sleep**: Terminates the process (preserves session)
@@ -394,7 +394,7 @@ dashboard:
   selfsigned: true
   certPath: /path/to/cert.pem
   keyPath: /path/to/key.pem
-  forkScriptPath: ~/.iris/spawn.sh
+  spawnScriptPath: ~/.iris/spawn.sh
 teams:
   backend:
     path: /absolute/path/to/backend
@@ -413,7 +413,7 @@ teams:
 | `selfsigned` | boolean | `true` | Generate self-signed cert (for HTTPS) |
 | `certPath` | string | - | Path to SSL certificate (if not self-signed) |
 | `keyPath` | string | - | Path to SSL private key (if not self-signed) |
-| `forkScriptPath` | string | - | Path to terminal fork script (enables Fork button) |
+| `spawnScriptPath` | string | - | Path to terminal fork script (enables Fork button) |
 
 ### SSL/TLS
 
@@ -1376,12 +1376,12 @@ server {
 
 ### Fork button doesn't appear
 
-**Cause**: `dashboard.forkScriptPath` not configured
+**Cause**: `dashboard.spawnScriptPath` not configured
 
 - Add to `config.yaml`:
   ```yaml
   dashboard:
-    forkScriptPath: ~/.iris/spawn.sh
+    spawnScriptPath: ~/.iris/spawn.sh
   ```
 - Create fork script (see [Fork Script](#fork-script))
 

@@ -150,11 +150,25 @@ export function ProcessMonitor() {
       const response = await api.getConfig();
       return response.data;
     },
-    staleTime: 60000, // Config doesn't change often, cache for 1 minute
+    staleTime: 0, // Always fetch fresh data for debugging
+    refetchOnMount: true, // Force refetch on component mount
   });
 
   const terminalScriptAvailable =
-    !!configData?.config?.dashboard?.forkScriptPath;
+    !!configData?.config?.dashboard?.spawnScriptPath;
+
+  // Debug logging
+  useEffect(() => {
+    console.log("[ProcessMonitor] Config data:", configData);
+    console.log(
+      "[ProcessMonitor] spawnScriptPath:",
+      configData?.config?.dashboard?.spawnScriptPath,
+    );
+    console.log(
+      "[ProcessMonitor] terminalScriptAvailable:",
+      terminalScriptAvailable,
+    );
+  }, [configData, terminalScriptAvailable]);
 
   // Fetch sessions
   const { data, isLoading } = useQuery({
@@ -241,54 +255,51 @@ export function ProcessMonitor() {
     });
   }, []);
 
-  const handleLaunchTerminal = useCallback(
-    async (sessionId: string) => {
-      setTerminalStatus((prev) => ({ ...prev, [sessionId]: "launching" }));
+  const handleLaunchTerminal = useCallback(async (sessionId: string) => {
+    setTerminalStatus((prev) => ({ ...prev, [sessionId]: "launching" }));
 
-      try {
-        const response = await api.launchTerminal(sessionId);
+    try {
+      const response = await api.launchTerminal(sessionId);
 
-        if (response.data.success) {
-          // Success - terminal launched
-          setTerminalStatus((prev) => ({ ...prev, [sessionId]: "success" }));
-          setTimeout(() => {
-            setTerminalStatus((prev) => ({ ...prev, [sessionId]: "idle" }));
-          }, 3000);
-        }
-      } catch (error: any) {
-        const status = error.response?.status;
-        const errorMsg = error.response?.data?.error || error.message;
-
-        // Handle 404 - terminal script not found
-        if (status === 404) {
-          alert(
-            "⚠️ Terminal Script Not Found\n\n" +
-              errorMsg +
-              "\n\n" +
-              "The terminal script should be located at:\n" +
-              "  ~/.iris/terminal.sh (macOS/Linux)\n" +
-              "  ~/.iris/terminal.bat or terminal.ps1 (Windows)\n\n" +
-              "The script receives two arguments:\n" +
-              "  1. sessionId\n" +
-              "  2. teamPath",
-          );
+      if (response.data.success) {
+        // Success - terminal launched
+        setTerminalStatus((prev) => ({ ...prev, [sessionId]: "success" }));
+        setTimeout(() => {
           setTerminalStatus((prev) => ({ ...prev, [sessionId]: "idle" }));
-          return;
-        }
+        }, 3000);
+      }
+    } catch (error: any) {
+      const status = error.response?.status;
+      const errorMsg = error.response?.data?.error || error.message;
 
-        // Handle other errors
-        console.error("Failed to launch terminal:", error);
+      // Handle 404 - terminal script not found
+      if (status === 404) {
         alert(
-          `Failed to launch terminal: ${errorMsg}\n\n` +
-            `Session ID: ${sessionId}\n\n` +
-            "You can manually run:\n" +
-            `claude --resume ${sessionId}`,
+          "⚠️ Terminal Script Not Found\n\n" +
+            errorMsg +
+            "\n\n" +
+            "The terminal script should be located at:\n" +
+            "  ~/.iris/terminal.sh (macOS/Linux)\n" +
+            "  ~/.iris/terminal.bat or terminal.ps1 (Windows)\n\n" +
+            "The script receives two arguments:\n" +
+            "  1. sessionId\n" +
+            "  2. teamPath",
         );
         setTerminalStatus((prev) => ({ ...prev, [sessionId]: "idle" }));
+        return;
       }
-    },
-    [],
-  );
+
+      // Handle other errors
+      console.error("Failed to launch terminal:", error);
+      alert(
+        `Failed to launch terminal: ${errorMsg}\n\n` +
+          `Session ID: ${sessionId}\n\n` +
+          "You can manually run:\n" +
+          `claude --resume ${sessionId}`,
+      );
+      setTerminalStatus((prev) => ({ ...prev, [sessionId]: "idle" }));
+    }
+  }, []);
 
   const handleSleep = useCallback(
     async (fromTeam: string, toTeam: string, poolKey: string) => {
@@ -590,9 +601,7 @@ export function ProcessMonitor() {
                   </button>
                   {terminalScriptAvailable && (
                     <button
-                      onClick={() =>
-                        handleLaunchTerminal(session.sessionId)
-                      }
+                      onClick={() => handleLaunchTerminal(session.sessionId)}
                       disabled={
                         terminalStatus[session.sessionId] === "launching"
                       }

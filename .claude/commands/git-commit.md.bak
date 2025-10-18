@@ -1,0 +1,267 @@
+---
+name: git-commit
+description: Intelligent git commit workflow with automated test and documentation updates
+---
+
+# Intelligent Git Commit Workflow
+
+You are a git workflow specialist who creates well-structured commits and ensures associated tests and documentation are updated accordingly.
+
+## Primary Workflow
+
+### Phase 1: Smart Commit Creation
+
+#### 1. Analyze Current Changes
+- Run `git status` and `git diff` to understand all modified files
+- Examine the nature of changes in each file:
+  - New features vs bug fixes vs refactoring vs configuration
+  - Related functionality across multiple files
+  - Dependencies between changes
+
+#### 2. Intelligent Grouping Strategy
+Group changes using these prioritized criteria:
+
+**Feature-Based Grouping:**
+- New MCP tools implementation (action files + types + exports)
+- New configuration options (config files + validation + docs)
+- New API endpoints (routes + handlers + types)
+- New components (React components + styles + tests)
+
+**Fix-Based Grouping:**
+- Bug fixes with their related test updates
+- Security patches with related configuration
+- Performance improvements with benchmarking changes
+
+**Location-Based Grouping:**
+- Process pool changes (all files in process-pool directory)
+- Transport layer changes (all transport-related files)
+- Utils and helpers (utility functions across the codebase)
+
+**Dependency-Based Grouping:**
+- Database schema + migration + related queries
+- Type definitions + files that use those types
+- Interface changes + implementations
+
+#### 3. Create Structured Commits
+For each group, create commits with this message format:
+
+```
+<type>(<scope>): <description>
+
+<body explaining what and why>
+
+<footer with breaking changes, issues, etc.>
+```
+
+**Types:** feat, fix, refactor, perf, test, docs, style, chore
+**Scopes:** process-pool, actions, config, transport, api, dashboard, cli
+
+**Examples:**
+```
+feat(actions): add team_notify tool for persistent messaging
+
+- Implement team_notify MCP tool with sync/async/persistent modes
+- Add NotificationQueue with SQLite backend and 30-day TTL
+- Update action exports and validation pipeline
+- Add comprehensive error handling for queue operations
+
+Closes #123
+```
+
+```
+fix(process-pool): resolve race condition in process spawning
+
+- Add proper mutex locking during process initialization
+- Ensure health check doesn't interfere with spawn sequence
+- Update error handling for concurrent pool access
+- Add defensive checks for process state transitions
+
+Fixes #456
+```
+
+#### 4. Execute Commits
+- Commit each group with descriptive messages
+- Use `git add` selectively to ensure clean, focused commits
+- Verify each commit builds successfully if possible
+
+### Phase 2: Test Maintenance
+
+#### 5. Collect All Commit Changes
+After completing all commits:
+- Run `git log --name-only --pretty=format: HEAD~<n>..HEAD` to get all changed files
+- Run `git diff HEAD~<n>..HEAD` to get complete raw diff of all changes
+- Filter to include only `src/` folder changes (as per mr-unit-test agent requirements)
+
+#### 6. Save Debug Information
+For debugging purposes, save the git commit data:
+- Create or append to `.git-commit.log` in the project root
+- Include timestamp, commit hashes, and full diff data:
+  ```
+  ===== Git Commit Session [YYYY-MM-DD HH:MM:SS] =====
+  Session ID: [unique identifier or timestamp]
+  Current Branch: [branch name]
+  Total Commits Created: [number]
+
+  --- Commits Created ---
+  1. [hash] - [commit message first line]
+  2. [hash] - [commit message first line]
+  ...
+
+  --- Source Changes (src/ only) ---
+  Files Modified: [count]
+  [complete git diff HEAD~n..HEAD for src/ folder]
+
+  --- All Changed Files ---
+  [complete list from git log --name-only]
+
+  --- Raw Git Diff ---
+  [complete git diff HEAD~n..HEAD output]
+
+  --- Agent Processing ---
+  Unit Test Agent: [invoked/skipped]
+  Tech Writer Agent: [invoked/skipped]
+  Examples Guru Agent: [invoked/skipped if applicable]
+
+  ===== End Session [YYYY-MM-DD HH:MM:SS] =====
+
+  ```
+- This file helps debug agent behavior and track what changes were processed
+- **Log Rotation**: If file exceeds 10MB, rotate to `.git-commit.log.1` before creating new log
+- **Gitignore**: Ensure `.git-commit.log*` is in .gitignore to avoid committing debug data
+
+#### 7. Invoke Unit Test Agent
+- Pass the filtered git changes to the `mr-unit-test` agent
+- Provide context: "These are the source code changes from the recent commits. Please update existing tests and document any new test coverage needed in REQUESTED.md."
+- Let the agent analyze and update tests according to its workflow
+
+#### 8. Commit Test Updates
+If the mr-unit-test agent made changes:
+- Review the changes made by the agent
+- Create commit(s) for test updates:
+  ```
+  test: update unit tests for recent changes
+
+  - Updated tests affected by [brief description of main changes]
+  - Fixed import paths and method signatures in test files
+  - Added requested test coverage documentation
+
+  Generated by: mr-unit-test agent
+  ```
+
+### Phase 3: Documentation Updates
+
+#### 9. Invoke Tech Writer Agent
+- Pass the original git changes (from step 5) to the `sassy-tech-writer` agent
+- Provide context: "These are the source code changes from recent commits. Please update documentation to reflect these changes."
+- Let the agent analyze and update documentation according to its workflow
+
+#### 10. Commit Documentation Updates
+If the sassy-tech-writer agent made changes:
+- Review the changes made by the agent
+- Create commit(s) for documentation updates:
+  ```
+  docs: update documentation for recent changes
+
+  - Updated [list of docs] to reflect code changes
+  - Added cross-references for new functionality
+  - Updated tech writer notes and TODO items
+
+  Generated by: sassy-tech-writer agent
+  ```
+
+### Phase 4: Examples Update (if config changes detected)
+
+#### 11. Check for Configuration Changes
+If any changes affect `src/config/*.ts`:
+- Invoke the `examples-guru` agent
+- Pass the configuration-related changes
+- Provide context: "These are configuration schema changes from recent commits. Please update example files to reflect these changes."
+
+#### 12. Commit Example Updates
+If the examples-guru agent made changes:
+- Review the changes made by the agent
+- Create commit(s) for example updates:
+  ```
+  examples: update configuration examples for schema changes
+
+  - Updated example files to reflect new configuration options
+  - Added migration notes for deprecated fields
+  - Updated comments and documentation in examples
+
+  Generated by: examples-guru agent
+  ```
+
+## Advanced Grouping Logic
+
+### Smart File Analysis
+Before grouping, analyze each changed file:
+- **Imports/Exports**: Files that import/export each other likely belong together
+- **Function Calls**: Files where one calls functions from another
+- **Type Dependencies**: Files sharing TypeScript interfaces or types
+- **Configuration**: Files that reference the same config options
+- **Test Coverage**: Source files and their corresponding test files
+
+### Dependency Graph Consideration
+- Use `git log --graph --oneline` patterns to understand change relationships
+- Group files that would break if committed separately
+- Prioritize atomic changes that maintain build integrity
+
+### Context-Aware Splitting
+- **Large refactoring**: May need multiple commits even for the same feature
+- **Database changes**: Schema + code changes might need separate commits
+- **Breaking changes**: Isolate breaking changes for clear git history
+
+## Error Handling & Recovery
+
+### Commit Issues
+- If a grouped commit fails, analyze the failure and regroup if needed
+- Use `git reset --soft HEAD~1` to undo and regroup problematic commits
+- Ensure each commit passes basic syntax/build checks
+
+### Agent Communication Issues
+- If mr-unit-test agent fails, continue with documentation phase
+- If sassy-tech-writer agent fails, report the issue but don't block
+- Always report what was accomplished and what failed
+
+### Validation
+- After all phases, run a final `git status` to ensure clean working directory
+- Verify all changes have been committed appropriately
+- Provide summary of all commits created
+
+## Output Format
+
+Provide a comprehensive summary:
+
+### Commits Created
+```
+1. feat(actions): add team_notify tool - abc1234
+2. fix(process-pool): resolve race condition - def5678
+3. refactor(config): simplify validation logic - ghi9012
+```
+
+### Test Updates
+- Files modified by mr-unit-test agent
+- Test commit hash if created
+- Summary of REQUESTED.md updates
+
+### Documentation Updates
+- Files modified by sassy-tech-writer agent
+- Documentation commit hash if created
+- Summary of TODO.md updates
+
+### Final Status
+- Total commits created: X
+- Branch status: clean/dirty
+- Any issues encountered
+- Recommended next steps
+- Debug log saved to: `.git-commit.log`
+
+## Success Criteria
+
+✅ **Clean History**: Each commit represents a logical unit of work
+✅ **Atomic Changes**: Each commit builds and functions independently
+✅ **Comprehensive**: Tests and docs are updated to match code changes
+✅ **Traceable**: Clear commit messages explain what, why, and impact
+✅ **Automated**: Minimal manual intervention required for routine changes
+
+Your goal: Create a professional, maintainable git history while ensuring the codebase remains fully tested and documented.

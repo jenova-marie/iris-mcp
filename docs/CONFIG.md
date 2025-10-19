@@ -526,7 +526,6 @@ const IrisConfigSchema = z.object({
     .optional(),
   // Phase 2: Remote execution via SSH
   remote: z.string().optional(),
-  ssh2: z.boolean().optional(),
   remoteOptions: z.object({
     identity: z.string().optional(),
     passphrase: z.string().optional(),
@@ -665,6 +664,188 @@ Config file: /Users/jenova/.iris/config.yaml
 Team path:   "./projects/alpha"
 Resolved:    /Users/jenova/.iris/projects/alpha
 ```
+
+---
+
+## Session MCP Configuration
+
+### Overview
+
+Session MCP configuration enables writing MCP config files for each Claude session, allowing the Iris MCP server to identify which team is making requests through sessionId-based URL routing.
+
+**Key Benefits:**
+- Session-specific routing: Each team's Claude instance gets a unique `/mcp/{sessionId}` endpoint
+- Works for both local and remote teams
+- Configurable MCP config file location
+- Enables proper team identification in multi-team setups
+
+### Configuration Fields
+
+**`sessionMcpEnabled`** - Boolean (default: `false`)
+
+Enable MCP config file writing for sessions. When enabled, Iris writes a config file before spawning Claude with the `--mcp-config` flag.
+
+**`sessionMcpPath`** - String (default: `".claude/iris/mcp"`)
+
+Directory path for MCP config files, relative to the team's project path. Config files are written to:
+```
+<team-path>/<sessionMcpPath>/iris-mcp-<sessionId>.json
+```
+
+### Global vs Team Settings
+
+Both settings can be configured globally (in `settings`) and overridden per-team (in `teams.<team-name>`).
+
+**Global configuration:**
+```yaml
+settings:
+  sessionMcpEnabled: true
+  sessionMcpPath: .claude/iris/mcp  # All teams use this by default
+```
+
+**Team override:**
+```yaml
+teams:
+  team-custom:
+    path: /path/to/project
+    sessionMcpEnabled: true  # Override global setting
+    sessionMcpPath: .custom/mcp/dir  # Custom path for this team only
+```
+
+### Examples
+
+**Enable for all teams globally:**
+```yaml
+settings:
+  sessionMcpEnabled: true
+  sessionMcpPath: .claude/iris/mcp
+
+teams:
+  team-frontend:
+    path: /Users/you/projects/frontend
+    description: Frontend team
+
+  team-backend:
+    path: /Users/you/projects/backend
+    description: Backend team
+```
+
+**Enable for specific teams only:**
+```yaml
+settings:
+  sessionMcpEnabled: false  # Disabled globally
+
+teams:
+  team-frontend:
+    path: /Users/you/projects/frontend
+    sessionMcpEnabled: true  # Enabled for this team only
+
+  team-backend:
+    path: /Users/you/projects/backend
+    # No sessionMcpEnabled = uses global default (false)
+```
+
+**Custom MCP directory path:**
+```yaml
+teams:
+  team-special:
+    path: /Users/you/projects/special
+    sessionMcpEnabled: true
+    sessionMcpPath: .mcp/configs  # Custom directory
+```
+
+**Remote team with session MCP:**
+```yaml
+teams:
+  team-remote:
+    path: /home/user/projects/app
+    remote: ssh user@remote-host
+    claudePath: ~/.local/bin/claude
+    sessionMcpEnabled: true  # Works with remote teams too
+    enableReverseMcp: true   # Enable reverse tunnel for MCP communication
+```
+
+### How It Works
+
+1. **Session Creation**: When a team session starts, Iris generates a unique sessionId
+2. **MCP Config Writing**: If `sessionMcpEnabled: true`, Iris:
+   - Builds MCP config JSON with sessionId in URL: `http://localhost:1615/mcp/{sessionId}`
+   - Calls script (mcp-cp.sh/ps1 for local, mcp-scp.sh/ps1 for remote)
+   - Script writes config to `<team-path>/<sessionMcpPath>/iris-mcp-<sessionId>.json`
+3. **Claude Spawn**: Iris spawns Claude with `--mcp-config <filepath>`
+4. **Request Routing**: Claude connects to Iris using sessionId in URL path
+5. **Cleanup**: On termination, Iris deletes the MCP config file
+
+### File Locations
+
+**Local team example:**
+```
+Team path: /Users/you/projects/frontend
+SessionId: abc-123-def
+sessionMcpPath: .claude/iris/mcp
+
+File created: /Users/you/projects/frontend/.claude/iris/mcp/iris-mcp-abc-123-def.json
+```
+
+**Remote team example:**
+```
+Remote path: /home/user/projects/backend
+SessionId: xyz-789-ghi
+sessionMcpPath: .claude/iris/mcp
+
+File created: /home/user/projects/backend/.claude/iris/mcp/iris-mcp-xyz-789-ghi.json
+```
+
+### Custom Scripts
+
+You can provide custom scripts to handle MCP config file writing via the `mcpConfigScript` field:
+
+```yaml
+teams:
+  team-custom:
+    path: /path/to/project
+    sessionMcpEnabled: true
+    mcpConfigScript: /path/to/custom-mcp-writer.sh
+```
+
+**Script interface:**
+- **Local**: `script <sessionId> <team-path> [sessionMcpPath]`
+- **Remote**: `script <sessionId> <sshHost> <remote-team-path> [sessionMcpPath]`
+- **Input**: JSON config on stdin
+- **Output**: File path on stdout
+
+See `examples/scripts/mcp-cp.sh` and `examples/scripts/mcp-scp.sh` for reference implementations.
+
+### Security Considerations
+
+**File Permissions:**
+- Config directory: `700` (owner-only read/write/execute)
+- Config files: `600` (owner-only read/write)
+- Bundled scripts set these automatically
+
+**Cleanup:**
+- Config files are deleted when sessions terminate
+- Orphaned files may remain if Iris crashes (safe to delete manually)
+
+**Network:**
+- Local teams connect to `http://localhost:1615/mcp/{sessionId}`
+- Remote teams use reverse tunnel: `https://localhost:1615/mcp/{sessionId}` (if `enableReverseMcp: true`)
+
+### Troubleshooting
+
+**Config file not created:**
+- Check `sessionMcpEnabled: true` is set
+- Verify team path exists and is writable
+- Check Iris logs for script execution errors
+
+**Permission denied:**
+- Ensure scripts have execute permission: `chmod +x examples/scripts/mcp-*.sh`
+- For remote: verify SSH key authentication works
+
+**sessionId routing not working:**
+- Confirm `--mcp-config` flag appears in launch command (check logs)
+- Verify config file contains correct URL with sessionId
+- Check Iris HTTP server is listening on correct port
 
 ---
 
@@ -1040,6 +1221,8 @@ interface Settings {
   defaultTransport?: "stdio" | "http";  // "stdio" - MCP transport mode
   wonderLoggerConfig?: string;    // "./wonder-logger.yaml" - observability config
   hotReloadConfig?: boolean;      // false - enable automatic config reload
+  sessionMcpEnabled?: boolean;    // false - enable MCP config file writing
+  sessionMcpPath?: string;        // ".claude/iris/mcp" - MCP config directory path
 }
 ```
 
@@ -1104,7 +1287,6 @@ interface IrisConfig {
   color?: string;                 // Hex color for UI (#FF6B9D)
   // Remote execution
   remote?: string;                // SSH connection string (e.g., "user@host")
-  ssh2?: boolean;                 // Use ssh2 library instead of OpenSSH (default: false)
   remoteOptions?: RemoteOptions;  // SSH connection options
   claudePath?: string;            // Custom Claude CLI path (supports ~ expansion)
   // Reverse MCP tunneling
@@ -1112,6 +1294,9 @@ interface IrisConfig {
   reverseMcpPort?: number;        // Port to tunnel (default: 1615)
   allowHttp?: boolean;            // Allow HTTP for reverse MCP (dev only)
   mcpConfigScript?: string;       // Custom script path for writing MCP config files
+  // Session MCP configuration
+  sessionMcpEnabled?: boolean;    // Enable MCP config file writing (overrides global)
+  sessionMcpPath?: string;        // MCP config directory path (overrides global)
   // Permission approval mode
   grantPermission?: "yes" | "no" | "ask" | "forward";  // Permission mode (default: "ask")
   // Tool allowlist/denylist
@@ -1333,8 +1518,8 @@ See [PERMISSION_APPROVAL_PLAN.md](./future/PERMISSION_APPROVAL_PLAN.md) for impl
 - TeamsConfigManager API and methods
 - Dashboard and database configuration options
 
-**Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, hotReloadConfig, grantPermission, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration, MCP config scripts, mcpConfigScript, mcp-cp.sh, mcp-scp.sh, reverse MCP, ClaudeCommandBuilder, getMcpConfigPath
+**Keywords:** config.yaml, YAML, environment variables, interpolation, Zod validation, hot-reload, hotReloadConfig, grantPermission, permission approval, TeamsConfigManager, paths.ts, env-interpolation, teams configuration, MCP config scripts, mcpConfigScript, mcp-cp.sh, mcp-scp.sh, reverse MCP, ClaudeCommandBuilder, getMcpConfigPath, sessionMcpEnabled, sessionMcpPath, session MCP configuration, sessionId routing, local-transport.ts, ssh-transport.ts, mcp-config-writer.ts
 
 **Last Updated:** 2025-10-18
-**Change Context:** Updated MCP config file location from temporary directories to team-specific `.claude/iris/mcp` directory. All MCP config scripts (mcp-cp.sh, mcp-cp.ps1, mcp-scp.sh, mcp-scp.ps1) now write to `<team-path>/.claude/iris/mcp/iris-mcp-{sessionId}.json` instead of `/tmp` or `~/.iris/mcp-configs`. Added `ClaudeCommandBuilder.getMcpConfigPath()` helper method to generate the MCP config file path. Scripts now create the `.claude/iris/mcp` directory if it doesn't exist. Updated script interfaces to require team path as a mandatory argument instead of optional destination directory.
-**Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design), src/config/iris-config.ts (schema), src/index.ts (implementation), src/utils/command-builder.ts (getMcpConfigPath method), examples/scripts/mcp-*.sh (script implementations)
+**Change Context:** Added `sessionMcpEnabled` and `sessionMcpPath` configuration fields to enable session-specific MCP config file writing for both local and remote teams. This enables sessionId-based routing for proper team identification. Both fields can be set globally (settings) and overridden per-team. Updated all MCP config scripts (mcp-cp.sh, mcp-cp.ps1, mcp-scp.sh, mcp-scp.ps1) to accept optional sessionMcpPath parameter with `.claude/iris/mcp` as default. Updated transports (local-transport.ts, ssh-transport.ts) to use `sessionMcpEnabled` instead of `enableReverseMcp` for config file writing. Updated `mcp-config-writer.ts` and `ClaudeCommandBuilder.getMcpConfigPath()` to support configurable paths. Added comprehensive documentation section explaining session MCP configuration, examples, troubleshooting, and security considerations.
+**Related Files:** GETTING_STARTED.md (config references), FEATURES.md (configuration management section), CLAUDE.md (config path references), README.md (config snippets), ARCHITECTURE.md (config system design), src/config/iris-config.ts (schema), src/transport/local-transport.ts, src/transport/ssh-transport.ts, src/utils/command-builder.ts, src/utils/mcp-config-writer.ts, examples/scripts/mcp-*.sh (script implementations)

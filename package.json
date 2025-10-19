@@ -80,6 +80,7 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@jenova-marie/ts-rust-result": "^1.3.6",
     "@modelcontextprotocol/sdk": "^1.19.1",
     "better-sqlite3": "^11.0.0",
     "commander": "^12.0.0",

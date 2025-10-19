@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@jenova-marie/ts-rust-result':
+        specifier: ^1.3.6
+        version: 1.3.6
       '@modelcontextprotocol/sdk':
         specifier: ^1.19.1
         version: 1.19.1
@@ -315,6 +318,10 @@ packages:
   '@istanbuljs/schema@0.1.3':
     resolution: {integrity: sha512-ZXRY4jNvVgSVQ8DL3LTcakaAtXwTVUxE81hslsyD2AtoXW/wVob10HkOJ1X/pAlcI7D+2YoZKg5do8G/w6RYgA==}
     engines: {node: '>=8'}
+
+  '@jenova-marie/ts-rust-result@1.3.6':
+    resolution: {integrity: sha512-LyP6S092v84UBBNB8I51aR6pa1SI4EsmhhEkqbtoaWN8LfuFzFIB1IKF2RSRLAaJ4fW2/RD4DKFlg39WX9Ufrg==}
+    engines: {node: '>=18'}
 
   '@jenova-marie/wonder-logger@1.0.12':
     resolution: {integrity: sha512-2hzGR/bHEzLbmsGHBFlNaX/DPiZ9Qy1kzjXf/j/f7+cHyCwiUDo0EF2JH8/UlUqftD+pCKgSTTc3/RyF44a8sg==}
@@ -2762,6 +2769,8 @@ snapshots:
       wrap-ansi-cjs: wrap-ansi@7.0.0
 
   '@istanbuljs/schema@0.1.3': {}
+
+  '@jenova-marie/ts-rust-result@1.3.6': {}
 
   '@jenova-marie/wonder-logger@1.0.12(@opentelemetry/core@2.1.0(@opentelemetry/api@1.9.0))':
     dependencies:

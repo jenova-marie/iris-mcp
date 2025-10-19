@@ -3,13 +3,13 @@ name: Release & Publish
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   release:
     types: [created]
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., 1.0.0)'
+        description: "Version to publish (e.g., 1.0.0)"
         required: true
         type: string
 
@@ -21,73 +21,44 @@ jobs:
   publish-npm:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Install pnpm
-      uses: pnpm/action-setup@v2
-      with:
-        version: 10.14.0
-        run_install: false
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10.14.0
+          run_install: false
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20.x'
-        registry-url: 'https://registry.npmjs.org'
-        cache: 'pnpm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          registry-url: "https://registry.npmjs.org"
+          cache: "pnpm"
 
-    - name: Install build dependencies for native modules
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y build-essential python3
+      - name: Install build dependencies for native modules
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential python3
 
-    - name: Install dependencies
-      run: pnpm install --frozen-lockfile --dangerously-allow-all-builds
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --dangerously-allow-all-builds
 
-    - name: Rebuild native modules
-      run: |
-        # Navigate to better-sqlite3 in pnpm store and rebuild from source
-        cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
-        npm run build-release
-        cd -
+      - name: Rebuild native modules
+        run: |
+          # Navigate to better-sqlite3 in pnpm store and rebuild from source
+          cd node_modules/.pnpm/better-sqlite3@11.10.0/node_modules/better-sqlite3
+          npm run build-release
+          cd -
 
-    - name: Build project
-      run: pnpm build
+      - name: Build project
+        run: pnpm build
 
-    - name: Run tests
-      run: pnpm test:unit
+      - name: Run tests
+        run: pnpm test:unit
 
-    - name: Configure npm
-      run: |
-        echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
-        npm whoami
-
-    - name: Update version if manual trigger
-      if: github.event_name == 'workflow_dispatch'
-      run: |
-        npm version ${{ github.event.inputs.version }} --no-git-tag-version
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add package.json pnpm-lock.yaml
-        git commit -m "chore: bump version to ${{ github.event.inputs.version }}"
-        git push
-
-    - name: Publish to npm
-      run: pnpm publish --access public
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-    - name: Create GitHub Release (if manual)
-      if: github.event_name == 'workflow_dispatch'
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: v${{ github.event.inputs.version }}
-        release_name: Release v${{ github.event.inputs.version }}
-        body: |
-          ## Changes in this Release
-          See [CHANGELOG.md](https://github.com/jenova-marie/iris-mcp/blob/main/CHANGELOG.md) for details.
-        draft: false
-        prerelease: false
+      - name: Publish to npm
+        run: pnpm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

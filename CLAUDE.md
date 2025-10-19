@@ -18,6 +18,45 @@ team_getTeamName({ pwd: "/Users/jenova/projects/jenova-marie/iris-mcp" })
 // Returns: { teamName: "team-iris", found: true }
 ```
 
+## Agent Prompts via MCP Protocol
+
+Iris MCP exposes specialized agent prompts through the **native MCP prompts protocol**, making them discoverable and directly accessible:
+
+**Available via MCP Prompts:**
+- `tech-writer` - Technical documentation specialist
+- `unit-tester` - Unit testing expert
+- `integration-tester` - Integration testing specialist
+- `code-reviewer` - Code review expert
+- `debugger` - Debugging specialist
+- `refactorer` - Code refactoring expert
+- `changeloger` - Changelog writer
+- `error-handler` - Error handling specialist
+- `example-writer` - Code examples writer
+- `logger` - Logging enhancement specialist
+
+**Usage** (when MCP client supports prompts):
+```typescript
+// List available prompts
+const prompts = await mcp.listPrompts();
+
+// Get a specialized agent prompt
+const prompt = await mcp.getPrompt({
+  name: "unit-tester",
+  arguments: {
+    projectPath: "/path/to/project",
+    includeGitDiff: "true"
+  }
+});
+```
+
+**Features:**
+- Auto-detects project context (TypeScript, React, Vitest, etc.)
+- Template hierarchy: project → user → bundled
+- Git diff integration for recent changes
+- Handlebars templates with custom helpers
+
+See `docs/PROMPTS_IMPLEMENTATION.md` for full documentation.
+
 ## Build & Development Commands
 
 ```bash

@@ -115,8 +115,8 @@ export class LocalTransport implements Transport {
     // Capture team config snapshot for debugging
     this.teamConfigSnapshot = this.buildTeamConfigSnapshot();
 
-    // Build and write MCP config file if reverse MCP is enabled
-    if (this.irisConfig.enableReverseMcp) {
+    // Build and write MCP config file if session MCP is enabled
+    if (this.irisConfig.sessionMcpEnabled) {
       this.logger.debug("Building MCP config for local transport", {
         teamName: this.teamName,
         sessionId: this.sessionId,
@@ -127,10 +127,14 @@ export class LocalTransport implements Transport {
         this.sessionId,
       );
 
+      const sessionMcpPath =
+        this.irisConfig.sessionMcpPath ?? ".claude/iris/mcp";
+
       this.mcpConfigFilePath = await writeMcpConfigLocal(
         mcpConfig,
         this.sessionId,
         this.irisConfig.path,
+        sessionMcpPath,
         this.irisConfig.mcpConfigScript,
       );
 

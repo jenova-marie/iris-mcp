@@ -233,8 +233,8 @@ export class SSHTransport implements Transport {
     this.startTime = Date.now();
     this.currentCacheEntry = spawnCacheEntry;
 
-    // Build and write MCP config file if reverse MCP is enabled
-    if (this.irisConfig.enableReverseMcp) {
+    // Build and write MCP config file if session MCP is enabled
+    if (this.irisConfig.sessionMcpEnabled) {
       this.logger.debug("Building MCP config for remote transport", {
         teamName: this.teamName,
         sessionId: this.sessionId,
@@ -248,11 +248,15 @@ export class SSHTransport implements Transport {
       // Extract SSH host from remote string
       const sshHost = this.extractSshHost();
 
+      const sessionMcpPath =
+        this.irisConfig.sessionMcpPath ?? ".claude/iris/mcp";
+
       this.mcpConfigFilePath = await writeMcpConfigRemote(
         mcpConfig,
         this.sessionId,
         sshHost,
         this.irisConfig.path,
+        sessionMcpPath,
         this.irisConfig.mcpConfigScript,
       );
 

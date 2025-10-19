@@ -1,9 +1,10 @@
 # mcp-cp.ps1 - Write MCP config file locally (Windows PowerShell)
 #
-# Usage: Get-Content config.json | .\mcp-cp.ps1 <sessionId> <team-path>
+# Usage: Get-Content config.json | .\mcp-cp.ps1 <sessionId> <team-path> [sessionMcpPath]
 #
 # Reads MCP config JSON from stdin, writes to file, outputs the file path to stdout.
-# Destination: <team-path>\.claude\iris\mcp\iris-mcp-<sessionId>.json
+# Destination: <team-path>\<sessionMcpPath>\iris-mcp-<sessionId>.json
+# Default sessionMcpPath: .claude\iris\mcp
 #
 
 param(
@@ -11,13 +12,16 @@ param(
     [string]$SessionId,
 
     [Parameter(Mandatory=$true)]
-    [string]$TeamPath
+    [string]$TeamPath,
+
+    [Parameter(Mandatory=$false)]
+    [string]$sessionMcpPath = ".claude\iris\mcp"
 )
 
 $ErrorActionPreference = "Stop"
 
 # Build destination directory path
-$McpDir = Join-Path $TeamPath ".claude\iris\mcp"
+$McpDir = Join-Path $TeamPath $sessionMcpPath
 
 # Create directory if it doesn't exist
 if (-not (Test-Path $McpDir)) {

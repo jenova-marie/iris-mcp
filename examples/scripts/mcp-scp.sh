@@ -2,12 +2,13 @@
 #
 # mcp-scp.sh - Write MCP config file to remote host via SCP
 #
-# Usage: echo '{"mcpServers": {...}}' | mcp-scp.sh <sessionId> <ssh-host> <remote-team-path>
+# Usage: echo '{"mcpServers": {...}}' | mcp-scp.sh <sessionId> <ssh-host> <remote-team-path> [sessionMcpPath]
 #
 # Reads MCP config JSON from stdin, writes to local temp file, SCPs to remote host,
 # outputs the remote file path to stdout, then cleans up local temp file.
 #
-# Destination: <remote-team-path>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+# Destination: <remote-team-path>/<sessionMcpPath>/iris-mcp-<sessionId>.json
+# Default sessionMcpPath: .claude/iris/mcp
 #
 
 set -euo pipefail
@@ -19,12 +20,15 @@ REMOTE_TEAM_PATH="${3:-}"
 
 if [ -z "$SESSION_ID" ] || [ -z "$SSH_HOST" ] || [ -z "$REMOTE_TEAM_PATH" ]; then
   echo "ERROR: Session ID, SSH host, and remote team path required" >&2
-  echo "Usage: $0 <sessionId> <ssh-host> <remote-team-path>" >&2
+  echo "Usage: $0 <sessionId> <ssh-host> <remote-team-path> [sessionMcpPath]" >&2
   exit 1
 fi
 
+# Get MCP directory path from fourth argument (default: .claude/iris/mcp)
+MCP_DIR_PATH="${4:-.claude/iris/mcp}"
+
 # Build remote MCP directory path
-REMOTE_MCP_DIR="${REMOTE_TEAM_PATH}/.claude/iris/mcp"
+REMOTE_MCP_DIR="${REMOTE_TEAM_PATH}/${MCP_DIR_PATH}"
 
 # Create local temp file
 LOCAL_TEMP=$(mktemp /tmp/iris-mcp-XXXXXX.json)

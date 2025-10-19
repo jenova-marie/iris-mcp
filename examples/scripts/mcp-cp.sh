@@ -2,10 +2,11 @@
 #
 # mcp-cp.sh - Write MCP config file locally
 #
-# Usage: echo '{"mcpServers": {...}}' | mcp-cp.sh <sessionId> <team-path>
+# Usage: echo '{"mcpServers": {...}}' | mcp-cp.sh <sessionId> <team-path> [sessionMcpPath]
 #
 # Reads MCP config JSON from stdin, writes to file, outputs the file path to stdout.
-# Destination: <team-path>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+# Destination: <team-path>/<sessionMcpPath>/iris-mcp-<sessionId>.json
+# Default sessionMcpPath: .claude/iris/mcp
 #
 
 set -euo pipefail
@@ -14,7 +15,7 @@ set -euo pipefail
 SESSION_ID="${1:-}"
 if [ -z "$SESSION_ID" ]; then
   echo "ERROR: Session ID required" >&2
-  echo "Usage: $0 <sessionId> <team-path>" >&2
+  echo "Usage: $0 <sessionId> <team-path> [sessionMcpPath]" >&2
   exit 1
 fi
 
@@ -22,12 +23,15 @@ fi
 TEAM_PATH="${2:-}"
 if [ -z "$TEAM_PATH" ]; then
   echo "ERROR: Team path required" >&2
-  echo "Usage: $0 <sessionId> <team-path>" >&2
+  echo "Usage: $0 <sessionId> <team-path> [sessionMcpPath]" >&2
   exit 1
 fi
 
+# Get MCP directory path from third argument (default: .claude/iris/mcp)
+MCP_DIR_PATH="${3:-.claude/iris/mcp}"
+
 # Build destination directory path
-MCP_DIR="${TEAM_PATH}/.claude/iris/mcp"
+MCP_DIR="${TEAM_PATH}/${MCP_DIR_PATH}"
 
 # Create directory if it doesn't exist
 mkdir -p "$MCP_DIR"

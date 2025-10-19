@@ -31,7 +31,7 @@ The codebase uses a **three-tier reactive architecture**:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Layer 1: Transport (Pure RxJS)                         │
-│  - LocalTransport, SSH2Transport, SSHTransport          │
+│  - LocalTransport, SSHTransport                         │
 │  - Emits: status$, errors$                              │
 │  - NO EventEmitter                                      │
 └──────────────────┬──────────────────────────────────────┘
@@ -361,7 +361,7 @@ The RxJS migration followed a **progressive enhancement strategy** with backward
 
 ### Phase 1: Transport Layer
 1. ✅ Added `status$` and `errors$` observables to Transport interface
-2. ✅ Implemented observables in LocalTransport, SSH2Transport, SSHTransport
+2. ✅ Implemented observables in LocalTransport, SSHTransport
 3. ✅ Removed all EventEmitter code from transports
 4. ✅ Kept Transport interface stable
 

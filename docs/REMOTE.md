@@ -57,7 +57,6 @@ teams:
 - **Reverse MCP** - Remote Claude instances can call back to local Iris via SSH tunnel
 
 **🔮 Future Enhancements:**
-- ssh2 library transport (pure JavaScript, opt-in)
 - Auto-reconnect logic for transient network failures
 - Connection state tracking (online/offline/error)
 - Docker transport (`docker exec`)
@@ -114,7 +113,7 @@ Iris can now:
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │         TransportFactory (NEW)                        │  │
 │  │  createTransport(irisConfig) → Transport             │  │
-│  │    - if (config.remote): SSH2Transport          │  │
+│  │    - if (config.remote): SSHTransport          │  │
 │  │    - else: LocalTransport                            │  │
 │  └────────────────────┬─────────────────────────────────┘  │
 └────────────────────────┼─────────────────────────────────────┘

@@ -235,17 +235,6 @@ const mcpConfig = {
 args.push('--mcp-config', JSON.stringify(mcpConfig));
 ```
 
-**SSH2Transport** (`src/transport/ssh2-transport.ts`):
-```typescript
-const mcpConfig = {
-  mcpServers: {
-    iris: {
-      type: "http",
-      url: `${protocol}://localhost:${mcpPort}/mcp/${this.sessionId}`
-    }
-  }
-};
-
 args.push('--mcp-config', `'${JSON.stringify(mcpConfig)}'`);
 ```
 
@@ -518,7 +507,6 @@ ps aux | grep claude
 
 **Fix:**
 - Ensure reverse MCP tunnel uses session-specific URL: `http://localhost:1615/mcp/{sessionId}`
-- Check MCP config in LocalTransport/SSH2Transport spawn args
 - Verify Express route handler wraps request in `runWithContext()`
 
 ### Permission Timeout

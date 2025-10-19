@@ -26,7 +26,6 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 ### Remote Execution via SSH ✅
 
 - **OpenSSH Client Transport**: Execute Claude Code on remote hosts via SSH (default, implemented)
-- **SSH2 Library Transport**: Pure Node.js SSH implementation (planned, opt-in)
 - **Transport Abstraction**: Clean interface supporting LocalTransport and SSHTransport implementations
 - **Configuration Flexibility**: Simple `remote: "ssh user@host"` configuration flag enables remote execution
 - **Session Lifecycle**: SSH connection lifecycle tied to process session lifecycle
@@ -470,7 +469,6 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 ### Remote Execution
 
 - **SSH Client**: OpenSSH CLI via `child_process` (default, implemented)
-- **SSH2 Library**: `ssh2` package for pure Node.js SSH (planned, opt-in)
 - **Transport Abstraction**: Interface-based design for LocalTransport vs SSHTransport
 
 ---

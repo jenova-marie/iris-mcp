@@ -25,6 +25,18 @@ export interface CommandInfo {
 }
 
 /**
+ * MCP server configuration structure
+ */
+export interface McpConfig {
+  mcpServers: {
+    [serverName: string]: {
+      type: string;
+      url: string;
+    };
+  };
+}
+
+/**
  * Load and render team identity prompt template
  */
 function loadTeamIdentityPrompt(teamName: string): string {
@@ -184,7 +196,7 @@ export class ClaudeCommandBuilder {
    *
    * NOTE: This is now public so transports can use it to generate MCP config files
    */
-  static buildMcpConfig(irisConfig: IrisConfig, sessionId: string): object {
+  static buildMcpConfig(irisConfig: IrisConfig, sessionId: string): McpConfig {
     // Determine MCP port (from config or env var or default)
     const mcpPort = irisConfig.enableReverseMcp
       ? irisConfig.reverseMcpPort || 1615

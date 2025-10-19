@@ -155,16 +155,6 @@ Before grouping, analyze each changed file:
 - Use `git reset --soft HEAD~1` to undo and regroup problematic commits
 - Ensure each commit passes basic syntax/build checks
 
-### Agent Communication Issues
-- If mr-unit-test agent fails, continue with documentation phase
-- If sassy-tech-writer agent fails, report the issue but don't block
-- Always report what was accomplished and what failed
-
-### Validation
-- After all phases, run a final `git status` to ensure clean working directory
-- Verify all changes have been committed appropriately
-- Provide summary of all commits created
-
 ## Output Format
 
 Provide a comprehensive summary:
@@ -175,16 +165,6 @@ Provide a comprehensive summary:
 2. fix(process-pool): resolve race condition - def5678
 3. refactor(config): simplify validation logic - ghi9012
 ```
-
-### Test Updates
-- Files modified by mr-unit-test agent
-- Test commit hash if created
-- Summary of REQUESTED.md updates
-
-### Documentation Updates
-- Files modified by sassy-tech-writer agent
-- Documentation commit hash if created
-- Summary of TODO.md updates
 
 ### Final Status
 - Total commits created: X

@@ -1,89 +1,94 @@
-===== Git Commit Session [2025-10-17 $(date +%H:%M:%S)] =====
-Session ID: mcp-config-refactor-$(date +%s)
+===== Git Commit Session [2025-10-18 19:10:00] =====
+Session ID: 2025-10-18T19:10:00Z
 Current Branch: main
-Total Commits Created: 8
+Total Commits Created: 9
 
 --- Commits Created ---
-1. 8b8f6cb - refactor(transport): move command-builder to utils
-2. 1bfa743 - feat(utils): add MCP config file writer with shell scripts
-3. 5da7f6c - fix(transport): refactor command-builder for file-based MCP config
-4. 31a63a3 - feat(config): add mcpConfigScript field for custom MCP config writers
-5. e08dfcf - feat(transport): implement file-based MCP config for local and SSH
-6. 6b4bf51 - test: update tests for command-builder relocation and MCP config
-7. 6a054d5 - docs: document MCP config file system and architecture changes
-8. 8f9e59d - chore: remove deprecated files and update slash command
-
---- Summary ---
-This session refactored the MCP configuration system to use file-based configs
-instead of stringified JSON, fixing a critical bug where --mcp-config flag
-expected a file path but was receiving JSON strings.
-
-Key Changes:
-- Moved command-builder.ts from src/transport/ to src/utils/
-- Created mcp-config-writer.ts utility for file operations
-- Added 4 shell scripts (mcp-cp.sh/ps1, mcp-scp.sh/ps1)
-- Updated both local and SSH transports to write config files
-- Added mcpConfigScript field to IrisConfig
-- Updated all tests and documentation
-
-Architecture: Pipe-based design where TypeScript streams JSON to shell scripts
-via stdin, scripts handle filesystem operations, and return file paths via stdout.
+1. aca7cb3 - feat(config): add session MCP configuration support
+2. 45afdca - feat(scripts): add sessionMcpPath parameter to MCP config scripts
+3. 2a26291 - feat(utils): add sessionMcpPath support to MCP config writers
+4. a5b2b46 - feat(transport): implement sessionMcpEnabled for local and remote sessions
+5. f41721a - fix(actions): use sessionMcpEnabled in fork action
+6. fbbaa39 - refactor(mcp): rename MCP tools for better semantic clarity
+7. 4954897 - test(mcp-config-writer): update tests for sessionMcpPath parameter
+8. 9d68b61 - docs(config): add comprehensive session MCP configuration section
+9. 832ce4b - chore: remove obsolete files and test artifacts
 
 --- Source Changes (src/ only) ---
-Files Modified: 13
-Files Created: 5 (mcp-config-writer.ts, 4 shell scripts)
-Files Relocated: 1 (command-builder.ts)
-
---- Git Diff Summary ---
-$(git diff HEAD~8..HEAD --stat)
+Files Modified: 7
+src/actions/compact.ts (deleted)
+src/actions/fork.ts
+src/config/iris-config.ts
+src/default.config.yaml
+src/mcp_server.ts
+src/process-pool/types.ts
+src/transport/local-transport.ts
+src/transport/ssh-transport.ts
+src/utils/command-builder.ts
+src/utils/mcp-config-writer.ts
 
 --- Agent Processing ---
-Unit Test Agent: Skipped (tests already updated in commit 6)
-Tech Writer Agent: Skipped (docs already updated in commit 7)
-Examples Guru Agent: Not applicable
+Unit Test Agent: invoking
+Tech Writer Agent: skipped (not configured)
+Examples Guru Agent: skipped (not configured)
 
-===== End Session [2025-10-17 $(date +%H:%M:%S)] =====
+===== End Session [2025-10-18 19:10:30] =====
 
-===== Git Commit Session #2 [2025-10-17 $(date +%H:%M:%S)] =====
-Session ID: spawn-scripts-fork-enhancements-$(date +%s)
+
+===== Git Commit Session [2025-10-18 23:01:49] =====
+Session ID: 2025-10-18T23:01:49
 Current Branch: main
-Total Commits Created: 6
+Total Commits Created: 4
 
 --- Commits Created ---
-1. 035f3a9 - feat(utils): add interactive and fork modes to command-builder
-2. 61966f8 - refactor(scripts): rename fork scripts to spawn for clarity
-3. e860088 - feat(actions): enhance fork action with MCP config and spawn scripts
-4. 37eba23 - docs: update documentation for spawn scripts and fork enhancements
-5. 4fa9f15 - chore(tests): remove stale command-builder test from transport
-6. efff55b - feat(utils): enable debug mode for all Claude sessions
-
---- Summary ---
-This session completed enhancements to the fork/spawn functionality and
-improved command-builder flexibility for both headless and interactive modes.
-
-Key Changes:
-- Enhanced command-builder with interactive and fork mode support
-- Renamed fork.{sh,ps1} to spawn.{sh,ps1} for clarity
-- Updated fork action to use new spawn scripts and MCP config files
-- Enabled --debug flag for all Claude sessions
-- Cleaned up stale test files from refactoring
-
-Architecture: CommandBuilder now supports both headless (stream-json I/O) and
-interactive (terminal) modes, with optional --fork-session flag for forking.
-
---- Source Changes (src/ only) ---
-Files Modified: 6
-Files Deleted: 2 (fork scripts)
-Files Created: 2 (spawn scripts)
+1. 06ea873 - chore(deps): add ts-rust-result dependency
+2. 31ce9eb - refactor(test): remove deprecated --allowed-tools test assertions
+3. 4d6b28c - docs: reorganize and archive obsolete implementation plans
+4. f86c85d - chore(config): update agent names and refine git-commit workflow
 
 --- All Changed Files ---
-$(git log --name-only --pretty=format: HEAD~6..HEAD | sort -u)
+.claude/agents/mr-unit-test.md
+.claude/agents/sassy-tech-writer.md
+.claude/commands/git-commit.md
+docs/.architecture-review-findings.md
+docs/ACTIONS.md
+docs/ARCHITECTURE.md
+docs/CHANGELOG.md
+docs/COMPACT_IMPLEMENTATION.md (deleted)
+docs/DASHBOARD.md
+docs/ENV_VARS.md
+docs/FEATURES.md
+docs/NOMENCLATURE.md
+docs/OBSERVABILITY.md
+docs/PERMISSIONS.md
+docs/PRINT.md
+docs/REMOTE.md
+docs/REVERSE_MCP.md
+docs/REVERSE_MCP_IMPLEMENTATION_PLAN.md (deleted)
+docs/REVERSE_MCP_SECURITY.md
+docs/TODO.md
+docs/future/API_AUTH.md (moved from docs/)
+docs/future/API_AUTH_IMPLEMENTATION_PLAN.md (moved from docs/)
+docs/future/API_IMPLEMENTATION_PLAN.md (moved from docs/)
+docs/future/CLAUDE_APPROVE.md
+docs/future/DI.md (deleted)
+docs/future/LAUNCH_COMMAND_DEBUGGING.md (deleted)
+docs/future/PERMISSION_APPROVAL_PLAN.md (deleted)
+package.json
+pnpm-lock.yaml
+REQUESTED.md (deleted)
+tests/integration/process/pool-manager.test.ts
+tests/unit/TODO.md
+tests/unit/utils/command-builder.test.ts
 
---- Git Diff Summary ---
-$(git diff HEAD~6..HEAD --stat)
+--- Summary Statistics ---
+Files changed: 32
+Insertions: 1,765
+Deletions: 4,394
+Net change: -2,629 lines
 
 --- Agent Processing ---
-Unit Test Agent: Skipped (tests updated in commits)
-Tech Writer Agent: Skipped (docs updated in commit 4)
-Examples Guru Agent: Not applicable
+Unit Test Agent (mr-unit-test): pending
+Tech Writer Agent (sassy-tech-writer): pending
 
+===== End Session [2025-10-18 23:01:49] =====

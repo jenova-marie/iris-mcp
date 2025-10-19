@@ -171,31 +171,35 @@ export async function fork(
     true, // fork (appends --fork-session)
   );
 
-  // Write MCP config file if enableReverseMcp is configured
+  // Write MCP config file if sessionMcpEnabled is configured
   let mcpConfigPath: string | undefined;
-  if (teamConfig.enableReverseMcp) {
+  if (teamConfig.sessionMcpEnabled) {
     const mcpConfig = ClaudeCommandBuilder.buildMcpConfig(
       teamConfig,
       session.sessionId,
     );
 
+    const mcpDirPath = teamConfig.sessionMcpPath ?? ".claude/iris/mcp";
+
     if (isRemote) {
       // Remote: use remote config writer
-      // Signature: writeMcpConfigRemote(mcpConfig, sessionId, sshHost, remoteTeamPath, scriptPath?)
+      // Signature: writeMcpConfigRemote(mcpConfig, sessionId, sshHost, remoteTeamPath, mcpDirPath?, scriptPath?)
       mcpConfigPath = await writeMcpConfigRemote(
         mcpConfig,
         session.sessionId,
         teamConfig.remote!,
         teamConfig.path,
+        mcpDirPath,
         teamConfig.mcpConfigScript,
       );
     } else {
       // Local: use local config writer
-      // Signature: writeMcpConfigLocal(mcpConfig, sessionId, teamPath, scriptPath?)
+      // Signature: writeMcpConfigLocal(mcpConfig, sessionId, teamPath, mcpDirPath?, scriptPath?)
       mcpConfigPath = await writeMcpConfigLocal(
         mcpConfig,
         session.sessionId,
         teamConfig.path,
+        mcpDirPath,
         teamConfig.mcpConfigScript,
       );
     }

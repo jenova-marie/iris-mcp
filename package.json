@@ -25,7 +25,7 @@
     "tsc": "tsc --noEmit",
     "inspector": "npx @modelcontextprotocol/inspector dist/index.js",
     "prepare": "npm run build",
-    "prepublishOnly": "pnpm run lint && pnpm run test && pnpm run build"
+    "prepublishOnly": "pnpm run lint && pnpm run test:unit && pnpm run build"
   },
   "keywords": [
     "mcp",

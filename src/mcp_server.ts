@@ -26,7 +26,6 @@ import { quickTell } from "./actions/quick_tell.js";
 import { cancel } from "./actions/cancel.js";
 import { reboot } from "./actions/reboot.js";
 import { deleteSession } from "./actions/delete.js";
-import { compact } from "./actions/compact.js";
 import { fork } from "./actions/fork.js";
 import { isAwake } from "./actions/isAwake.js";
 import { wake } from "./actions/wake.js";
@@ -44,8 +43,9 @@ const logger = getChildLogger("iris:mcp");
 // MCP Tool Definitions
 const TOOLS: Tool[] = [
   {
-    name: "team_tell",
-    description: "Tell a message to a specific team",
+    name: "send_message",
+    description:
+      "Send a message to a team and wait for response. Use this for communication that requires acknowledgment or when you need to wait for the team to complete a task.",
     inputSchema: {
       type: "object",
       properties: {
@@ -82,11 +82,12 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_quick_tell",
+    name: "quick_message",
     description:
-      "Quickly send a message to a team with timeout=-1 (async). " +
+      "Quickly send a message to a team without waiting (async/fire-and-forget). " +
       "Returns immediately after queuing the message. " +
-      "Convenience wrapper for team_tell with hardcoded timeout=-1 to execute quicly",
+      "Use when you want to notify a team but don't need to wait for their response. " +
+      'Perfect for phrases like "quickly tell team-X to..." or "notify team-Y that..."',
     inputSchema: {
       type: "object",
       properties: {
@@ -108,40 +109,58 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_cancel",
+    name: "ask_message",
     description:
-      "EXPERIMENTAL: Attempt to cancel a running operation by sending ESC to stdin. " +
-      "This may or may not work depending on whether Claude's headless mode supports ESC interrupt handling. " +
-      "Use this when you want to try interrupting a long-running Claude operation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        team: {
-          type: "string",
-          description: "Name of the team whose operation to cancel",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Name of the team requesting the cancel",
-        },
-      },
-      required: ["team", "fromTeam"],
-    },
-  },
-  {
-    name: "team_reboot",
-    description:
-      "Create a fresh new session for a team pair. Use this to start over with a clean slate, " +
-      "restart the conversation, or reset when you want a fresh beginning without prior message history. " +
-      "Terminates existing process, deletes old session (including file cleanup), and creates a brand new " +
-      "session with a new UUID. Perfect for starting fresh, clearing history, getting a new start, or resetting " +
-      "after context has become too large or confused.",
+      "Ask a question to a team and wait for their response. " +
+      "This is a semantic alias for send_message that makes it clear you're expecting an answer. " +
+      'Use for phrases like "ask team-X about..." or "ask team-Y to explain..."',
     inputSchema: {
       type: "object",
       properties: {
         toTeam: {
           type: "string",
-          description: "Name of the team to create fresh session for",
+          description:
+            'Name of the team to ask (e.g., "frontend", "backend", "mobile")',
+        },
+        message: {
+          type: "string",
+          description: "The question or request to send",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team asking the question",
+        },
+        timeout: {
+          type: "number",
+          description:
+            "Optional timeout in milliseconds (default: 30000). 0 to wait indefinitely.",
+        },
+        persist: {
+          type: "boolean",
+          description:
+            "Use persistent queue (default: false). When true, message is queued in SQLite.",
+        },
+        ttlDays: {
+          type: "number",
+          description:
+            "Optional: TTL in days for persistent notifications (default: 30). Only used when persist=true.",
+        },
+      },
+      required: ["toTeam", "message", "fromTeam"],
+    },
+  },
+  {
+    name: "session_reboot",
+    description:
+      "Reboot a session to start fresh with a clean slate. " +
+      "Creates a brand new session with new UUID, terminating the existing process and deleting old session data. " +
+      "Use when you want to restart the conversation, clear history, or reset after context has become too large or confused.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        toTeam: {
+          type: "string",
+          description: "Name of the team whose session to reboot",
         },
         fromTeam: {
           type: "string",
@@ -152,17 +171,17 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_delete",
+    name: "session_delete",
     description:
-      "Delete a team session permanently. Terminates the process and removes the session data completely. " +
-      "Unlike clear which creates a new session, delete just removes the session without replacement. " +
-      "Use this when you want to completely remove a session and don't need a fresh one.",
+      "Delete a session permanently. " +
+      "Terminates the process and removes the session data completely without creating a replacement. " +
+      "Use when you want to completely remove a session and don't need a fresh one.",
     inputSchema: {
       type: "object",
       properties: {
         toTeam: {
           type: "string",
-          description: "Name of the team to delete session for",
+          description: "Name of the team whose session to delete",
         },
         fromTeam: {
           type: "string",
@@ -173,42 +192,11 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_compact",
+    name: "session_fork",
     description:
-      "Compact a team's session to reduce context size. Uses claude --print /compact to compress " +
-      "the session history while preserving important context. This is useful when a session has grown " +
-      "large and needs optimization without completely clearing the history. The session remains active " +
-      "after compacting.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        toTeam: {
-          type: "string",
-          description: "Name of the team whose session to compact",
-        },
-        fromTeam: {
-          type: "string",
-          description: "Name of the team requesting the compact",
-        },
-        timeout: {
-          type: "number",
-          description: "Optional timeout in milliseconds (default: 30000)",
-        },
-        retries: {
-          type: "number",
-          description: "Optional number of retry attempts (default: 2)",
-        },
-      },
-      required: ["toTeam", "fromTeam"],
-    },
-  },
-  {
-    name: "team_fork",
-    description:
-      "Fork a session by launching a new terminal window with claude --resume --fork-session. " +
-      "This allows you to manually interact with a session in a separate terminal. " +
-      "Executes the user-configured fork script (~/.iris/spawn.sh or ps1) to open a new terminal. " +
-      "The fork script receives: sessionId, teamPath, claudePath, and optionally sshHost and sshOptions for remote teams.",
+      "Fork a session into a new terminal window for manual interaction. " +
+      "Launches a separate terminal with 'claude --resume --fork-session' so you can interact with the session directly. " +
+      "Executes the user-configured fork script (~/.iris/spawn.sh or ps1). Works for both local and remote teams.",
     inputSchema: {
       type: "object",
       properties: {
@@ -225,9 +213,11 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_isAwake",
+    name: "team_status",
     description:
-      "Check if teams are awake (active) or asleep (inactive) and get their current status. Returns process details for active teams.",
+      "Get the status of teams (awake/active or asleep/inactive). " +
+      "Returns process details for active teams including PID, status, and session information. " +
+      "Optionally includes notification queue statistics.",
     inputSchema: {
       type: "object",
       properties: {
@@ -261,6 +251,30 @@ const TOOLS: Tool[] = [
           type: "string",
           description:
             'Name of the team to wake up (e.g., "frontend", "backend", "mobile")',
+        },
+        fromTeam: {
+          type: "string",
+          description:
+            "Identify the calling team for session-specific process. " +
+            "Creates a dedicated process for this team pair to maintain conversation isolation.",
+        },
+      },
+      required: ["team", "fromTeam"],
+    },
+  },
+  {
+    name: "team_launch",
+    description:
+      "Launch a team by ensuring its process is active. " +
+      "This is a convenience alias for team_wake that matches natural language like 'launch team-X' or 'start team-Y'. " +
+      "Returns immediately if team is already active, otherwise starts the process.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team: {
+          type: "string",
+          description:
+            'Name of the team to launch (e.g., "frontend", "backend", "mobile")',
         },
         fromTeam: {
           type: "string",
@@ -318,45 +332,65 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_report",
+    name: "session_report",
     description:
-      "View the cached conversation for a team pair. " +
-      "Returns all cache entries (spawn + tell operations) with their messages and status. " +
-      "Shows the complete conversation history including protocol messages from Claude. " +
-      "Caching is always enabled - this is the primary means for Claude → requestor communication.",
+      "View the conversation history for a session. " +
+      "Returns complete conversation cache including all messages, responses, and protocol messages from Claude. " +
+      "Shows the full context of your communication with a team.",
     inputSchema: {
       type: "object",
       properties: {
         team: {
           type: "string",
           description:
-            "Name of the team whose conversation cache to view (the recipient/toTeam)",
+            "Name of the team whose conversation to view",
         },
         fromTeam: {
           type: "string",
           description:
-            "Name of the team requesting the report (the sender/fromTeam)",
+            "Name of the team requesting the report",
         },
       },
       required: ["team", "fromTeam"],
     },
   },
   {
-    name: "team_teams",
+    name: "session_cancel",
     description:
-      "Get all currently configured teams. " +
-      "Returns a list of all teams with their name and configuration details (path, description, color, etc.).",
+      "Cancel a running session operation. " +
+      "Attempts to interrupt a long-running Claude operation by sending ESC to stdin. " +
+      "Note: May not work in all cases depending on headless mode support.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        team: {
+          type: "string",
+          description: "Name of the team whose operation to cancel",
+        },
+        fromTeam: {
+          type: "string",
+          description: "Name of the team requesting the cancel",
+        },
+      },
+      required: ["team", "fromTeam"],
+    },
+  },
+  {
+    name: "list_teams",
+    description:
+      "List all configured teams. " +
+      "Returns team names with configuration details including path, description, color, and settings.",
     inputSchema: {
       type: "object",
       properties: {},
     },
   },
   {
-    name: "team_debug",
+    name: "get_logs",
     description:
-      "Query in-memory logs from Wonder Logger memory transport. " +
-      "Returns logs since a specified timestamp, with optional filtering by level and format. " +
-      "Use getAllStores=true to see available memory store names.",
+      "Query in-memory logs from the Iris MCP server. " +
+      "Returns logs since a specified timestamp with optional filtering by level and format. " +
+      "Useful for debugging and monitoring server activity.",
     inputSchema: {
       type: "object",
       properties: {
@@ -420,10 +454,10 @@ const TOOLS: Tool[] = [
     },
   },
   {
-    name: "team_date",
+    name: "get_date",
     description:
-      "Get the current system date and time in UTC. " +
-      "Returns timestamp, ISO 8601 format, UTC string, Unix timestamp, and detailed components.",
+      "Get the current system date and time. " +
+      "Returns timestamp in multiple formats: ISO 8601, UTC string, Unix timestamp, and detailed components (year, month, day, etc.).",
     inputSchema: {
       type: "object",
       properties: {},
@@ -501,7 +535,8 @@ export class IrisMcpServer {
       let result;
       try {
         switch (name) {
-          case "team_tell":
+          case "send_message":
+          case "ask_message":
             result = {
               content: [
                 {
@@ -516,7 +551,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_quick_tell":
+          case "quick_message":
             result = {
               content: [
                 {
@@ -531,7 +566,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_cancel":
+          case "session_cancel":
             result = {
               content: [
                 {
@@ -546,7 +581,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_reboot":
+          case "session_reboot":
             result = {
               content: [
                 {
@@ -566,7 +601,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_delete":
+          case "session_delete":
             result = {
               content: [
                 {
@@ -586,27 +621,28 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_compact":
-            result = {
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(
-                    await compact(
-                      args as any,
-                      this.iris,
-                      this.sessionManager,
-                      this.configManager,
-                    ),
-                    null,
-                    2,
-                  ),
-                },
-              ],
-            };
-            break;
+          // TODO: Implement team_compact action
+          // case "team_compact":
+          //   result = {
+          //     content: [
+          //       {
+          //         type: "text",
+          //         text: JSON.stringify(
+          //           await compact(
+          //             args as any,
+          //             this.iris,
+          //             this.sessionManager,
+          //             this.configManager,
+          //           ),
+          //           null,
+          //           2,
+          //         ),
+          //       },
+          //     ],
+          //   };
+          //   break;
 
-          case "team_fork":
+          case "session_fork":
             result = {
               content: [
                 {
@@ -627,7 +663,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_isAwake":
+          case "team_status":
             result = {
               content: [
                 {
@@ -649,6 +685,7 @@ export class IrisMcpServer {
             break;
 
           case "team_wake":
+          case "team_launch":
             result = {
               content: [
                 {
@@ -703,7 +740,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_report":
+          case "session_report":
             result = {
               content: [
                 {
@@ -718,7 +755,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_teams":
+          case "list_teams":
             result = {
               content: [
                 {
@@ -733,7 +770,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_debug":
+          case "get_logs":
             result = {
               content: [
                 {
@@ -759,7 +796,7 @@ export class IrisMcpServer {
             };
             break;
 
-          case "team_date":
+          case "get_date":
             result = {
               content: [
                 {

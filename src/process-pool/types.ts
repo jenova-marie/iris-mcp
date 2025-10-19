@@ -37,6 +37,8 @@ export interface ProcessPoolConfig {
   defaultTransport?: "stdio" | "http";
   wonderLoggerConfig?: string; // Path to wonder-logger.yaml config file
   hotReloadConfig?: boolean; // Enable automatic config reload when config.yaml changes (default: false)
+  sessionMcpEnabled?: boolean; // Enable MCP config file writing for sessions (default: false)
+  sessionMcpPath?: string; // MCP config directory path relative to team path (default: ".claude/iris/mcp")
 }
 
 export interface RemoteOptions {
@@ -68,6 +70,9 @@ export interface IrisConfig {
   reverseMcpPort?: number; // Port to tunnel (default: 1615)
   allowHttp?: boolean; // Allow HTTP for reverse MCP (dev only, default: false)
   mcpConfigScript?: string; // Custom script path for writing MCP config files (default: bundled mcp-cp.sh or mcp-scp.sh)
+  // Session MCP configuration
+  sessionMcpEnabled?: boolean; // Enable MCP config file writing (overrides global setting)
+  sessionMcpPath?: string; // MCP config directory path relative to team path (overrides global setting)
   // Permission approval mode
   grantPermission?: "yes" | "no" | "ask" | "forward"; // How to handle permission requests (default: "yes" for auto-approve)
   // Tool allowlist/denylist

@@ -65,6 +65,9 @@ const IrisConfigSchema = z
     disallowedTools: z.string().optional(), // Comma-separated list of denied MCP tools (passed to Claude CLI --disallowed-tools flag)
     // System prompt customization
     appendSystemPrompt: z.string().optional(), // Additional system prompt to append (passed to Claude CLI --append-system-prompt flag)
+    // Session MCP configuration
+    sessionMcpEnabled: z.boolean().optional(), // Enable MCP config file writing for this team (overrides global setting)
+    sessionMcpPath: z.string().optional(), // MCP config directory path relative to team path (overrides global setting)
   })
   .refine(
     (data) => {
@@ -92,6 +95,8 @@ const TeamsConfigSchema = z.object({
     defaultTransport: z.enum(["stdio", "http"]).optional().default("stdio"),
     wonderLoggerConfig: z.string().optional().default("./wonder-logger.yaml"),
     hotReloadConfig: z.boolean().optional().default(false),
+    sessionMcpEnabled: z.boolean().optional().default(false),
+    sessionMcpPath: z.string().optional().default(".claude/iris/mcp"),
   }),
   dashboard: z
     .object({
@@ -354,6 +359,8 @@ export class TeamsConfigManager {
     return {
       ...team,
       idleTimeout: team.idleTimeout || config.settings.idleTimeout,
+      sessionMcpEnabled: team.sessionMcpEnabled ?? config.settings.sessionMcpEnabled,
+      sessionMcpPath: team.sessionMcpPath || config.settings.sessionMcpPath,
     };
   }
 

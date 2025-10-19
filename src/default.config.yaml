@@ -57,6 +57,16 @@ settings:
   # Supports OpenTelemetry, Prometheus metrics, distributed tracing
   wonderLoggerConfig: ${IRIS_WONDER_LOGGER_CONFIG:-./wonder-logger.yaml}
 
+  # Session MCP Configuration
+  # Enable writing MCP config files for session-specific routing
+  # When enabled, each Claude session gets a config file with sessionId in the URL
+  # This allows the Iris MCP server to identify which team is making requests
+  sessionMcpEnabled: ${IRIS_SESSION_MCP_ENABLED:-false}
+
+  # Directory path for session MCP config files (relative to team path)
+  # Config files are written to: <team-path>/<sessionMcpPath>/iris-mcp-<sessionId>.json
+  sessionMcpPath: ${IRIS_SESSION_MCP_PATH:-.claude/iris/mcp}
+
 # ==============================================================================
 # Web Dashboard Configuration
 # ==============================================================================

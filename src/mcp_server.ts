@@ -9,6 +9,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import express from "express";
@@ -36,6 +38,7 @@ import { teams } from "./actions/teams.js";
 import { debug } from "./actions/debug.js";
 import { permissionsApprove } from "./actions/permissions.js";
 import { date } from "./actions/date.js";
+import { agent, AGENT_TYPES } from "./actions/agent.js";
 import { runWithContext } from "./utils/request-context.js";
 
 const logger = getChildLogger("iris:mcp");
@@ -342,13 +345,11 @@ const TOOLS: Tool[] = [
       properties: {
         team: {
           type: "string",
-          description:
-            "Name of the team whose conversation to view",
+          description: "Name of the team whose conversation to view",
         },
         fromTeam: {
           type: "string",
-          description:
-            "Name of the team requesting the report",
+          description: "Name of the team requesting the report",
         },
       },
       required: ["team", "fromTeam"],
@@ -463,6 +464,30 @@ const TOOLS: Tool[] = [
       properties: {},
     },
   },
+  {
+    name: "get_agent",
+    description:
+      "Get a canned prompt for a specialized agent role. " +
+      `Available agent types: ${AGENT_TYPES.join(", ")}. ` +
+      "Returns prompt text that can be executed by the calling agent to adopt that specialized role. " +
+      "Useful for delegating tasks to specialized agent personas.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agentType: {
+          type: "string",
+          description: `Type of agent to get prompt for. Available: ${AGENT_TYPES.join(", ")}`,
+          enum: [...AGENT_TYPES],
+        },
+        context: {
+          type: "object",
+          description:
+            "Optional context variables to interpolate into the template (e.g., {projectName: 'iris-mcp', version: '1.0'})",
+        },
+      },
+      required: ["agentType"],
+    },
+  },
 ];
 
 export class IrisMcpServer {
@@ -481,11 +506,12 @@ export class IrisMcpServer {
     this.server = new Server(
       {
         name: "@iris-mcp/server",
-        version: "1.0.0",
+        version: "0.1.0",
       },
       {
         capabilities: {
           tools: {},
+          prompts: {},
         },
       },
     );
@@ -521,6 +547,74 @@ export class IrisMcpServer {
     // List available tools
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return { tools: TOOLS };
+    });
+
+    // List available prompts
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      const prompts = AGENT_TYPES.map((agentType) => ({
+        name: agentType,
+        description: `Get specialized prompt for ${agentType.replace(/-/g, ' ')} agent role`,
+        arguments: [
+          {
+            name: "projectPath",
+            description: "Optional path to project for context discovery (auto-detects TypeScript, framework, testing tools, etc.)",
+            required: false,
+          },
+          {
+            name: "includeGitDiff",
+            description: "Include git diff of uncommitted changes in the prompt context",
+            required: false,
+          },
+        ],
+      }));
+
+      return { prompts };
+    });
+
+    // Get specific prompt
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name, arguments: args } = request.params;
+
+      // Validate agent type
+      if (!AGENT_TYPES.includes(name as any)) {
+        throw new Error(
+          `Invalid agent type "${name}". Available types: ${AGENT_TYPES.join(", ")}`,
+        );
+      }
+
+      // Build agent input from prompt arguments
+      const agentInput: any = {
+        agentType: name,
+      };
+
+      if (args?.projectPath) {
+        agentInput.projectPath = args.projectPath as string;
+      }
+
+      if (args?.includeGitDiff === "true" || args?.includeGitDiff === "1") {
+        agentInput.includeGitDiff = true;
+      }
+
+      // Get the agent prompt
+      const result = await agent(agentInput);
+
+      if (!result.valid) {
+        throw new Error(result.prompt);
+      }
+
+      // Return as MCP prompt message
+      return {
+        description: `Specialized ${name.replace(/-/g, ' ')} agent prompt${agentInput.projectPath ? ' with project context' : ''}${agentInput.includeGitDiff ? ' and git diff' : ''}`,
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: result.prompt,
+            },
+          },
+        ],
+      };
     });
 
     // Handle tool calls
@@ -802,6 +896,17 @@ export class IrisMcpServer {
                 {
                   type: "text",
                   text: JSON.stringify(await date(args as any), null, 2),
+                },
+              ],
+            };
+            break;
+
+          case "get_agent":
+            result = {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(await agent(args as any), null, 2),
                 },
               ],
             };

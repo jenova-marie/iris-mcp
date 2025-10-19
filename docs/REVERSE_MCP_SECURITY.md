@@ -278,14 +278,13 @@ function validateSshSession(req: McpRequest): boolean {
     "reverseMcpPermissions": {
       "allowedTools": [
         "team_wake",
-        "team_isAwake",
-        "team_tell",
-        "team_fork"
+        "team_status",
+        "send_message",
+        "session_fork"
       ],
       "deniedTools": [
-        "team_delete",    // Too dangerous
-        "team_compact",   // Could disrupt sessions
-        "team_clear"      // Could lose data
+        "session_delete",    // Too dangerous
+        "session_reboot"     // Could lose data
       ],
       "allowedTargets": [
         "team-alpha",
@@ -545,12 +544,12 @@ interface AuditLogEntry {
   "event": "reverse_mcp_call",
   "sourceTeam": "team-inanna",
   "targetTeam": "team-production",
-  "tool": "team_delete",
+  "tool": "session_delete",
   "result": "failure",
   "duration_ms": 2,
   "authenticated": true,
   "authorized": false,
-  "error": "Tool team_delete not allowed for team-inanna",
+  "error": "Tool session_delete not allowed for team-inanna",
   "requestId": "req-def456",
   "sshSessionId": "session-xyz789"
 }

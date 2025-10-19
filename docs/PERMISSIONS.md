@@ -528,7 +528,7 @@ ps aux | grep claude
 **Cause:** Process not registered in pool or already terminated
 
 **Fix:**
-1. Check if process is still alive: `team_isAwake`
+1. Check if process is still alive: `team_status`
 2. Verify sessionId matches active session
 3. Check for process crash/termination in logs
 4. Ensure process spawned successfully before permission request
@@ -717,6 +717,6 @@ pnpm start
 
 **Keywords:** permissions, grantPermission, ask mode, PendingPermissionsManager, permission approval, dashboard modal, WebSocket events, AsyncLocalStorage, sessionId, team detection, reverse MCP, remote teams, security, timeout handling, permission:request, permission:resolved
 
-**Last Updated:** 2025-10-17
-**Change Context:** Updated "ask" mode from planned to fully implemented (✅). Added details on PendingPermissionsManager implementation, dashboard WebSocket integration, and Permission Approval Modal UI. Changed default permission mode from "yes" to "ask" for safer defaults. Added implementation file references and integration points. Documented complete event flow and API methods.
-**Related Files:** DASHBOARD.md (permission modal UI), CONFIG.md (grantPermission configuration), REMOTE.md (reverse MCP integration), TEAM_IDENTIFICATION.md (sessionId-based detection)
+**Last Updated:** 2025-10-18
+**Change Context:** Updated MCP tool name in troubleshooting section. Changed: team_isAwake → team_status. Previous update (2025-10-17): Updated "ask" mode from planned to fully implemented (✅). Added details on PendingPermissionsManager implementation, dashboard WebSocket integration, and Permission Approval Modal UI. Changed default permission mode from "yes" to "ask" for safer defaults.
+**Related Files:** ACTIONS.md (complete tool API reference), DASHBOARD.md (permission modal UI), CONFIG.md (grantPermission configuration), REMOTE.md (reverse MCP integration), REVERSE_MCP.md (bidirectional tunneling), TEAM_IDENTIFICATION.md (sessionId-based detection)

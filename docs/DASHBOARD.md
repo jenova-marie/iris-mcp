@@ -1,6 +1,6 @@
 # Dashboard Documentation
 
-> **Phase 2: Web Dashboard for Real-Time Monitoring**
+> **Web Dashboard for Real-Time Monitoring**
 
 The Iris MCP Dashboard is a React-based web application that provides real-time monitoring and management of Claude Code team sessions. It features a modern, responsive UI with WebSocket-powered live updates.
 

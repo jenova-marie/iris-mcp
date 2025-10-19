@@ -48,30 +48,36 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 - **Global Settings**: Configurable `maxProcesses`, `healthCheckInterval`, and default timeouts
 - **Permission Control**: `grantPermission` field (yes/no/ask/forward) for granular permission approval ✅ (ask mode fully implemented with dashboard UI)
 
-### MCP Tools (15 Total)
+### MCP Tools (17 Total)
 
-**Core Communication**:
-1. **team_tell**: Send messages with sync/async/persistent modes, configurable timeouts
-2. **team_quick_tell**: Fire-and-forget async messaging (timeout=-1 wrapper)
-3. **team_report**: View cached conversation output (stdout/stderr) for team sessions
+See [ACTIONS.md](ACTIONS.md) for complete API reference.
 
-**Process Lifecycle**:
-4. **team_wake**: Wake up a specific team process (create if doesn't exist)
-5. **team_wake_all**: Wake all configured teams sequentially (parallel mode not recommended)
-6. **team_sleep**: Put a team process to sleep (terminate)
-7. **team_isAwake**: Check if teams are active or inactive with process metrics
+**Communication Tools (3)**:
+1. **send_message**: Send messages with sync/async/persistent modes, configurable timeouts
+2. **ask_message**: Ask a question and wait for response (semantic alias for send_message)
+3. **quick_message**: Fire-and-forget async messaging (timeout=-1 wrapper)
 
-**Session Management**:
-8. **team_clear** (reboot): Create fresh session, terminate old process, delete old session files
-9. **team_delete**: Permanently delete session without replacement
-10. **team_compact**: Compress session history using `claude --print /compact` to reduce context size
-11. **team_fork**: Launch interactive terminal session with `--resume --fork-session` for manual debugging
+**Session Management Tools (4)**:
+4. **session_reboot**: Create fresh session, terminate old process, delete old session files
+5. **session_delete**: Permanently delete session without replacement
+6. **session_fork**: Launch interactive terminal session with `--resume --fork-session` for manual debugging
+7. **session_cancel**: Experimental ESC signal to interrupt running operations (EXPERIMENTAL)
 
-**System**:
-12. **team_cancel**: Experimental ESC signal to interrupt running operations (EXPERIMENTAL)
-13. **team_teams**: Get all configured teams with metadata (name, path, description, color)
-14. **team_debug**: Query in-memory logs from Wonder Logger memory transport with level filtering
-15. **permissions__approve**: Permission approval handler for Reverse MCP (`--permission-prompt-tool`)
+**Process Management Tools (5)**:
+8. **team_wake**: Wake up a specific team process (create if doesn't exist)
+9. **team_launch**: Launch a team process (semantic alias for team_wake)
+10. **team_wake_all**: Wake all configured teams sequentially (parallel mode not recommended)
+11. **team_sleep**: Put a team process to sleep (terminate)
+12. **team_status**: Check if teams are active or inactive with process metrics
+
+**Information & Debug Tools (4)**:
+13. **session_report**: View cached conversation output (stdout/stderr) for team sessions
+14. **list_teams**: Get all configured teams with metadata (name, path, description, color)
+15. **get_logs**: Query in-memory logs from Wonder Logger memory transport with level filtering
+16. **get_date**: Get current system date and time in UTC with timestamp formats
+
+**Internal Tools (1)**:
+17. **permissions__approve**: Permission approval handler for Reverse MCP (`--permission-prompt-tool`)
 
 ### Event System
 
@@ -511,9 +517,9 @@ A comprehensive inventory of Iris MCP's capabilities across all five architectur
 
 **Keywords:** features, capabilities, MCP tools, configuration, YAML, environment variables, grantPermission, process pool, remote execution, observability, dashboard, API, CLI, intelligence layer, performance metrics, technology stack
 
-**Last Updated:** 2025-10-17
-**Change Context:** Updated permission approval system status from "schema-only, implementation pending" to ✅ fully implemented with dashboard UI. Added new dashboard features: Permission Approval System, Log Viewer, and Debug Info Display sections. Updated UI features to include /logs route, global modals, and WebSocket hooks. All ask mode permission functionality is now live with real-time modal approval.
-**Related Files:** PERMISSIONS.md (permission system details), DASHBOARD.md (UI documentation), CONFIG.md (configuration), SESSION.md (debug info fields), GETTING_STARTED.md (quick start), README.md (overview), ARCHITECTURE.md (system design)
+**Last Updated:** 2025-10-18
+**Change Context:** Updated MCP Tools section with new tool names (v3.0). Renamed: team_tell → send_message, team_quick_tell → quick_message, team_isAwake → team_status, team_report → session_report, team_teams → list_teams, team_debug → get_logs, team_cancel → session_cancel, team_delete → session_delete, team_fork → session_fork, team_clear → session_reboot. Added semantic aliases: ask_message (for send_message), team_launch (for team_wake). Added get_date tool. Removed team_compact (incomplete implementation). Updated tool count from 15 to 17 tools. Previous update (2025-10-17): Updated permission approval system status to ✅ fully implemented with dashboard UI.
+**Related Files:** ACTIONS.md (complete tool API reference), NOMENCLATURE.md (core concepts), PERMISSIONS.md (permission system details), DASHBOARD.md (UI documentation), CONFIG.md (configuration), SESSION.md (debug info fields), GETTING_STARTED.md (quick start), README.md (overview), ARCHITECTURE.md (system design)
 
 ---
 

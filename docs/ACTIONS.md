@@ -27,29 +27,31 @@
 Iris exposes **15 MCP tools** that enable Claude instances to coordinate across projects:
 
 **Communication:**
-- `team_tell` - Send messages between teams (sync/async/persistent modes)
-- `team_quick_tell` - Quick async message (convenience wrapper)
+- `send_message` - Send messages between teams (sync/async/persistent modes)
+- `ask_message` - Semantic alias for send_message (question-focused)
+- `quick_message` - Quick async message (fire-and-forget)
 
 **Session Management:**
-- `team_clear` - Create fresh session (reboot with clean slate)
-- `team_delete` - Delete session permanently
-- `team_compact` - Compress session history
-- `team_fork` - Launch interactive terminal session
+- `session_reboot` - Create fresh session (reboot with clean slate)
+- `session_delete` - Delete session permanently
+- `session_fork` - Launch interactive terminal session
+- `session_cancel` - Cancel running operation (EXPERIMENTAL)
 
 **Process Management:**
 - `team_wake` - Start team process
+- `team_launch` - Semantic alias for team_wake (natural language)
 - `team_sleep` - Stop team process
 - `team_wake_all` - Start all team processes
-- `team_isAwake` - Check team process status
-- `team_cancel` - Cancel running operation (EXPERIMENTAL)
+- `team_status` - Check team process status
 
 **Information & Debug:**
-- `team_report` - View conversation cache
-- `team_teams` - List all configured teams
-- `team_debug` - Query in-memory logs
+- `session_report` - View conversation cache
+- `list_teams` - List all configured teams
+- `get_logs` - Query in-memory logs
+- `get_date` - Get current system date/time
 
 **Internal:**
-- `permissions__approve` - Permission approval handler (for Reverse MCP)
+- `permissions__approve` - Permission approval handler (for permission prompts)
 
 ---
 
@@ -57,20 +59,22 @@ Iris exposes **15 MCP tools** that enable Claude instances to coordinate across 
 
 | Tool | Purpose | Blocking? | Parameters |
 |------|---------|-----------|------------|
-| `team_tell` | Send message to team | Optional | toTeam, message, fromTeam, timeout?, persist?, ttlDays? |
-| `team_quick_tell` | Quick async tell | No | toTeam, message, fromTeam |
-| `team_cancel` | Cancel operation | Yes | team, fromTeam |
-| `team_clear` | Create fresh session | Yes | toTeam, fromTeam |
-| `team_delete` | Delete session | Yes | toTeam, fromTeam |
-| `team_compact` | Compress session | Yes | toTeam, fromTeam, timeout?, retries? |
-| `team_fork` | Fork to terminal | Yes | toTeam, fromTeam |
+| `send_message` | Send message to team | Optional | toTeam, message, fromTeam, timeout?, persist?, ttlDays? |
+| `ask_message` | Ask question (semantic alias) | Optional | toTeam, message, fromTeam, timeout?, persist?, ttlDays? |
+| `quick_message` | Quick async message | No | toTeam, message, fromTeam |
+| `session_cancel` | Cancel operation | Yes | team, fromTeam |
+| `session_reboot` | Create fresh session | Yes | toTeam, fromTeam |
+| `session_delete` | Delete session | Yes | toTeam, fromTeam |
+| `session_fork` | Fork to terminal | Yes | toTeam, fromTeam |
 | `team_wake` | Wake team process | Yes | team, fromTeam |
+| `team_launch` | Launch team (alias) | Yes | team, fromTeam |
 | `team_sleep` | Sleep team process | Yes | team, fromTeam, force? |
 | `team_wake_all` | Wake all teams | Yes | fromTeam, parallel? |
-| `team_isAwake` | Check team status | Yes | fromTeam, team?, includeNotifications? |
-| `team_report` | View cache | Yes | team, fromTeam |
-| `team_teams` | List all teams | Yes | - |
-| `team_debug` | Query logs | Yes | logs_since?, storeName?, format?, level?, getAllStores? |
+| `team_status` | Check team status | Yes | fromTeam, team?, includeNotifications? |
+| `session_report` | View cache | Yes | team, fromTeam |
+| `list_teams` | List all teams | Yes | - |
+| `get_logs` | Query logs | Yes | logs_since?, storeName?, format?, level?, getAllStores? |
+| `get_date` | Get current date/time | Yes | - |
 | `permissions__approve` | Approve tool | Yes | tool_name, input, reason? |
 
 ---
@@ -79,17 +83,17 @@ Iris exposes **15 MCP tools** that enable Claude instances to coordinate across 
 
 ### Communication Tools
 
-#### 1. team_tell
+#### 1. send_message
 
 **Purpose:** Send a message to another team with multiple modes (sync, async, persistent)
 
 **Signature:**
 ```typescript
-team_tell(input: {
+send_message(input: {
   toTeam: string;
   message: string;
   fromTeam: string;
-  timeout?: number;           // default: 0 (indefinite wait)
+  timeout?: number;           // default: 30000
   persist?: boolean;          // default: false
   ttlDays?: number;           // default: 30
 }): Promise<{
@@ -109,7 +113,7 @@ team_tell(input: {
 | `toTeam` | string | Yes | Target team name |
 | `message` | string | Yes | Message content (max 100KB) |
 | `fromTeam` | string | Yes | Calling team name |
-| `timeout` | number | No | Timeout in ms. 0=indefinite, -1=async (default: 0) |
+| `timeout` | number | No | Timeout in ms. 0=indefinite, -1=async (default: 30000) |
 | `persist` | boolean | No | Use SQLite queue for persistence (default: false) |
 | `ttlDays` | number | No | TTL for persistent messages in days (default: 30) |
 
@@ -122,7 +126,7 @@ team_tell(input: {
 **Example:**
 ```typescript
 // Sync mode (wait for response)
-const result = await team_tell({
+const result = await send_message({
   toTeam: "backend",
   fromTeam: "frontend",
   message: "What's the API status?",
@@ -131,16 +135,16 @@ const result = await team_tell({
 // result.response = "All APIs operational"
 
 // Async mode (fire and forget)
-const async = await team_tell({
+const async = await send_message({
   toTeam: "data-pipeline",
   fromTeam: "frontend",
   message: "Generate monthly report",
   timeout: -1
 });
-// Returns immediately, check cache later with team_report
+// Returns immediately, check cache later with session_report
 
 // Persistent mode (survives restart)
-const persistent = await team_tell({
+const persistent = await send_message({
   toTeam: "mobile",
   fromTeam: "backend",
   message: "New API version deployed",
@@ -151,13 +155,43 @@ const persistent = await team_tell({
 
 ---
 
-#### 2. team_quick_tell
+#### 2. ask_message
 
-**Purpose:** Convenience wrapper for async `team_tell` (timeout=-1)
+**Purpose:** Ask a question to a team and wait for their response. Semantic alias for send_message that makes it clear you're expecting an answer.
 
 **Signature:**
 ```typescript
-team_quick_tell(input: {
+ask_message(input: {
+  toTeam: string;
+  message: string;
+  fromTeam: string;
+  timeout?: number;
+  persist?: boolean;
+  ttlDays?: number;
+}): Promise<TellOutput>
+```
+
+**Example:**
+```typescript
+const result = await ask_message({
+  toTeam: "backend",
+  fromTeam: "frontend",
+  message: "What's the database schema for users table?"
+});
+// Makes intent clear: expecting an answer
+```
+
+**Note:** This is identical to `send_message` but signals question intent through naming.
+
+---
+
+#### 3. quick_message
+
+**Purpose:** Quickly send a message without waiting (async/fire-and-forget)
+
+**Signature:**
+```typescript
+quick_message(input: {
   toTeam: string;
   message: string;
   fromTeam: string;
@@ -166,7 +200,7 @@ team_quick_tell(input: {
 
 **Example:**
 ```typescript
-const result = await team_quick_tell({
+const result = await quick_message({
   toTeam: "staging",
   fromTeam: "ci-cd",
   message: "Deploy latest build"
@@ -174,21 +208,21 @@ const result = await team_quick_tell({
 // Returns immediately, processes in background
 ```
 
-**Note:** This is identical to `team_tell` with `timeout: -1` but more explicit.
+**Note:** This is equivalent to `send_message` with `timeout: -1` but more explicit for fire-and-forget scenarios.
 
 ---
 
 ### Session Management Tools
 
-#### 3. team_clear
+#### 4. session_reboot
 
-**Purpose:** Create a fresh new session (reboot with clean slate)
+**Purpose:** Reboot a session to start fresh with a clean slate
 
 Terminates existing process, deletes old session, creates new session with fresh UUID. Perfect for starting over when context becomes too large or conversation gets confused.
 
 **Signature:**
 ```typescript
-team_clear(input: {
+session_reboot(input: {
   toTeam: string;
   fromTeam: string;
 }): Promise<{
@@ -212,7 +246,7 @@ team_clear(input: {
 
 **Example:**
 ```typescript
-const result = await team_clear({
+const result = await session_reboot({
   toTeam: "backend",
   fromTeam: "frontend"
 });
@@ -232,15 +266,15 @@ const result = await team_clear({
 
 ---
 
-#### 4. team_delete
+#### 5. session_delete
 
 **Purpose:** Delete a session permanently without creating a new one
 
-Unlike `team_clear` which creates a new session, `team_delete` just removes the session completely.
+Unlike `session_reboot` which creates a new session, `session_delete` just removes the session completely.
 
 **Signature:**
 ```typescript
-team_delete(input: {
+session_delete(input: {
   toTeam: string;
   fromTeam: string;
 }): Promise<{
@@ -256,7 +290,7 @@ team_delete(input: {
 
 **Example:**
 ```typescript
-const result = await team_delete({
+const result = await session_delete({
   toTeam: "temporary-worker",
   fromTeam: "orchestrator"
 });
@@ -270,76 +304,15 @@ const result = await team_delete({
 
 ---
 
-#### 5. team_compact
+#### 6. session_fork
 
-**Purpose:** Compress session history to reduce context size
+**Purpose:** Fork a session into a new terminal window for manual interaction
 
-Uses `claude --print /compact` to compress the session while preserving important context. Session remains active after compacting.
-
-**Signature:**
-```typescript
-team_compact(input: {
-  toTeam: string;
-  fromTeam: string;
-  timeout?: number;           // default: 30000
-  retries?: number;           // default: 2
-}): Promise<{
-  from: string;
-  to: string;
-  sessionId: string;
-  success: boolean;
-  duration: number;
-  exitCode: number;
-  output?: string;
-  message: string;
-  timestamp: number;
-  retryCount?: number;
-}>
-```
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `toTeam` | string | Yes | Team to compact |
-| `fromTeam` | string | Yes | Calling team |
-| `timeout` | number | No | Timeout in ms (default: 30000) |
-| `retries` | number | No | Retry attempts (default: 2) |
-
-**Example:**
-```typescript
-const result = await team_compact({
-  toTeam: "backend",
-  fromTeam: "frontend",
-  timeout: 45000,
-  retries: 3
-});
-
-// result = {
-//   success: true,
-//   exitCode: 0,
-//   duration: 12500,
-//   message: "Session compacted successfully for frontend->backend"
-// }
-```
-
-**When to Use:**
-- Session context has grown large (>100k tokens)
-- Performance degrading due to large history
-- Want to preserve context but reduce size
-- Alternative to `team_clear` when you don't want to lose history
-
----
-
-#### 6. team_fork
-
-**Purpose:** Fork a session to an interactive terminal
-
-Launches a new terminal window with `claude --resume --fork-session` so you can interact with the session manually. Executes user-configured fork script (`~/.iris/spawn.sh` or `ps1`).
+Launches a separate terminal with `claude --resume --fork-session` so you can interact with the session directly. Executes user-configured fork script (`~/.iris/spawn.sh` or `ps1`). Works for both local and remote teams.
 
 **Signature:**
 ```typescript
-team_fork(input: {
+session_fork(input: {
   toTeam: string;
   fromTeam: string;
 }): Promise<{
@@ -357,33 +330,31 @@ team_fork(input: {
 ```
 
 **Fork Script Arguments:**
-1. `sessionId` - The session ID to resume
-2. `teamPath` - Project path for the team
-3. `claudePath` - Path to Claude CLI executable
-4. `sshHost` - SSH host (if remote team)
-5. `sshOptions` - SSH options (if remote team)
+1. `teamPath` - Project path for the team
+2. `fullClaudeCommand` - Complete command to execute
+3. `sshHost` - SSH host (if remote team)
+4. `sshOptions` - SSH options (if remote team)
 
 **Example Fork Script (`~/.iris/spawn.sh`):**
 ```bash
 #!/bin/bash
-SESSION_ID="$1"
-TEAM_PATH="$2"
-CLAUDE_PATH="$3"
-SSH_HOST="$4"
-SSH_OPTIONS="$5"
+TEAM_PATH="$1"
+FULL_COMMAND="$2"
+SSH_HOST="$3"
+SSH_OPTIONS="$4"
 
 if [ -n "$SSH_HOST" ]; then
   # Remote team
-  osascript -e "tell app \"Terminal\" to do script \"ssh $SSH_OPTIONS $SSH_HOST 'cd $TEAM_PATH && $CLAUDE_PATH --resume --fork-session $SESSION_ID'\""
+  osascript -e "tell app \"Terminal\" to do script \"ssh $SSH_OPTIONS $SSH_HOST '$FULL_COMMAND'\""
 else
   # Local team
-  osascript -e "tell app \"Terminal\" to do script \"cd $TEAM_PATH && $CLAUDE_PATH --resume --fork-session $SESSION_ID\""
+  osascript -e "tell app \"Terminal\" to do script \"cd $TEAM_PATH && $FULL_COMMAND\""
 fi
 ```
 
 **Example:**
 ```typescript
-const result = await team_fork({
+const result = await session_fork({
   toTeam: "backend",
   fromTeam: "frontend"
 });
@@ -398,19 +369,56 @@ const result = await team_fork({
 ```
 
 **Requirements:**
-- Fork script must exist at `~/.iris/spawn.sh` (or `.bat`/`.ps1` on Windows)
-- Script must be executable (`chmod +x ~/.iris/spawn.sh`)
+- Fork script must exist at `~/.iris/scripts/spawn.sh` (or `.bat`/`.ps1` on Windows)
+- Script must be executable (`chmod +x ~/.iris/scripts/spawn.sh`)
 - Session must exist (wake team first if needed)
+
+---
+
+#### 7. session_cancel
+
+**Purpose:** Cancel a running session operation
+
+**EXPERIMENTAL** - Attempts to interrupt a long-running Claude operation by sending ESC to stdin. May not work in all cases depending on headless mode support.
+
+**Signature:**
+```typescript
+session_cancel(input: {
+  team: string;
+  fromTeam: string;
+}): Promise<{
+  team: string;
+  cancelled: boolean;
+  message: string;
+  timestamp: number;
+}>
+```
+
+**Example:**
+```typescript
+const result = await session_cancel({
+  team: "backend",
+  fromTeam: "frontend"
+});
+
+// result = {
+//   team: "backend",
+//   cancelled: true,
+//   message: "ESC signal sent to process"
+// }
+```
+
+**Warning:** This is experimental. Success depends on whether Claude's headless mode supports ESC interrupt handling. Not guaranteed to work.
 
 ---
 
 ### Process Management Tools
 
-#### 7. team_wake
+#### 8. team_wake
 
-**Purpose:** Ensure a team's process is running (spawn if needed)
+**Purpose:** Wake up a team by ensuring its process is active
 
-Creates a session-specific process for conversation isolation. For example, `fromTeam='iris'` and `team='alpha'` creates a dedicated process for the `iris->alpha` conversation.
+Creates a session-specific process for conversation isolation. Returns immediately if team is already active, otherwise starts the process.
 
 **Signature:**
 ```typescript
@@ -450,7 +458,34 @@ const result = await team_wake({
 
 ---
 
-#### 8. team_sleep
+#### 9. team_launch
+
+**Purpose:** Launch a team by ensuring its process is active
+
+This is a convenience alias for `team_wake` that matches natural language like "launch team-X" or "start team-Y".
+
+**Signature:**
+```typescript
+team_launch(input: {
+  team: string;
+  fromTeam: string;
+}): Promise<WakeOutput>
+```
+
+**Example:**
+```typescript
+const result = await team_launch({
+  team: "backend",
+  fromTeam: "frontend"
+});
+// Identical behavior to team_wake
+```
+
+**Note:** Semantic alias for better natural language integration.
+
+---
+
+#### 10. team_sleep
 
 **Purpose:** Put a team to sleep (terminate process, free resources)
 
@@ -498,7 +533,7 @@ const result = await team_sleep({
 
 ---
 
-#### 9. team_wake_all
+#### 11. team_wake_all
 
 **Purpose:** Wake up all configured teams
 
@@ -550,13 +585,15 @@ const result = await team_wake_all({
 
 ---
 
-#### 10. team_isAwake
+#### 12. team_status
 
-**Purpose:** Check if one or all teams are active
+**Purpose:** Get the status of teams (awake/active or asleep/inactive)
+
+Returns process details for active teams including PID, status, and session information. Optionally includes notification queue statistics.
 
 **Signature:**
 ```typescript
-team_isAwake(input: {
+team_status(input: {
   fromTeam: string;
   team?: string;
   includeNotifications?: boolean;   // default: true
@@ -579,7 +616,7 @@ team_isAwake(input: {
 
 **Single Team Check:**
 ```typescript
-const result = await team_isAwake({
+const result = await team_status({
   fromTeam: "frontend",
   team: "backend"
 });
@@ -593,7 +630,7 @@ const result = await team_isAwake({
 
 **All Teams Check:**
 ```typescript
-const result = await team_isAwake({
+const result = await team_status({
   fromTeam: "orchestrator"
 });
 
@@ -609,54 +646,17 @@ const result = await team_isAwake({
 
 ---
 
-#### 11. team_cancel
-
-**Purpose:** **EXPERIMENTAL** - Attempt to cancel a running operation
-
-Sends ESC to stdin to interrupt the Claude process. This may or may not work depending on Claude's headless mode implementation.
-
-**Signature:**
-```typescript
-team_cancel(input: {
-  team: string;
-  fromTeam: string;
-}): Promise<{
-  team: string;
-  cancelled: boolean;
-  message: string;
-  timestamp: number;
-}>
-```
-
-**Example:**
-```typescript
-const result = await team_cancel({
-  team: "backend",
-  fromTeam: "frontend"
-});
-
-// result = {
-//   team: "backend",
-//   cancelled: true,
-//   message: "ESC signal sent to process"
-// }
-```
-
-**Warning:** This is experimental. Success depends on whether Claude's headless mode supports ESC interrupt handling. Not guaranteed to work.
-
----
-
 ### Information & Debug Tools
 
-#### 12. team_report
+#### 13. session_report
 
-**Purpose:** View the conversation cache for a team pair
+**Purpose:** View the conversation history for a session
 
-Returns all cache entries (spawn + tell operations) with their messages and status. This is the primary means for viewing Claude responses from async operations.
+Returns complete conversation cache including all messages, responses, and protocol messages from Claude. Shows the full context of your communication with a team.
 
 **Signature:**
 ```typescript
-team_report(input: {
+session_report(input: {
   team: string;
   fromTeam: string;
 }): Promise<{
@@ -681,7 +681,7 @@ team_report(input: {
 
 **Example:**
 ```typescript
-const result = await team_report({
+const result = await session_report({
   team: "backend",
   fromTeam: "frontend"
 });
@@ -713,20 +713,22 @@ const result = await team_report({
 ```
 
 **Use Cases:**
-- Check results from async `team_tell` (timeout=-1)
+- Check results from async `send_message` (timeout=-1)
 - Debug empty responses
 - View conversation history
 - Monitor active operations
 
 ---
 
-#### 13. team_teams
+#### 14. list_teams
 
-**Purpose:** List all configured teams and their configuration
+**Purpose:** List all configured teams
+
+Returns team names with configuration details including path, description, color, and settings.
 
 **Signature:**
 ```typescript
-team_teams(): Promise<{
+list_teams(): Promise<{
   teams: Array<{
     name: string;
     path: string;
@@ -742,7 +744,7 @@ team_teams(): Promise<{
 
 **Example:**
 ```typescript
-const result = await team_teams();
+const result = await list_teams();
 
 // result = {
 //   teams: [
@@ -765,15 +767,15 @@ const result = await team_teams();
 
 ---
 
-#### 14. team_debug
+#### 15. get_logs
 
-**Purpose:** Query in-memory logs from Wonder Logger
+**Purpose:** Query in-memory logs from the Iris MCP server
 
-Returns logs since a specified timestamp with optional filtering by level and format. Useful for debugging Iris MCP server internals.
+Returns logs since a specified timestamp with optional filtering by level and format. Useful for debugging and monitoring server activity.
 
 **Signature:**
 ```typescript
-team_debug(input: {
+get_logs(input: {
   logs_since?: number;
   storeName?: string;
   format?: "raw" | "parsed";
@@ -805,14 +807,14 @@ team_debug(input: {
 **Example:**
 ```typescript
 // Get error logs from last 5 minutes
-const result = await team_debug({
+const result = await get_logs({
   logs_since: Date.now() - 300000,
   level: "error",
   format: "parsed"
 });
 
 // Get all available stores
-const stores = await team_debug({
+const stores = await get_logs({
   getAllStores: true
 });
 // stores = { stores: ["iris-mcp", "session-manager", "pool-manager"] }
@@ -820,13 +822,57 @@ const stores = await team_debug({
 
 ---
 
+#### 16. get_date
+
+**Purpose:** Get the current system date and time
+
+Returns timestamp in multiple formats: ISO 8601, UTC string, Unix timestamp, and detailed components (year, month, day, etc.).
+
+**Signature:**
+```typescript
+get_date(): Promise<{
+  timestamp: number;
+  iso: string;
+  utc: string;
+  unix: number;
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+  timezone: string;
+}>
+```
+
+**Example:**
+```typescript
+const result = await get_date();
+
+// result = {
+//   timestamp: 1697567890123,
+//   iso: "2025-01-15T10:30:00.123Z",
+//   utc: "Tue, 15 Jan 2025 10:30:00 GMT",
+//   unix: 1697567890,
+//   year: 2025,
+//   month: 1,
+//   day: 15,
+//   hour: 10,
+//   minute: 30,
+//   second: 0,
+//   timezone: "UTC"
+// }
+```
+
+---
+
 ### Internal Tools
 
-#### 15. permissions__approve
+#### 17. permissions__approve
 
 **Purpose:** Permission approval handler for Claude Code's `--permission-prompt-tool`
 
-This tool is called by remote Claude instances (via Reverse MCP) when they need permission to use Iris MCP tools. Auto-approves all `mcp__iris__*` tools, denies everything else.
+This tool is called by Claude Code when it needs permission to use another tool. Auto-approves all Iris MCP tools (`mcp__iris__*`) and denies all others.
 
 **Signature:**
 ```typescript
@@ -844,7 +890,7 @@ permissions__approve(input: {
 **Example:**
 ```typescript
 const result = await permissions__approve({
-  tool_name: "mcp__iris__team_teams",
+  tool_name: "mcp__iris__list_teams",
   input: {},
   reason: "Need to list teams"
 });
@@ -859,9 +905,9 @@ const result = await permissions__approve({
 - Auto-approve: All `mcp__iris__*` tools
 - Deny: All other tools
 
-**Use Case:** Reverse MCP tunneling where remote Claude instances call back to local Iris MCP server.
+**Use Case:** Used by the permission approval system when `grantPermission: "ask"` mode is configured. See [PERMISSIONS.md](PERMISSIONS.md) for details.
 
-**Note:** This is an internal tool primarily used by the Reverse MCP feature. Most users won't call this directly.
+**Note:** This is an internal tool primarily used by the permission system. Most users won't call this directly.
 
 ---
 
@@ -971,7 +1017,7 @@ function validateTimeout(timeout: number): void {
 
 ```typescript
 try {
-  const result = await team_tell({
+  const result = await send_message({
     toTeam: "invalid/team",
     message: "hi",
     fromTeam: "test"
@@ -990,7 +1036,7 @@ try {
 
 ```typescript
 // Frontend team asks backend team to review PR
-const result = await team_tell({
+const result = await send_message({
   toTeam: "backend",
   fromTeam: "frontend",
   message: "Please review PR #123: Add authentication middleware",
@@ -1001,6 +1047,20 @@ console.log(result.response);
 // "Reviewed PR #123. LGTM! Approved with minor suggestions."
 ```
 
+### Asking Questions
+
+```typescript
+// Use ask_message for clarity of intent
+const result = await ask_message({
+  toTeam: "database",
+  fromTeam: "api",
+  message: "What's the optimal index configuration for the users table?"
+});
+
+console.log(result.response);
+// Claude responds with database optimization advice
+```
+
 ### Orchestrated Deployment
 
 ```typescript
@@ -1008,13 +1068,13 @@ console.log(result.response);
 await team_wake_all({ fromTeam: "orchestrator" });
 
 // Tell each team to run tests
-const frontendTests = await team_tell({
+const frontendTests = await send_message({
   toTeam: "frontend",
   fromTeam: "orchestrator",
   message: "Run npm test"
 });
 
-const backendTests = await team_tell({
+const backendTests = await send_message({
   toTeam: "backend",
   fromTeam: "orchestrator",
   message: "Run pytest"
@@ -1023,7 +1083,7 @@ const backendTests = await team_tell({
 // Deploy if all pass
 if (frontendTests.response?.includes("PASS") &&
     backendTests.response?.includes("PASS")) {
-  await team_tell({
+  await send_message({
     toTeam: "devops",
     fromTeam: "orchestrator",
     message: "Deploy to staging"
@@ -1035,14 +1095,14 @@ if (frontendTests.response?.includes("PASS") &&
 
 ```typescript
 // Start long-running task async
-const task = await team_quick_tell({
+const task = await quick_message({
   toTeam: "data-pipeline",
   fromTeam: "analytics",
   message: "Generate annual report for 2024"
 });
 
 // Later, check cache for results
-const cache = await team_report({
+const cache = await session_report({
   team: "data-pipeline",
   fromTeam: "analytics"
 });
@@ -1054,26 +1114,20 @@ console.log(cache.entries);
 ### Session Cleanup Workflow
 
 ```typescript
-// Session context too large? Compact it first
-const compact = await team_compact({
+// Session context too large? Reboot it
+await session_reboot({
   toTeam: "backend",
   fromTeam: "frontend"
 });
 
-if (!compact.success) {
-  // Compact failed? Clear and start fresh
-  await team_clear({
-    toTeam: "backend",
-    fromTeam: "frontend"
-  });
-}
+// Fresh start with clean slate
 ```
 
 ### Debug Workflow
 
 ```typescript
 // Check if team is awake
-const status = await team_isAwake({
+const status = await team_status({
   fromTeam: "frontend",
   team: "backend"
 });
@@ -1087,7 +1141,7 @@ if (!status.awake) {
 }
 
 // Check logs for errors
-const logs = await team_debug({
+const logs = await get_logs({
   logs_since: Date.now() - 300000,
   level: "error"
 });
@@ -1106,22 +1160,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   switch (name) {
-    case "team_tell":
+    case "send_message":
+    case "ask_message":
       return { content: [{ type: "text", text: JSON.stringify(
         await tell(args, iris), null, 2
       )}]};
 
-    case "team_quick_tell":
+    case "quick_message":
       return { content: [{ type: "text", text: JSON.stringify(
         await quickTell(args, iris), null, 2
       )}]};
 
-    case "team_cancel":
+    case "session_cancel":
       return { content: [{ type: "text", text: JSON.stringify(
         await cancel(args, processPool), null, 2
       )}]};
 
-    case "team_clear":
+    case "session_reboot":
       return { content: [{ type: "text", text: JSON.stringify(
         await reboot(args, iris, sessionManager, processPool), null, 2
       )}]};
@@ -1136,12 +1191,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 ---
 
-**Document Version:** 2.0
-**Last Updated:** January 2025
+## Tech Writer Notes
+
+**Coverage Areas:**
+- MCP tool catalog and complete API reference
+- Communication tools (send_message, ask_message, quick_message)
+- Session management tools (session_reboot, session_delete, session_fork, session_cancel)
+- Process management tools (team_wake, team_launch, team_sleep, team_wake_all, team_status)
+- Information and debug tools (session_report, list_teams, get_logs, get_date)
+- Internal tools (permissions__approve)
+- Input validation patterns (validateTeamName, validateMessage, validateTimeout)
+- Error handling and error types
+- Usage examples and patterns
+- Tool registration in mcp_server.ts
+
+**Keywords:** MCP tools, actions, send_message, ask_message, quick_message, session_reboot, session_delete, session_fork, session_cancel, team_wake, team_launch, team_sleep, team_wake_all, team_status, session_report, list_teams, get_logs, get_date, permissions__approve, tool API, validation, error handling, cross-team communication, session management, process management
+
+**Last Updated:** 2025-10-18
+**Change Context:** Complete rewrite to reflect MCP tool renaming (team_tell → send_message, team_quick_tell → quick_message, team_reboot → session_reboot, team_delete → session_delete, team_fork → session_fork, team_isAwake → team_status, team_report → session_report, team_teams → list_teams, team_debug → get_logs, team_cancel → session_cancel). Added ask_message and team_launch as semantic aliases. Removed team_compact (incomplete implementation). Updated all examples, code snippets, and cross-references to use new naming convention.
+**Related Files:** MCP_TOOLS.md (tool reference), CONFIG.md (configuration), PERMISSIONS.md (permission approval), CACHE.md (conversation cache), SESSION.md (session management)
+
+---
+
+**Document Version:** 3.0
+**Last Updated:** 2025-10-18
 **Iris MCP Version:** 0.0.1
 
-**Changes from v1.0:**
-- Removed: `team_cache_read`, `team_cache_clear`, `team_getTeamName` (deprecated)
-- Added: `team_quick_tell`, `team_cancel`, `team_clear`, `team_delete`, `team_compact`, `team_fork`, `team_debug`, `permissions__approve`
-- Updated: `team_tell` (added persist, ttlDays), `team_isAwake` (fromTeam required), `team_report` (conversation cache)
-- Corrected all parameter signatures and return types based on actual implementation
+**Breaking Changes from v2.0:**
+- Renamed all MCP tools for better semantic clarity
+- Removed `team_compact` (incomplete implementation)
+- Added semantic aliases: `ask_message`, `team_launch`
+- Updated all code examples and documentation

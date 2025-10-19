@@ -391,13 +391,13 @@ The RxJS migration followed a **progressive enhancement strategy** with backward
 ### Complete Lifecycle Example
 
 ```
-User calls team_tell → Iris orchestrator → ProcessPool → ClaudeProcess → Transport
+User calls send_message → Iris orchestrator → ProcessPool → ClaudeProcess → Transport
 ```
 
 **Status propagation (reactive):**
 ```
 1. Transport:      STOPPED
-2. User action:    team_tell("frontend", "backend", "hello")
+2. User action:    send_message("frontend", "backend", "hello")
 3. Transport:      SPAWNING
    ↓ observable
 4. ClaudeProcess:  SPAWNING

@@ -70,16 +70,22 @@ All MCP tools map 1:1 to HTTP endpoints:
 
 | MCP Tool | HTTP Endpoint | Method | Action File |
 |----------|--------------|--------|-------------|
-| `team_tell` | `/api/teams/tell` | POST | tell.ts |
-| `team_quick_tell` | `/api/teams/quick-tell` | POST | quick_tell.ts |
-| `team_cancel` | `/api/teams/:team/cancel` | POST | cancel.ts |
-| `team_clear` | `/api/teams/:team/clear` | DELETE | clear.ts |
+| `send_message` | `/api/teams/tell` | POST | tell.ts |
+| `ask_message` | `/api/teams/ask` | POST | ask.ts |
+| `quick_message` | `/api/teams/quick-tell` | POST | quick_tell.ts |
+| `session_cancel` | `/api/teams/:team/cancel` | POST | cancel.ts |
+| `session_reboot` | `/api/teams/:team/reboot` | DELETE | reboot.ts |
+| `session_delete` | `/api/teams/:team/delete` | DELETE | delete.ts |
+| `session_fork` | `/api/teams/:team/fork` | POST | fork.ts |
 | `team_wake` | `/api/teams/:team/wake` | POST | wake.ts |
+| `team_launch` | `/api/teams/:team/launch` | POST | launch.ts |
 | `team_sleep` | `/api/teams/:team/sleep` | POST | sleep.ts |
 | `team_wake_all` | `/api/teams/wake-all` | POST | wake-all.ts |
-| `team_isAwake` | `/api/teams/status` | GET | isAwake.ts |
-| `team_report` | `/api/teams/:team/report` | GET | report.ts |
-| `team_teams` | `/api/teams` | GET | teams.ts |
+| `team_status` | `/api/teams/status` | GET | status.ts |
+| `session_report` | `/api/teams/:team/report` | GET | report.ts |
+| `list_teams` | `/api/teams` | GET | teams.ts |
+| `get_logs` | `/api/logs` | GET | logs.ts |
+| `get_date` | `/api/date` | GET | date.ts |
 
 **Additional Endpoints:**
 - `GET /api/status` - Overall system health

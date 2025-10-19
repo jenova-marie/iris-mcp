@@ -11,10 +11,87 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 ### Changed
+- **14 Documentation Files**: Updated all remaining documentation files with new MCP tool names (v3.0)
+  - NOMENCLATURE.md: Rewrote MCP Tools section (17 tools with new names)
+  - MCP_TOOLS.md: Verified already updated with new names
+  - FEATURES.md: Updated MCP Tools section and tool count (15→17 tools)
+  - ARCHITECTURE.md: Updated Tool Registration section and flow diagrams
+  - REVERSE_MCP.md: Updated all usage examples and approval policies
+  - PERMISSIONS.md: Updated troubleshooting section (team_isAwake → team_status)
+  - REMOTE.md: Updated MCP Tool Integration section and implementation checklists
+  - REVERSE_MCP_IMPLEMENTATION_PLAN.md: Updated all code examples, checklists, and functional requirements
+  - API_IMPLEMENTATION_PLAN.md: Rewrote complete endpoint mapping table (expanded from 10 to 16 tools)
+  - REVERSE_MCP_SECURITY.md: Updated security policy examples and audit logs
+  - OBSERVABILITY.md: Updated status observable flow examples
+  - ENV_VARS.md: Updated forked sessions troubleshooting section
+  - PRINT.md: Marked Phase 2 (team_compact) as removed/not implemented
+  - future/CLAUDE_APPROVE.md: Updated all permission approval examples
+  - All files: Added/updated Tech Writer Notes documenting changes and cross-references
+
+  Tool name changes applied:
+  - team_tell → send_message, ask_message
+  - team_quick_tell → quick_message
+  - team_isAwake → team_status
+  - team_report → session_report
+  - team_teams → list_teams
+  - team_debug → get_logs
+  - team_cancel → session_cancel
+  - team_delete → session_delete
+  - team_clear/team_reboot → session_reboot
+  - team_fork → session_fork
+  - team_compact → REMOVED (incomplete implementation)
+
+  Added semantic aliases:
+  - ask_message (semantic alias for send_message)
+  - team_launch (semantic alias for team_wake)
+
+  Added new tools:
+  - get_date
+
 ### Deprecated
 ### Removed
 ### Fixed
 ### Security
+
+## [2025-10-18] - MCP Tool Renaming & Session MCP Configuration
+
+### Changed
+- **ACTIONS.md**: Complete rewrite (v3.0) to reflect all MCP tool renames
+  - Renamed tools: team_tell → send_message, team_quick_tell → quick_message, team_reboot → session_reboot, team_delete → session_delete, team_fork → session_fork, team_isAwake → team_status, team_report → session_report, team_teams → list_teams, team_debug → get_logs, team_cancel → session_cancel
+  - Added semantic aliases: ask_message (for send_message), team_launch (for team_wake)
+  - Added get_date tool documentation
+  - Removed team_compact (incomplete implementation)
+  - Updated all code examples, signatures, and usage patterns with new tool names
+  - Updated tool catalog table with 17 tools (including new aliases)
+  - Updated Tool Registration section to show new case statements
+  - Updated all usage examples (cross-team review, deployment, async processing, debugging)
+  - Updated Tech Writer Notes with new tool names and comprehensive keywords
+- **COMPACT_IMPLEMENTATION.md**: Added deprecation notice at document start
+  - Noted that compact.ts implementation has been removed as incomplete
+  - Noted that team_compact tool registration is commented out in src/mcp_server.ts
+  - Preserved document as reference for future implementation
+  - Updated status from "Design Phase" to "Not Implemented (Design Phase)"
+  - Added removal date (2025-10-18)
+- **CONFIG.md**: Session MCP configuration documentation (from previous commit, included for completeness)
+  - Added sessionMcpEnabled and sessionMcpPath configuration fields
+  - Added comprehensive "Session MCP Configuration" section before "Permission Approval System"
+  - Included global vs team-level configuration examples
+  - Added file location examples for local and remote teams
+  - Documented custom script interface changes
+  - Added security considerations and troubleshooting guide
+  - Updated Tech Writer Notes with sessionMcp keywords and cross-references
+
+### Added
+- None (documentation updates only)
+
+### Fixed
+- ACTIONS.md: Fixed all tool names to match actual implementation in src/mcp_server.ts
+- ACTIONS.md: Removed references to non-existent team_compact tool
+- COMPACT_IMPLEMENTATION.md: Added clear notice that implementation has been removed to prevent confusion
+
+**Trigger**: Git commit session implementing session MCP configuration (sessionMcpEnabled, sessionMcpPath) and renaming MCP tools for semantic clarity (9 commits total, 10 src/ files modified)
+**Files**: 3 documentation files updated (1 complete rewrite, 2 targeted updates)
+**Key Topics**: MCP tool renaming, send_message, ask_message, quick_message, session_reboot, session_delete, session_fork, session_cancel, team_status, session_report, list_teams, get_logs, get_date, team_launch semantic alias, team_compact removal, session MCP configuration, sessionMcpEnabled, sessionMcpPath, mcp-config-writer updates
 
 ## [2025-10-17] - Permission Approval & Dashboard Enhancements
 

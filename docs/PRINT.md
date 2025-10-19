@@ -894,11 +894,11 @@ class RemotePrintExecutor extends ClaudePrintExecutor { }
 - ✅ Implement remote execution (executeRemote)
 - ✅ Add unit tests
 
-### Phase 2: Compact Action (Week 1-2)
-- Create `src/actions/compact.ts`
-- Use ClaudePrintExecutor for /compact
-- Register team_compact MCP tool
-- Add integration tests
+### Phase 2: Compact Action (NOT IMPLEMENTED - Removed)
+- ~~Create `src/actions/compact.ts`~~
+- ~~Use ClaudePrintExecutor for /compact~~
+- ~~Register team_compact MCP tool~~ (Feature removed - incomplete implementation)
+- ~~Add integration tests~~
 
 ### Phase 3: Refactor initializeSessionFile (Week 2)
 - Replace inline implementation with ClaudePrintExecutor

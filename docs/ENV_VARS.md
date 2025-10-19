@@ -75,7 +75,7 @@ teams:
 
 ### Forked Sessions Not Resuming
 
-**Symptom:** When using `team_fork`, the new terminal starts a fresh Claude session instead of resuming the existing one.
+**Symptom:** When using `session_fork`, the new terminal starts a fresh Claude session instead of resuming the existing one.
 
 **Cause:** Either `NODE_ENV=test` or `IRIS_TEST_REMOTE=1` is set in your shell environment.
 

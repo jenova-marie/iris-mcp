@@ -16,7 +16,7 @@ Allow Claude (or any orchestrating team) to programmatically approve permission 
        permissionId: "perm-001",
        sessionId: "abc123",
        teamName: "team-a",
-       toolName: "mcp__iris__team_tell",
+       toolName: "mcp__iris__send_message",
        ...
      }
    → Team A waits for approval (Promise pending)
@@ -94,7 +94,7 @@ Allow Claude (or any orchestrating team) to programmatically approve permission 
       permissionId: "perm-001",
       sessionId: "abc123",
       teamName: "team-a",
-      toolName: "mcp__iris__team_tell",
+      toolName: "mcp__iris__send_message",
       toolInput: { ... },
       reason: "...",
       createdAt: "2025-01-15T10:30:00Z",
@@ -172,7 +172,7 @@ await team_wake({ team: "frontend", fromTeam: "claude" });
 await team_wake({ team: "backend", fromTeam: "claude" });
 
 // Claude tells frontend to query backend (requires permission)
-await team_tell({
+await send_message({
   toTeam: "frontend",
   fromTeam: "claude",
   message: "Query the backend team for user data"
@@ -201,7 +201,7 @@ Claude can inspect permission requests before approving:
 const pending = await team_check_perm_requests({ fromTeam: "claude" });
 
 for (const perm of pending.permissions) {
-  if (perm.toolName === "mcp__iris__team_tell" &&
+  if (perm.toolName === "mcp__iris__send_message" &&
       perm.toolInput.toTeam === "production") {
     // Risky operation - deny or escalate to dashboard
     continue;
@@ -223,7 +223,7 @@ Dashboard could show permissions organized by orchestrator:
 Pending Permissions (grouped by orchestrator):
 
 claude (2 pending)
-  ├─ team-frontend → team-backend (team_tell)
+  ├─ team-frontend → team-backend (send_message)
   └─ team-worker → file-write (write_file)
 
 user-alice (1 pending)

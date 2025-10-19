@@ -72,54 +72,85 @@ CacheManager
 - **Persistence**: In-memory only (not persisted to disk)
 
 **Access Patterns:**
-- `team_cache_read(sessionId)` - Read all entries for a session
-- `team_cache_clear(sessionId)` - Clear specific session cache
-- `cache.observe()` - Subscribe to real-time cache events
+- `session_report(team, fromTeam)` - View conversation history for a session
+- `cache.observe()` - Subscribe to real-time cache events (internal API)
 
-## MCP Tools (All 10)
+## MCP Tools (17 Total)
 
-### Communication
-- **`team_tell`** - Send message to a team and optionally wait for response
-  - Modes: `sync` (wait), `async` (background), `persistent` (queue for later)
-  - Required: `fromTeam`, `toTeam`, `message`
-  - Optional: `timeout`
+See [ACTIONS.md](ACTIONS.md) for complete API reference.
 
-### Process Management
+### Communication Tools (3)
+- **`send_message`** - Send message to a team with optional response wait
+  - Modes: `sync` (wait for response), `async` (background), `persistent` (SQLite queue)
+  - Required: `toTeam`, `message`, `fromTeam`
+  - Optional: `timeout`, `persist`, `ttlDays`
+
+- **`ask_message`** - Ask a question and wait for response (semantic alias for send_message)
+  - Same parameters as `send_message`
+  - Signals question intent through naming
+
+- **`quick_message`** - Fire-and-forget async message (convenience wrapper)
+  - Required: `toTeam`, `message`, `fromTeam`
+  - Equivalent to `send_message` with `timeout: -1`
+
+### Session Management Tools (4)
+- **`session_reboot`** - Create fresh session with clean slate
+  - Required: `toTeam`, `fromTeam`
+  - Terminates process, deletes old session, creates new UUID
+
+- **`session_delete`** - Delete session permanently without replacement
+  - Required: `toTeam`, `fromTeam`
+  - Unlike reboot, does not create new session
+
+- **`session_fork`** - Launch interactive terminal session
+  - Required: `toTeam`, `fromTeam`
+  - Opens new terminal with `claude --resume --fork-session`
+
+- **`session_cancel`** - Cancel running operation (EXPERIMENTAL)
+  - Required: `team`, `fromTeam`
+  - Sends ESC to stdin to interrupt operation
+
+### Process Management Tools (5)
 - **`team_wake`** - Wake up a team's process (spawn if needed)
   - Required: `team`, `fromTeam`
-  - Optional: `clearCache` (default: true)
+  - Creates session-specific process for isolation
 
-- **`team_sleep`** - Put a team's process to sleep (terminate gracefully)
+- **`team_launch`** - Launch a team process (semantic alias for team_wake)
+  - Same parameters as `team_wake`
+  - Natural language alternative
+
+- **`team_sleep`** - Put team to sleep (terminate process)
   - Required: `team`, `fromTeam`
-  - Optional: `force` (SIGKILL vs SIGTERM)
+  - Optional: `force` (SIGKILL vs SIGTERM, default: false)
 
 - **`team_wake_all`** - Wake up all configured teams
   - Required: `fromTeam`
-  - Optional: `parallel` (default: false - sequential mode)
+  - Optional: `parallel` (default: false, NOT RECOMMENDED)
 
-### Status & Monitoring
-- **`team_isAwake`** - Check if team processes are active
-  - Required: `teams` (array of team names)
-  - Returns: Status for each team (active/inactive)
+- **`team_status`** - Check if teams are awake or asleep
+  - Required: `fromTeam`
+  - Optional: `team` (specific team), `includeNotifications` (default: true)
+  - Returns: Process details for active teams
 
-- **`team_report`** - View process output (stdout/stderr)
+### Information & Debug Tools (4)
+- **`session_report`** - View conversation history for a session
   - Required: `team`, `fromTeam`
-  - Returns: Recent process output without clearing
+  - Returns: Complete conversation cache with messages and protocol events
 
-### Cache Operations
-- **`team_cache_read`** - Read conversation cache and protocol messages
-  - Required: `sessionId`, `fromTeam`
-  - Returns: All cache entries for the session
-
-- **`team_cache_clear`** - Clear conversation cache
-  - Required: `sessionId`, `fromTeam`
-  - Removes all entries for the session
-
-### Team Identification
-- **`team_getTeamName`** - Identify team name from current directory
-  - Required: `pwd` (current working directory)
-  - Returns: Team name matching the directory path
-
-- **`team_teams`** - List all configured teams
+- **`list_teams`** - List all configured teams
   - No parameters required
-  - Returns: Array of all team configurations
+  - Returns: Array of team configurations (name, path, description, color, etc.)
+
+- **`get_logs`** - Query in-memory logs from server
+  - Optional: `logs_since`, `storeName`, `format`, `level`, `getAllStores`
+  - Returns: Filtered logs since specified timestamp
+
+- **`get_date`** - Get current system date and time
+  - No parameters required
+  - Returns: Timestamp in multiple formats (ISO, UTC, Unix, components)
+
+### Internal Tools (1)
+- **`permissions__approve`** - Permission approval handler (internal)
+  - Required: `tool_name`, `input`
+  - Optional: `reason`
+  - Auto-approves Iris MCP tools, denies others

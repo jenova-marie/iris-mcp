@@ -1,8 +1,8 @@
 # Iris MCP - System Architecture
 
-**Version:** 2.0 (Post-Refactor)
-**Date:** October 12, 2025
-**Status:** Refactored with Iris BLL and new Cache Architecture
+**Version:** 3.0 (Major Update)
+**Date:** October 18, 2025
+**Status:** Production-ready with Dashboard, Transport Abstraction, and Reverse MCP
 
 ## Table of Contents
 
@@ -128,11 +128,14 @@ System handles failures gracefully:
 ┌──────────────────────────────────────────────────────────────────┐
 │                      MCP SERVER (index.ts)                        │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Tool Registration                                          │  │
-│  │ - team_tell      - team_wake      - team_cache_read       │  │
-│  │ - team_isAwake   - team_sleep     - team_cache_clear      │  │
-│  │ - team_wake_all  - team_report    - team_getTeamName      │  │
-│  │ - team_teams                                               │  │
+│  │ Tool Registration (17 tools)                               │  │
+│  │ - send_message     - team_wake        - list_teams        │  │
+│  │ - ask_message      - team_launch      - get_logs          │  │
+│  │ - quick_message    - team_wake_all    - get_date          │  │
+│  │ - session_reboot   - team_sleep       - permissions__appr │  │
+│  │ - session_delete   - team_status                           │  │
+│  │ - session_fork     - session_report                        │  │
+│  │ - session_cancel                                           │  │
 │  └────────────────────────────────────────────────────────────┘  │
 └────────────────┬─────────────────────────────────────────────────┘
                  │ Tool Invocation
@@ -164,14 +167,22 @@ System handles failures gracefully:
    ▼                   ▼                    ▼
 ┌────────────────┐ ┌─────────────────┐ ┌──────────────────────┐
 │ CLAUDE PROCESS │ │  MESSAGE CACHE  │ │  SQLite Database     │
-│ (dumb pipe)    │ │ (per team pair) │ │ team-sessions.db     │
+│ (coordinator)  │ │ (per team pair) │ │ team-sessions.db     │
 ├────────────────┤ ├─────────────────┤ ├──────────────────────┤
-│ spawn()        │ │ createEntry()   │ │ from_team            │
-│ executeTell()  │ │ getAllEntries() │ │ to_team              │
-│ pipe to cache  │ │ getStats()      │ │ session_id           │
-└────────────────┘ └─────────────────┘ │ process_state        │
-                     │                  │ last_response_at     │
-                     │ contains         └──────────────────────┘
+│ transport      │ │ createEntry()   │ │ id (PK)              │
+│ spawn()        │ │ getAllEntries() │ │ from_team            │
+│ executeTell()  │ │ getStats()      │ │ to_team              │
+└────────────────┘ └─────────────────┘ │ session_id (UNIQUE)  │
+                     │                  │ created_at           │
+                     │ contains         │ last_used_at         │
+                                        │ message_count        │
+                                        │ status               │
+                                        │ process_state        │
+                                        │ current_cache_id     │
+                                        │ last_response_at     │
+                                        │ launch_command       │
+                                        │ team_config_snapshot │
+                                        └──────────────────────┘
                      ▼
                   ┌─────────────────┐
                   │  CACHE ENTRY    │
@@ -268,6 +279,182 @@ ClaudeProcessPool
 **Pool Key Format:** `fromTeam->toTeam` (e.g., `"iris->alpha"`, `"alpha->beta"`, `"frontend->backend"`)
 
 **LRU Tracking:** Array of pool keys ordered by access time (least recent first)
+
+---
+
+## Transport Abstraction Layer
+
+### Critical Architectural Component
+
+**ClaudeProcess does NOT directly spawn processes.** It delegates to a **Transport abstraction layer** that handles local and remote execution transparently.
+
+### Architecture Diagram
+
+```
+Iris Orchestrator
+    ↓
+ClaudeProcessPool
+    ↓
+ClaudeProcess (wrapper/coordinator)
+    ↓
+Transport (abstraction interface)
+    ├── LocalTransport → child_process.spawn()
+    └── SSHTransport → OpenSSH client (ssh command)
+```
+
+### Transport Interface
+
+**Location:** `src/transport/transport.interface.ts`
+
+```typescript
+interface Transport {
+  // RxJS reactive streams
+  status$: Observable<TransportStatus>;  // STOPPED → CONNECTING → SPAWNING → READY → BUSY
+  errors$: Observable<Error>;            // Error stream
+
+  // Core operations
+  spawn(
+    spawnCacheEntry: CacheEntry,
+    commandInfo: CommandInfo,        // Pre-built command (executable, args, cwd)
+    spawnTimeout?: number            // Timeout in ms (default: 20000)
+  ): Promise<void>;
+
+  executeTell(cacheEntry: CacheEntry): void;
+  terminate(): Promise<void>;
+
+  // State queries
+  isReady(): boolean;
+  isBusy(): boolean;
+  getPid(): number | null;           // Local only, null for remote
+
+  // Metrics & debugging
+  getMetrics(): TransportMetrics;
+  getLaunchCommand?(): string | null;      // Debug: Get full launch command
+  getTeamConfigSnapshot?(): string | null;  // Debug: Get team config JSON
+  cancel?(): void;                          // Send ESC to stdin (attempt cancel)
+}
+```
+
+### Implementations
+
+#### 1. LocalTransport ✅
+
+**Location:** `src/transport/local-transport.ts`
+
+**Purpose:** Execute Claude CLI on the local machine
+
+**Mechanism:**
+- Uses Node.js `child_process.spawn()`
+- Direct stdio piping to cache
+- Process runs in team's project directory
+
+**Key Features:**
+- Fast startup (~2s warm, ~7s cold)
+- Direct process control
+- Native stdio handling
+- PID tracking
+
+#### 2. SSHTransport ✅
+
+**Location:** `src/transport/ssh-transport.ts`
+
+**Purpose:** Execute Claude CLI on remote hosts via SSH
+
+**Mechanism:**
+- Uses OpenSSH client (`ssh` command)
+- Tunnels stdio over SSH connection
+- Supports all SSH features (agent forwarding, ProxyJump, etc.)
+
+**Key Features:**
+- Automatic SSH config integration (`~/.ssh/config`)
+- Keepalive support (ServerAliveInterval, ServerAliveCountMax)
+- Reverse MCP tunneling (`ssh -R` for remote → local calls)
+- Session MCP configuration (bidirectional communication)
+- Remote MCP config file deployment
+
+**Configuration:**
+```yaml
+teams:
+  team-remote:
+    remote: ssh inanna             # OpenSSH command
+    path: /opt/containers           # Remote path
+    enableReverseMcp: true          # SSH tunnel for callbacks
+    sessionMcpEnabled: true         # Deploy MCP config files
+```
+
+#### 3. TransportFactory ✅
+
+**Location:** `src/transport/transport-factory.ts`
+
+**Purpose:** Select appropriate transport based on team configuration
+
+**Logic:**
+```typescript
+class TransportFactory {
+  static create(teamName: string, config: IrisConfig, sessionId: string): Transport {
+    if (config.remote) {
+      return new SSHTransport(teamName, config, sessionId);
+    }
+    return new LocalTransport(teamName, config, sessionId);
+  }
+}
+```
+
+### ClaudeProcess Integration
+
+**ClaudeProcess is now a thin coordinator:**
+
+```typescript
+class ClaudeProcess extends EventEmitter {
+  private transport: Transport;  // Abstraction
+
+  constructor(teamName: string, config: IrisConfig, sessionId: string) {
+    this.transport = TransportFactory.create(teamName, config, sessionId);
+  }
+
+  async spawn(cacheEntry: CacheEntry): Promise<void> {
+    return this.transport.spawn(cacheEntry, commandInfo, timeout);
+  }
+
+  executeTell(cacheEntry: CacheEntry): void {
+    this.transport.executeTell(cacheEntry);
+  }
+}
+```
+
+**ClaudeProcess responsibilities:**
+- ✅ Coordinate transport lifecycle
+- ✅ Bridge transport events to ProcessPool
+- ✅ Maintain status observables
+- ✅ Track metrics
+- ❌ Does NOT spawn processes directly
+- ❌ Does NOT manage stdio (delegated to transport)
+
+### Benefits of Transport Abstraction
+
+1. **Remote Execution:** Teams can run on any SSH-accessible host
+2. **Transparency:** Iris treats local/remote identically
+3. **Extensibility:** Easy to add new transports (Docker, Kubernetes, WebSocket)
+4. **Testability:** Mock transports for unit testing
+5. **Separation of Concerns:** Process orchestration vs. execution mechanism
+
+### RxJS Reactive Streams
+
+Both LocalTransport and SSHTransport emit reactive status updates:
+
+```typescript
+transport.status$.subscribe(status => {
+  // STOPPED → CONNECTING → SPAWNING → READY → BUSY → READY
+  console.log('Transport status changed:', status);
+});
+
+transport.errors$.subscribe(error => {
+  // Handle transport-level errors
+  console.error('Transport error:', error);
+});
+```
+
+**Integration:** ClaudeProcess subscribes to transport observables and forwards to ProcessPool.
 
 ---
 
@@ -378,7 +565,7 @@ Time    Event
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                   1. MCP Tool Call                                │
-│  team_tell(toTeam: "alpha", message: "Hello", timeout: 30000)    │
+│  send_message(toTeam: "alpha", message: "Hello", timeout: 30000) │
 └────────────────────┬─────────────────────────────────────────────┘
                      │
                      ▼
@@ -623,42 +810,77 @@ Iris is designed for **five progressive phases**:
 
 **Status:** Complete (refactored Oct 2025)
 
-### Phase 2: React Dashboard 🚧
+### Phase 2: React Dashboard ✅ **IMPLEMENTED**
 **Location:** `src/dashboard/`
-**Tech Stack:** React 18 + Express + Socket.io
-**Purpose:** Web UI for monitoring teams, processes, cache
+**Tech Stack:** React 18 + Vite + Express + Socket.io
+**Purpose:** Web UI for monitoring teams, processes, and permissions
+**Status:** Production-ready, fully functional
 
-**Features:**
-- Real-time process status
-- Cache inspection
-- Session history
-- Manual process control
-- Health metrics visualization
+**Server-Side (src/dashboard/server/):**
+- `index.ts` - Express server with WebSocket support
+- `state-bridge.ts` - State synchronization with Iris core
+- `routes/processes.ts` - Process management API
+- `routes/config.ts` - Configuration management API
 
-**Integration:** Subscribe to RxJS observables for live updates
+**Client-Side (src/dashboard/client/):**
+- `ProcessMonitor.tsx` - Real-time process status monitoring
+- `LogViewer.tsx` - Live log streaming with filtering
+- `ConfigEditor.tsx` - Visual configuration editor
+- `PermissionApprovalModal.tsx` - Manual permission approval UI
+- `useWebSocket.ts` - WebSocket integration hook
 
-### Phase 3: HTTP/WebSocket API 🚧
-**Location:** `src/api/`
-**Tech Stack:** Express + Socket.io
-**Purpose:** External integrations
+**Features Implemented:**
+- ✅ Real-time process status with WebSocket updates
+- ✅ Permission approval system with modal dialogs
+- ✅ Real-time log streaming from wonder-logger
+- ✅ Session history and statistics
+- ✅ Manual process control (wake/sleep/terminate)
+- ✅ Configuration editor with validation
+- ✅ Health metrics visualization
+- ✅ Debug info display (launch commands, config snapshots)
 
-**Endpoints:**
-- `POST /api/teams/tell` - HTTP version of team_tell
-- `GET /api/teams/:name/status` - Team status
-- `WS /api/stream` - Real-time event stream
+**Integration:** Subscribes to RxJS observables via DashboardStateBridge, forwards events via Socket.io
 
-### Phase 4: CLI Interface 🚧
+### Phase 3: HTTP/WebSocket API ⚠️ **PARTIALLY IMPLEMENTED**
+**Location:** `src/mcp_server.ts` (integrated) + `src/api/` (planned separate module)
+**Tech Stack:** Express + StreamableHTTPServerTransport
+**Purpose:** HTTP transport for MCP + external integrations
+**Status:** HTTP/WS functionality exists, separate REST API module pending
+
+**Currently Implemented (in MCP server):**
+- ✅ HTTP transport mode (`run("http", port)`)
+- ✅ `/mcp` - General MCP HTTP endpoint (JSON-RPC over HTTP)
+- ✅ `/mcp/:sessionId` - Session-specific endpoint for Reverse MCP
+- ✅ Express server with JSON middleware
+- ✅ WebSocket support via Dashboard server
+- ✅ StreamableHTTPServerTransport integration
+
+**Planned (separate src/api/ module):**
+- 🔮 RESTful API wrapper around MCP tools
+- 🔮 `POST /api/teams/tell` - HTTP version of send_message
+- 🔮 `GET /api/teams/:name/status` - Team status endpoint
+- 🔮 `WS /api/stream` - Dedicated real-time event stream
+
+**Note:** HTTP/WebSocket capabilities are fully functional for Dashboard and Reverse MCP, but a dedicated REST API module is still planned.
+
+### Phase 4: CLI Interface ⚠️ **PARTIALLY IMPLEMENTED**
 **Location:** `src/cli/`
-**Tech Stack:** Ink 5 (React for terminals) + Commander
-**Purpose:** Terminal UI for humans
+**Tech Stack:** Plain TypeScript commands (Ink integration planned)
+**Purpose:** Terminal commands for installation and management
+**Status:** Basic commands implemented, interactive TUI pending
 
-**Commands:**
-- `iris teams list` - Show all teams
-- `iris tell <team> <message>` - Interactive tell
-- `iris monitor` - Live dashboard in terminal
-- `iris cache inspect <sessionId>` - Cache viewer
+**Currently Implemented (src/cli/commands/):**
+- ✅ `install.ts` - Install Iris MCP and register with Claude CLI
+- ✅ `uninstall.ts` - Uninstall and cleanup
+- ✅ `add-team.ts` - Add team to configuration
 
-**Why Ink?** Reuse React components from Phase 2 dashboard!
+**Planned (Ink-based Terminal UI):**
+- 🔮 `iris teams list` - Show all teams with status
+- 🔮 `iris tell <team> <message>` - Interactive tell with autocomplete
+- 🔮 `iris monitor` - Live dashboard in terminal (Ink-based)
+- 🔮 `iris cache inspect <sessionId>` - Interactive cache viewer
+
+**Note:** Current CLI uses plain TypeScript. Ink 5 (React for terminals) integration is planned to reuse Dashboard components for TUI.
 
 ### Phase 5: Intelligence Layer 🔮
 **Location:** `src/intelligence/`
@@ -824,6 +1046,36 @@ The refactored Iris MCP architecture achieves:
 
 ---
 
-**Document Version:** 2.0
-**Last Updated:** October 2025
+## Tech Writer Notes
+
+**Coverage Areas:**
+- System architecture and component interaction patterns
+- Two-timeout architecture (responseTimeout vs mcpTimeout)
+- Data flow diagrams and state machines
+- Event-driven communication with RxJS observables
+- Cache hierarchy and process pool management
+- Future phases (Dashboard, API, CLI, Intelligence Layer)
+
+**Keywords:** architecture, system design, components, data flow, state machine, event-driven, RxJS, observables, cache hierarchy, process pool, two-timeout, responseTimeout, mcpTimeout, Iris orchestrator, ClaudeProcess, business logic layer, transport layer, storage layer
+
+**Last Updated:** 2025-10-18
+**Change Context:** MAJOR ARCHITECTURE DOCUMENTATION UPDATE (v3.0). Corrected Phase 2 status - Dashboard is fully implemented and production-ready (not future). Added comprehensive Transport Abstraction Layer section documenting LocalTransport/SSHTransport split. Fixed tool registration diagram (removed non-existent team_cache_read/team_cache_clear tools). Updated database schema diagram with all actual fields (launch_command, team_config_snapshot, etc.). Corrected Phase 3 & 4 status (HTTP/WS partially implemented, CLI partially implemented). Document now accurately reflects actual implementation state vs. planned features.
+
+**Changes from v2.1 → v3.0:**
+- ✅ Added Transport Abstraction Layer section (fundamental architecture, was completely undocumented)
+- ✅ Updated Phase 2 status: Dashboard fully implemented (not future)
+- ✅ Updated Phase 3 status: HTTP/WS functionality exists in MCP server
+- ✅ Updated Phase 4 status: Basic CLI commands implemented (Ink integration pending)
+- ✅ Fixed tool registration: Removed team_cache_read/team_cache_clear (don't exist)
+- ✅ Updated database schema: Added all missing fields
+- ✅ Updated ClaudeProcess description: Now coordinator, not direct spawner
+- ✅ Added RxJS reactive streams documentation throughout
+- ✅ Added debug tooling documentation (getLaunchCommand, getTeamConfigSnapshot)
+
+**Related Files:** ACTIONS.md (tool API), FEATURES.md (features), NOMENCLATURE.md (concepts), REMOTE.md (transport details), SESSION.md (session mgmt), DASHBOARD.md (dashboard docs), PERMISSIONS.md (permission system)
+
+---
+
+**Document Version:** 3.0
+**Last Updated:** October 18, 2025
 **Author:** Jenova (with Claude Code)

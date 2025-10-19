@@ -151,13 +151,21 @@ Iris can now:
 
 ```typescript
 interface Transport {
+  // RxJS reactive streams
+  status$: Observable<TransportStatus>;  // Current status (STOPPED → CONNECTING → SPAWNING → READY → BUSY → READY → TERMINATING → STOPPED)
+  errors$: Observable<Error>;            // Error stream
+
   // Spawn Claude process with cache entry for init
-  spawn(spawnCacheEntry: CacheEntry): Promise<void>;
+  spawn(
+    spawnCacheEntry: CacheEntry,
+    commandInfo: CommandInfo,        // Pre-built command (executable, args, cwd)
+    spawnTimeout?: number            // Timeout in ms (default: 20000)
+  ): Promise<void>;
 
   // Execute tell by writing to stdin
   executeTell(cacheEntry: CacheEntry): void;
 
-  // Terminate process
+  // Terminate process gracefully
   terminate(): Promise<void>;
 
   // Check if transport is ready
@@ -168,6 +176,18 @@ interface Transport {
 
   // Get basic metrics
   getMetrics(): TransportMetrics;
+
+  // Get process ID (local only, returns null for remote)
+  getPid(): number | null;
+
+  // Send ESC to stdin (attempt to cancel current operation)
+  cancel?(): void;
+
+  // Get launch command for debugging
+  getLaunchCommand?(): string | null;
+
+  // Get team config snapshot for debugging
+  getTeamConfigSnapshot?(): string | null;
 }
 ```
 
@@ -357,12 +377,24 @@ interface IrisConfig {
     serverAliveCountMax?: number; // Max keepalive failures (default: 3)
     compression?: boolean;        // Enable SSH compression
     forwardAgent?: boolean;       // Forward SSH agent (OpenSSH only)
+    extraSshArgs?: string[];      // Additional SSH arguments
   };
+
+  // Reverse MCP (remote → local communication via SSH tunnel)
+  enableReverseMcp?: boolean;     // Enable reverse MCP tunnel (default: false)
+  reverseMcpPort?: number;        // Port for reverse tunnel (default: 1615)
+  allowHttp?: boolean;            // Allow HTTP for MCP (dev only, default: false)
+
+  // Session MCP Configuration (MCP config file routing)
+  sessionMcpEnabled?: boolean;    // Enable MCP config file writing (default: false)
+  sessionMcpPath?: string;        // MCP config directory relative to team path (default: ".claude/iris/mcp")
+  mcpConfigScript?: string;       // Custom script for writing MCP config files (default: bundled mcp-cp.sh/mcp-scp.sh)
 
   // Existing optional fields
   idleTimeout?: number;
   sessionInitTimeout?: number;
   color?: string;
+  claudePath?: string;            // Custom path to Claude CLI executable (default: "claude")
 }
 ```
 
@@ -421,6 +453,209 @@ team-frontend:
   path: /usr/src/app
   description: Frontend team in Kubernetes
 ```
+
+---
+
+## Session MCP Configuration
+
+**Feature:** Automatic MCP config file generation for bidirectional Claude communication.
+
+### Overview
+
+Session MCP Configuration enables remote (or local) Claude instances to communicate back to the Iris MCP server through session-specific MCP config files. When enabled, Iris automatically generates and deploys a JSON config file that Claude Code loads via the `--mcp-config` flag.
+
+**Key Benefit:** Remote teams can use Iris MCP tools (like `send_message`, `team_status`, etc.) to coordinate with other teams, creating a fully bidirectional mesh network of Claude instances.
+
+### Configuration Parameters
+
+```yaml
+settings:
+  # Global default (can be overridden per-team)
+  sessionMcpEnabled: false         # Enable session MCP by default (default: false)
+  sessionMcpPath: ".claude/iris/mcp"  # Default MCP config directory
+
+teams:
+  team-remote:
+    remote: ssh inanna
+    path: /opt/containers
+    sessionMcpEnabled: true        # Enable for this team (overrides global)
+    sessionMcpPath: ".claude/iris/mcp"  # Optional: override path
+    mcpConfigScript: /path/to/custom-script.sh  # Optional: custom config writer
+```
+
+### How It Works
+
+1. **Session Creation**: When a session is created (e.g., `team-iris → team-remote`), Iris generates a session-specific MCP config:
+   ```json
+   {
+     "mcpServers": {
+       "iris": {
+         "type": "http",
+         "url": "http://localhost:1615/mcp/<sessionId>"
+       }
+     }
+   }
+   ```
+
+2. **Config File Writing**:
+   - **Local teams**: Uses `mcp-cp.sh` (or `.ps1`) to copy config to `<teamPath>/<sessionMcpPath>/iris-mcp-<sessionId>.json`
+   - **Remote teams**: Uses `mcp-scp.sh` (or `.ps1`) to SCP config to remote host
+
+3. **Claude Launch**: Transport adds `--mcp-config <filepath>` to Claude command
+
+4. **Bidirectional Communication**: Remote Claude can now call Iris MCP tools to communicate with other teams
+
+### MCP Config Scripts
+
+Iris delegates all file I/O to external shell scripts for maximum flexibility and user control.
+
+**Default Scripts:**
+- **Local**: `examples/scripts/mcp-cp.sh` (or `mcp-cp.ps1` on Windows)
+- **Remote**: `examples/scripts/mcp-scp.sh` (or `mcp-scp.ps1` on Windows)
+
+**Script Contract:**
+
+**Input (via stdin):**
+```json
+{
+  "mcpServers": {
+    "iris": {
+      "type": "http",
+      "url": "http://localhost:1615/mcp/<sessionId>"
+    }
+  }
+}
+```
+
+**Arguments:**
+- `$1` - Session ID
+- `$2` - Team path (local) or SSH host (remote)
+- `$3` - Remote team path (remote only) or sessionMcpPath (optional)
+- `$4` - sessionMcpPath (remote only, optional)
+
+**Output (stdout):**
+```
+/absolute/path/to/iris-mcp-<sessionId>.json
+```
+
+**Example mcp-cp.sh (local):**
+```bash
+#!/bin/bash
+sessionId="$1"
+teamPath="$2"
+sessionMcpPath="${3:-.claude/iris/mcp}"
+
+# Create directory
+mkdir -p "$teamPath/$sessionMcpPath"
+
+# Write JSON from stdin
+configPath="$teamPath/$sessionMcpPath/iris-mcp-$sessionId.json"
+cat > "$configPath"
+
+# Output path
+echo "$configPath"
+```
+
+**Example mcp-scp.sh (remote):**
+```bash
+#!/bin/bash
+sessionId="$1"
+sshHost="$2"
+remoteTeamPath="$3"
+sessionMcpPath="${4:-.claude/iris/mcp}"
+
+# Create remote directory
+ssh "$sshHost" "mkdir -p '$remoteTeamPath/$sessionMcpPath'"
+
+# Write to temp file
+tmpFile=$(mktemp)
+cat > "$tmpFile"
+
+# SCP to remote
+remotePath="$remoteTeamPath/$sessionMcpPath/iris-mcp-$sessionId.json"
+scp "$tmpFile" "$sshHost:$remotePath"
+rm "$tmpFile"
+
+# Output remote path
+echo "$remotePath"
+```
+
+### Custom Config Scripts
+
+You can provide your own script for specialized workflows:
+
+```yaml
+team-custom:
+  sessionMcpEnabled: true
+  mcpConfigScript: /usr/local/bin/custom-mcp-writer.sh
+  # Script receives same stdin/args contract
+```
+
+**Use Cases:**
+- Deploy to S3 or cloud storage
+- Encrypt config files
+- Integrate with configuration management (Ansible, Chef, etc.)
+- Log config deployments to audit trail
+
+### Reverse MCP Integration
+
+Session MCP works seamlessly with Reverse MCP tunneling:
+
+```yaml
+team-remote:
+  remote: ssh inanna
+  path: /opt/containers
+  # Enable bidirectional communication
+  enableReverseMcp: true          # SSH reverse tunnel (remote → local)
+  reverseMcpPort: 1615            # Port for tunnel (default: 1615)
+  sessionMcpEnabled: true         # MCP config file routing
+  allowHttp: false                # HTTPS only (production)
+```
+
+**With Reverse MCP:**
+- Local Iris runs HTTP/HTTPS server on port 1615
+- SSH tunnel forwards `localhost:1615` on remote host to local Iris
+- MCP config points to `http://localhost:1615/mcp/<sessionId>`
+- Remote Claude connects via tunnel to local Iris
+
+**Without Reverse MCP:**
+- Iris HTTP server must be accessible from remote host
+- MCP config points to `https://<iris-host>:1615/mcp/<sessionId>`
+- Requires firewall rules and TLS certificates
+
+### Cleanup
+
+MCP config files are automatically cleaned up when:
+- Session is terminated
+- Session is rebooted (old session deleted)
+- Team process is terminated
+
+**Local cleanup:** `fs.unlink()` removes file
+**Remote cleanup:** `ssh <host> rm -f <remotePath>` removes file
+
+### Security Considerations
+
+1. **Session Isolation**: Each session gets a unique MCP config file tied to session ID
+2. **Path Validation**: `sessionMcpPath` is restricted to team's project directory
+3. **Script Execution**: Scripts run with Iris process permissions (review before using custom scripts)
+4. **File Permissions**: Scripts should set appropriate file permissions (644 or 600)
+
+### Troubleshooting
+
+**Config file not found:**
+- Check `sessionMcpEnabled: true` in team config
+- Verify script output path matches Claude's `--mcp-config` arg
+- Check script execution logs
+
+**Permission denied:**
+- Verify script has execute permissions (`chmod +x`)
+- Check directory permissions on remote host
+- Review SSH key permissions
+
+**Remote file not created:**
+- Verify SSH connectivity (`ssh <host> echo test`)
+- Check remote directory exists and is writable
+- Review SCP permissions
 
 ---
 
@@ -694,7 +929,7 @@ Suggestion: "Check SSH key at ~/.ssh/company_rsa or run: ssh-add ~/.ssh/company_
 **MCP Tool Integration:**
 
 ```typescript
-// team_isAwake returns connection state
+// team_status returns connection state
 {
   "team": "team-remote",
   "awake": true,
@@ -1408,43 +1643,60 @@ teams:
 
 ## Implementation Checklist
 
-### Phase 1: Transport Abstraction (1 week)
-- [ ] Define Transport interface
-- [ ] Extract LocalTransport from ClaudeProcess
-- [ ] Implement TransportFactory
-- [ ] Update config schema with `remote` field
-- [ ] Unit tests for transport abstraction
+### Phase 1: Transport Abstraction ✅ COMPLETE
+- [x] Define Transport interface
+- [x] Extract LocalTransport from ClaudeProcess
+- [x] Implement TransportFactory
+- [x] Update config schema with `remote` field
+- [x] Unit tests for transport abstraction
 
-### Phase 2: SSH2Transport (2 weeks)
-- [ ] Implement SSH2Transport class
-- [ ] SSH stdio tunneling (stdin/stdout piping)
-- [ ] Keepalive configuration (ServerAliveInterval)
-- [ ] Session file initialization on remote host
-- [ ] Integration tests with localhost SSH
+### Phase 2: SSH Transport ✅ COMPLETE (OpenSSH Client)
+- [x] Implement SSHTransport class (OpenSSH client-based)
+- [x] SSH stdio tunneling (stdin/stdout piping)
+- [x] Keepalive configuration (ServerAliveInterval, ServerAliveCountMax)
+- [x] Session file initialization on remote host
+- [x] Integration tests with localhost SSH
+- [x] SSH config integration (~/.ssh/config support)
+- [x] ProxyJump/bastion support
+- [x] Reverse MCP tunneling (remote → local communication)
+- [x] Session MCP configuration (bidirectional communication)
+- [x] MCP config script mechanism (mcp-cp.sh, mcp-scp.sh)
+- [x] Remote MCP config file cleanup on termination
+- [ ] ssh2 library transport (PLANNED - opt-in via `ssh2: true`)
 
-### Phase 3: Reconnect Logic & Session State (1 week)
-- [ ] Add connection_state column to team_sessions table
-- [ ] Implement offline/error state transitions
-- [ ] Auto-reconnect with exponential backoff
-- [ ] Permanent vs transient failure detection
-- [ ] Update team_isAwake MCP tool with connection state
-- [ ] User-facing error messages with remediation hints
+### Phase 3: Enhanced Features ✅ PARTIALLY COMPLETE
+- [x] RxJS reactive status streams (status$, errors$)
+- [x] Debug tooling (getLaunchCommand, getTeamConfigSnapshot)
+- [x] Cancel operation support (ESC to stdin)
+- [ ] Connection state tracking (online/offline/error) - PLANNED
+- [ ] Auto-reconnect with exponential backoff - PLANNED
+- [ ] Permanent vs transient failure detection - PLANNED
+- [ ] Update team_status MCP tool with connection state - PLANNED
 
-### Phase 4: Testing & Hardening (1 week)
-- [ ] E2E tests with real SSH hosts (localhost, LAN, WAN)
-- [ ] Network failure simulation tests
-- [ ] Performance benchmarks (local vs remote)
-- [ ] Security audit (key management, host verification)
-- [ ] Load testing with 10+ remote teams
-- [ ] Documentation and examples
+### Phase 4: Testing & Documentation ✅ PARTIALLY COMPLETE
+- [x] Integration tests with real SSH hosts
+- [x] LocalTransport and SSHTransport unit tests
+- [x] Process pool integration tests
+- [x] Session manager tests
+- [x] Comprehensive REMOTE.md documentation
+- [x] Session MCP configuration documentation
+- [ ] Network failure simulation tests - PLANNED
+- [ ] Performance benchmarks (local vs remote) - PLANNED
+- [ ] Load testing with 10+ remote teams - PLANNED
 
-**Total Timeline:** ~5 weeks (vs original 8 weeks)
+### Current Status (2025-01-18)
+✅ **Production Ready**: Local and SSH remote execution fully functional
+✅ **Session MCP**: Bidirectional communication enabled
+✅ **Reverse MCP**: SSH tunneling for remote → local calls
+🔮 **Future Work**: Auto-reconnect, connection state tracking, ssh2 library option
 
 ### Future: Advanced Features
 - [ ] Docker transport (`docker exec -i`)
 - [ ] Kubernetes transport (`kubectl exec -i`)
 - [ ] WSL transport (Windows Subsystem for Linux)
 - [ ] WebSocket/HTTP transport (cloud-native)
+- [ ] Connection pooling with automatic reconnect
+- [ ] Mesh network topology (peer-to-peer team communication)
 
 ---
 
@@ -1538,9 +1790,49 @@ Remote team execution transforms Iris MCP from a **local orchestrator** into a *
 
 ---
 
-**Document Version:** 2.0 (Implemented)
-**Last Updated:** January 2025
+---
+
+## Tech Writer Notes
+
+**Coverage Areas:**
+- Remote team execution via SSH transport (OpenSSH client and future ssh2 library)
+- Transport abstraction layer (LocalTransport vs SSHTransport)
+- SSH configuration integration (~/.ssh/config support)
+- Connection lifecycle and state management (online/offline/error states)
+- Auto-reconnect logic with exponential backoff
+- Permanent vs transient failure detection
+- Remote session file management
+- Security considerations (SSH keys, known_hosts, credential leakage)
+- Performance analysis and optimization strategies
+- Use cases (cloud workspaces, GPU clusters, multi-region, security isolation)
+
+**Keywords:** remote execution, SSH transport, OpenSSH, ssh2 library, transport abstraction, LocalTransport, SSHTransport, RemoteSSH2Transport, connection state, auto-reconnect, session lifecycle, SSH tunnel, stdio streaming, remote session files, keepalive, ServerAliveInterval, SSH config, connection pooling, LRU eviction, distributed AI orchestration, session MCP configuration, bidirectional communication, MCP config scripts, reverse MCP tunneling
+
+**Last Updated:** 2025-01-18
+**Change Context:** Major documentation update to sync with current implementation. Added comprehensive Session MCP Configuration section documenting bidirectional communication feature. Updated Transport interface to include RxJS observables, debug methods, and updated spawn() signature. Added extraSshArgs to RemoteOptions. Added enableReverseMcp, sessionMcpEnabled, sessionMcpPath, and mcpConfigScript configuration parameters. Updated implementation checklist to reflect Phase 1 & 2 completion. Documented MCP config script mechanism (mcp-cp.sh, mcp-scp.sh) for user-controlled file I/O.
+**Related Files:** ACTIONS.md (complete tool API reference), ARCHITECTURE.md (system design), REVERSE_MCP.md (bidirectional tunneling), FEATURES.md (remote execution features), CONFIG.md (remote configuration), REMOTE_SECURITY.md (security model), REVERSE_MCP_IMPLEMENTATION_PLAN.md (implementation design), MCP_TOOLS.md (MCP API reference)
+
+---
+
+**Document Version:** 3.0
+**Last Updated:** January 18, 2025
 **Status:** ✅ Live Feature - Production Ready
+
+**Changes from v2.1:**
+- Added comprehensive Session MCP Configuration section
+- Updated Transport interface with RxJS observables (status$, errors$)
+- Added debug methods (getLaunchCommand, getTeamConfigSnapshot, cancel)
+- Updated spawn() signature with commandInfo and spawnTimeout parameters
+- Added extraSshArgs to RemoteOptions
+- Documented enableReverseMcp, reverseMcpPort, allowHttp parameters
+- Documented sessionMcpEnabled, sessionMcpPath, mcpConfigScript parameters
+- Added MCP config script mechanism documentation (mcp-cp.sh, mcp-scp.sh)
+- Updated implementation checklist (Phase 1 & 2 complete)
+- Added cleanup behavior documentation for MCP config files
+
+**Changes from v2.0:**
+- Updated MCP tool names (team_isAwake → team_status, team_tell → send_message, etc.)
+- Updated tool references to reflect v3.0 naming convention
 
 **Changes from v1.0:**
 - OpenSSH client transport fully implemented
@@ -1548,4 +1840,3 @@ Remote team execution transforms Iris MCP from a **local orchestrator** into a *
 - Reverse MCP feature added for bidirectional communication
 - SSH config integration working
 - Process lifecycle management implemented
-- Updated implementation sections to reflect live status

@@ -297,7 +297,7 @@ const TOOLS = [
 
 ```typescript
 // Local: team-iris tells team-remote to wake team-alpha
-team_tell({
+send_message({
   toTeam: "team-remote",
   message: "Wake team-alpha using the team_wake tool",
   fromTeam: "team-iris"
@@ -315,7 +315,7 @@ team_wake({
 
 ```typescript
 // Remote team wants to interactively debug local team
-team_fork({
+session_fork({
   toTeam: "team-alpha",
   fromTeam: "team-remote"
 });
@@ -325,7 +325,7 @@ team_fork({
 ### Example 3: List Local Teams from Remote
 
 ```typescript
-team_teams({});
+list_teams({});
 // → Returns all configured teams from local Iris config
 ```
 
@@ -345,9 +345,9 @@ team_wake({ team: "team-remote", fromTeam: "team-iris" });
 
 3. **Test reverse communication**:
 ```typescript
-team_tell({
+send_message({
   toTeam: "team-remote",
-  message: "List all Iris MCP teams using team_teams",
+  message: "List all Iris MCP teams using list_teams",
   fromTeam: "team-iris"
 });
 ```
@@ -462,9 +462,9 @@ Configure approval policies per team:
     "team-remote": {
       "enableReverseMcp": true,
       "approvalPolicy": {
-        "autoApprove": ["team_teams", "team_isAwake"],
-        "requireApproval": ["team_wake", "team_fork"],
-        "deny": ["team_delete", "team_clear"]
+        "autoApprove": ["list_teams", "team_status"],
+        "requireApproval": ["team_wake", "session_fork"],
+        "deny": ["session_delete", "session_reboot"]
       }
     }
   }
@@ -516,3 +516,21 @@ This implementation is based on the Claude Code `--permission-prompt-tool` inter
 Reverse MCP enables powerful bidirectional orchestration while maintaining security through SSH tunneling and permission policies. Remote teams can now coordinate local teams, opening up new possibilities for distributed AI workflows, CI/CD integration, and cross-boundary collaboration.
 
 The key insight: **SSH reverse tunneling provides secure, firewall-friendly bidirectional communication without exposing any ports to the network.**
+
+---
+
+## Tech Writer Notes
+
+**Coverage Areas:**
+- Reverse MCP architecture and SSH tunnel configuration
+- Bidirectional orchestration between local and remote Claude instances
+- Permission approval system (permissions__approve tool)
+- Security considerations (SSH tunnel, permission policies, HTTP vs HTTPS)
+- Configuration schema for enableReverseMcp, reverseMcpPort, allowHttp
+- Usage examples and troubleshooting
+
+**Keywords:** reverse MCP, SSH tunnel, bidirectional orchestration, remote execution, permission approval, permissions__approve, enableReverseMcp, reverseMcpPort, allowHttp, GatewayPorts security, HTTP vs HTTPS, approval policies
+
+**Last Updated:** 2025-10-18
+**Change Context:** Updated MCP tool names in usage examples and approval policy. Changed: team_tell → send_message, team_teams → list_teams, team_fork → session_fork, team_isAwake → team_status, team_delete → session_delete, team_clear → session_reboot. Updated all code examples, testing instructions, and future enhancement examples with new tool names.
+**Related Files:** REMOTE.md (remote execution), PERMISSIONS.md (permission system), REVERSE_MCP_IMPLEMENTATION_PLAN.md (implementation design), REVERSE_MCP_SECURITY.md (security model), USE_CASE.md (CI/CD integration scenarios), ACTIONS.md (complete tool API reference)

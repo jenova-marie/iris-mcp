@@ -144,11 +144,12 @@ export async function writeMcpConfig(
 /**
  * Write MCP config for local execution
  *
- * Writes to: <teamPath>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+ * Writes to: <teamPath>/<sessionMcpPath>/iris-mcp-<sessionId>.json
  *
  * @param mcpConfig - MCP configuration object
  * @param sessionId - Session ID
  * @param teamPath - Absolute path to team's project directory
+ * @param sessionMcpPath - Optional MCP directory path relative to team path (defaults to ".claude/iris/mcp")
  * @param scriptPath - Optional custom script path (defaults to bundled mcp-cp script)
  * @returns Promise resolving to the file path where config was written
  */
@@ -156,10 +157,16 @@ export async function writeMcpConfigLocal(
   mcpConfig: object,
   sessionId: string,
   teamPath: string,
+  sessionMcpPath?: string,
   scriptPath?: string,
 ): Promise<string> {
   const script = scriptPath || DEFAULT_LOCAL_SCRIPT;
   const args = [sessionId, teamPath];
+
+  // Add sessionMcpPath if provided (otherwise script uses default)
+  if (sessionMcpPath) {
+    args.push(sessionMcpPath);
+  }
 
   return writeMcpConfig(script, mcpConfig, ...args);
 }
@@ -167,12 +174,13 @@ export async function writeMcpConfigLocal(
 /**
  * Write MCP config for remote execution (via SCP)
  *
- * Writes to: <remoteTeamPath>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+ * Writes to: <remoteTeamPath>/<sessionMcpPath>/iris-mcp-<sessionId>.json
  *
  * @param mcpConfig - MCP configuration object
  * @param sessionId - Session ID
  * @param sshHost - SSH host (e.g., "user@example.com" or "remote-alias")
  * @param remoteTeamPath - Absolute path to team's project directory on remote host
+ * @param sessionMcpPath - Optional MCP directory path relative to team path (defaults to ".claude/iris/mcp")
  * @param scriptPath - Optional custom script path (defaults to bundled mcp-scp script)
  * @returns Promise resolving to the remote file path where config was written
  */
@@ -181,10 +189,16 @@ export async function writeMcpConfigRemote(
   sessionId: string,
   sshHost: string,
   remoteTeamPath: string,
+  sessionMcpPath?: string,
   scriptPath?: string,
 ): Promise<string> {
   const script = scriptPath || DEFAULT_REMOTE_SCRIPT;
   const args = [sessionId, sshHost, remoteTeamPath];
+
+  // Add sessionMcpPath if provided (otherwise script uses default)
+  if (sessionMcpPath) {
+    args.push(sessionMcpPath);
+  }
 
   return writeMcpConfig(script, mcpConfig, ...args);
 }

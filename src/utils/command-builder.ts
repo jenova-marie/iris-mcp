@@ -124,7 +124,9 @@ export class ClaudeCommandBuilder {
 
       // Add user-specified tools from config
       if (irisConfig.allowedTools) {
-        const userTools = irisConfig.allowedTools.split(/[,\s]+/).filter((t) => t);
+        const userTools = irisConfig.allowedTools
+          .split(/[,\s]+/)
+          .filter((t) => t);
         userTools.forEach((tool) => allowedTools.add(tool));
       }
 
@@ -138,9 +140,10 @@ export class ClaudeCommandBuilder {
     // else grantPermission === "no": no tools allowed, no permission-prompt-tool (block everything)
 
     // Add allowedTools if we have any
-    if (allowedTools.size > 0) {
-      args.push("--allowed-tools", Array.from(allowedTools).join(","));
-    }
+    // TODO: Temporarily disabled - may be blocking MCP tools
+    // if (allowedTools.size > 0) {
+    //   args.push("--allowed-tools", Array.from(allowedTools).join(","));
+    // }
 
     if (irisConfig.disallowedTools) {
       args.push("--disallowed-tools", irisConfig.disallowedTools);
@@ -207,13 +210,18 @@ export class ClaudeCommandBuilder {
   /**
    * Get the MCP config file path for a team session
    *
-   * Returns: <team-path>/.claude/iris/mcp/iris-mcp-<sessionId>.json
+   * Returns: <team-path>/<sessionMcpPath>/iris-mcp-<sessionId>.json
    *
    * @param teamPath - Absolute path to team's project directory
    * @param sessionId - Session ID
+   * @param sessionMcpPath - MCP directory path relative to team path (defaults to ".claude/iris/mcp")
    * @returns Absolute path to MCP config file
    */
-  static getMcpConfigPath(teamPath: string, sessionId: string): string {
-    return join(teamPath, ".claude", "iris", "mcp", `iris-mcp-${sessionId}.json`);
+  static getMcpConfigPath(
+    teamPath: string,
+    sessionId: string,
+    sessionMcpPath = ".claude/iris/mcp",
+  ): string {
+    return join(teamPath, sessionMcpPath, `iris-mcp-${sessionId}.json`);
   }
 }

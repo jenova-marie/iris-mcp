@@ -1,0 +1,66 @@
+# Iris MCP - Project Context Configuration Example
+#
+# This file allows you to override auto-detected project context
+# and provide custom variables for agent prompts.
+#
+# Copy this file to .iris/context.yaml and customize for your project.
+
+# Override file patterns for what agents can write/read
+writePatterns:
+  - "**/*.md"
+  - "docs/**/*"
+  - "**/*.mdx"
+  - "src/**/*.stories.tsx"  # Allow Storybook story modifications
+
+readOnlyPatterns:
+  - "src/**/*.tsx"
+  - "src/**/*.ts"
+  - "package.json"
+  - "node_modules/**/*"
+
+# Custom variables available in all templates
+customVars:
+  # UI Component Library
+  componentLibrary: "Radix UI"
+
+  # State Management
+  stateManagement: "Zustand"
+
+  # API Integration Pattern
+  apiPattern: "React Query"
+
+  # Documentation Style Guide
+  docStyle: "Google Developer Documentation Style Guide"
+
+  # Code Style
+  codeStyle: "Prettier + ESLint"
+
+  # Branch Strategy
+  branchStrategy: "main + feature branches"
+
+  # Any other custom variables
+  customKey: "customValue"
+
+# Agent-specific additions (merged into prompts)
+techWriterAdditions: |
+  This project uses Radix UI components. When documenting components,
+  reference Radix patterns and link to Radix docs where appropriate.
+
+  State management is handled by Zustand. Document store usage clearly.
+
+unitTesterAdditions: |
+  All tests use Vitest. Follow the existing test patterns in tests/unit/.
+
+  Use test.each() for parameterized tests when testing multiple scenarios.
+
+codeReviewerAdditions: |
+  Pay special attention to:
+  - Proper error handling with our custom error classes
+  - Type safety (we use strict mode)
+  - Performance implications for process pool operations
+
+# Override detected values (optional)
+# projectName: "my-custom-name"
+# framework: "React"
+# testingFramework: "Vitest"
+# hasTypeScript: true

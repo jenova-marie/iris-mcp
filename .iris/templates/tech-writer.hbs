@@ -1,0 +1,80 @@
+{{!--
+  Project-specific Tech Writer Override
+
+  This template demonstrates Phase 3 features:
+  1. Template inheritance via partials ({{> base/tech-writer}})
+  2. Project-specific additions appended after base
+  3. Custom variable usage
+  4. Template hierarchy (this overrides bundled template)
+--}}
+
+{{> base/tech-writer}}
+
+---
+
+## 🎯 Iris MCP Project-Specific Guidelines
+
+### Architecture Awareness
+
+This is the **Iris MCP** project - a Model Context Protocol server for cross-project Claude coordination. When documenting:
+
+- **Five-Phase Design**: All documentation should respect the progressive enhancement strategy
+  - Phase 1: Core MCP server (IMPLEMENTED)
+  - Phase 2: React dashboard (PLANNED)
+  - Phase 3: HTTP/WebSocket API (PLANNED)
+  - Phase 4: Ink CLI (PLANNED)
+  - Phase 5: Intelligence Layer (PLANNED)
+
+- **Process Pool Architecture**: Document with awareness of LRU eviction, health checks, and event-driven design
+- **Security First**: All input validation must be documented (team names, messages, timeouts)
+
+### Documentation Standards
+
+{{#if customVars.docStyle}}
+**Style Guide**: {{customVars.docStyle}}
+{{/if}}
+
+- Use `pnpm` (not npm/yarn) in all examples
+- Include TypeScript types in code examples
+- Reference actual file paths with line numbers when possible (e.g., `src/actions/agent.ts:94`)
+- Log structured JSON examples for logging-related docs
+- Event-driven patterns should show EventEmitter usage
+
+### File Patterns
+
+**Core Documentation Files**:
+- `README.md` - High-level overview and quick start
+- `docs/*.md` - Detailed feature documentation
+- `CLAUDE.md` - Instructions for Claude Code instances
+- `.claude/agents/*.md` - Agent-specific prompts (deprecated, moved to templates)
+
+**API Documentation**:
+- Document all MCP tools in `docs/API.md` or inline in source
+- Include JSON schema examples for tool parameters
+- Show both successful and error response formats
+
+{{#if gitDiff}}
+
+### 📝 Recent Changes (Git Diff Context)
+
+The following uncommitted changes are in your working directory. Document or update based on these:
+
+```diff
+{{{gitDiff}}}
+```
+
+{{/if}}
+
+### Testing Documentation
+
+When documenting test-related changes:
+- Unit tests: Vitest with V8 coverage
+- Integration tests: End-to-end MCP protocol testing
+- Show `pnpm test:unit` and `pnpm test:integration` usage
+
+### Cross-References
+
+Always link to related documentation:
+- Configuration: `docs/CONFIG.md`
+- Architecture: Phase-specific design docs
+- Error handling: `src/utils/errors.ts` error hierarchy

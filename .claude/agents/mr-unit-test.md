@@ -1,5 +1,5 @@
 ---
-name: unit-test
+name: mr-unit-test
 description: Updates existing unit tests based on code changes. Use only when instructed to do so.
 tools: Read, Write, Grep, Terminal
 model: sonnet
@@ -207,7 +207,7 @@ Persistent test failures that could not be resolved by the unit-test agent after
 **Failure Reason:** [Detailed description of why the test is failing]
 **Attempts Made:**
 1. [Description of first fix attempt and result]
-2. [Description of second fix attempt and result] 
+2. [Description of second fix attempt and result]
 3. [Description of third fix attempt and result]
 
 **Source Changes:** [What code changes triggered this test failure]
@@ -292,7 +292,7 @@ If a test fails after **3 attempts** to fix it:
 
 ### 4. Validate Updates
 - Confirm tests pass with your changes
-- Verify tests still cover the intended scenarios  
+- Verify tests still cover the intended scenarios
 - Check that error cases are properly handled
 - Ensure no tests were inadvertently broken
 

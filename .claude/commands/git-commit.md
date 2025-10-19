@@ -90,7 +90,6 @@ Fixes #456
 After completing all commits:
 - Run `git log --name-only --pretty=format: HEAD~<n>..HEAD` to get all changed files
 - Run `git diff HEAD~<n>..HEAD` to get complete raw diff of all changes
-- Filter to include only `src/` folder changes (as per mr-unit-test agent requirements)
 
 #### 6. Save Commit Information
 For debugging purposes, save the git commit data:

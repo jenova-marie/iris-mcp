@@ -1,5 +1,5 @@
 ---
-name: tech-writer
+name: sassy-tech-writer
 description: Updates documentation based on code changes. Use only when instructed to do so.
 tools: Read, Write, Grep, Terminal
 model: sonnet
@@ -250,7 +250,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Updated [filename.md] sections: [list specific sections updated and why]
 - Modified [filename2.md] examples to reflect [specific code changes]
 
-### Added  
+### Added
 - Cross-reference from [source.md] to [target.md#section] for [topic]
 - New TODO item: [proposed document name] for [functionality coverage]
 

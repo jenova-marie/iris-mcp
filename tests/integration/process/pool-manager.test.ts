@@ -101,68 +101,76 @@ describe("ClaudeProcessPool Integration", () => {
       sessionInitTimeout,
     );
 
-    it("should reuse existing process for same team", async () => {
-      // Get sessionId from SessionManager
-      const session = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-beta",
-      );
+    it(
+      "should reuse existing process for same team",
+      async () => {
+        // Get sessionId from SessionManager
+        const session = await sessionManager.getOrCreateSession(
+          "team-iris",
+          "team-beta",
+        );
 
-      const process1 = await pool.getOrCreateProcess(
-        "team-beta",
-        session.sessionId,
-        "team-iris",
-      );
-      const pid1 = process1.getBasicMetrics().pid;
+        const process1 = await pool.getOrCreateProcess(
+          "team-beta",
+          session.sessionId,
+          "team-iris",
+        );
+        const pid1 = process1.getBasicMetrics().pid;
 
-      const process2 = await pool.getOrCreateProcess(
-        "team-beta",
-        session.sessionId,
-        "team-iris",
-      );
-      const pid2 = process2.getBasicMetrics().pid;
+        const process2 = await pool.getOrCreateProcess(
+          "team-beta",
+          session.sessionId,
+          "team-iris",
+        );
+        const pid2 = process2.getBasicMetrics().pid;
 
-      // Should be the same process (same PID)
-      expect(pid1).toBe(pid2);
-      expect(process1).toBe(process2);
+        // Should be the same process (same PID)
+        expect(pid1).toBe(pid2);
+        expect(process1).toBe(process2);
 
-      // Pool should have at least 1 process (may have others from previous tests)
-      const status = pool.getStatus();
-      expect(status.totalProcesses).toBeGreaterThanOrEqual(1);
-    });
+        // Pool should have at least 1 process (may have others from previous tests)
+        const status = pool.getStatus();
+        expect(status.totalProcesses).toBeGreaterThanOrEqual(1);
+      },
+      sessionInitTimeout,
+    );
 
-    it("should keep single agent alive after spawn", async () => {
-      // Get sessionId from SessionManager
-      const session = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-alpha",
-      );
+    it(
+      "should keep single agent alive after spawn",
+      async () => {
+        // Get sessionId from SessionManager
+        const session = await sessionManager.getOrCreateSession(
+          "team-iris",
+          "team-alpha",
+        );
 
-      // Spawn team-alpha
-      const process = await pool.getOrCreateProcess(
-        "team-alpha",
-        session.sessionId,
-        "team-iris",
-      );
+        // Spawn team-alpha
+        const process = await pool.getOrCreateProcess(
+          "team-alpha",
+          session.sessionId,
+          "team-iris",
+        );
 
-      // Check status immediately
-      expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
-        process.getBasicMetrics().status,
-      );
-      const pid = process.getBasicMetrics().pid;
-      expect(pid).toBeDefined();
+        // Check status immediately
+        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
+          process.getBasicMetrics().status,
+        );
+        const pid = process.getBasicMetrics().pid;
+        expect(pid).toBeDefined();
 
-      // Wait 1 second
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Wait 1 second
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Check status again - should still be idle
-      expect(process.getBasicMetrics().status).toBe(ProcessStatus.IDLE);
-      expect(process.getBasicMetrics().pid).toBe(pid);
+        // Check status again - should still be idle
+        expect(process.getBasicMetrics().status).toBe(ProcessStatus.IDLE);
+        expect(process.getBasicMetrics().pid).toBe(pid);
 
-      // Pool should have processes from all previous tests
-      const status = pool.getStatus();
-      expect(status.totalProcesses).toBeGreaterThanOrEqual(1);
-    });
+        // Pool should have processes from all previous tests
+        const status = pool.getStatus();
+        expect(status.totalProcesses).toBeGreaterThanOrEqual(1);
+      },
+      sessionInitTimeout,
+    );
 
     it(
       "should create separate processes for different teams",
@@ -225,42 +233,46 @@ describe("ClaudeProcessPool Integration", () => {
   });
 
   describe("process pool status", () => {
-    it("should return correct pool status", async () => {
-      // Note: Shared pool may have processes from previous tests
-      const sessionAlpha = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-alpha",
-      );
-      const sessionBeta = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-beta",
-      );
+    it(
+      "should return correct pool status",
+      async () => {
+        // Note: Shared pool may have processes from previous tests
+        const sessionAlpha = await sessionManager.getOrCreateSession(
+          "team-iris",
+          "team-alpha",
+        );
+        const sessionBeta = await sessionManager.getOrCreateSession(
+          "team-iris",
+          "team-beta",
+        );
 
-      await pool.getOrCreateProcess(
-        "team-alpha",
-        sessionAlpha.sessionId,
-        "team-iris",
-      );
-      await pool.getOrCreateProcess(
-        "team-beta",
-        sessionBeta.sessionId,
-        "team-iris",
-      );
+        await pool.getOrCreateProcess(
+          "team-alpha",
+          sessionAlpha.sessionId,
+          "team-iris",
+        );
+        await pool.getOrCreateProcess(
+          "team-beta",
+          sessionBeta.sessionId,
+          "team-iris",
+        );
 
-      const status = pool.getStatus();
+        const status = pool.getStatus();
 
-      // Should have at least these 2 teams (may have more from previous tests)
-      expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
-      expect(status.maxProcesses).toBe(10); // From config.yaml config
-      expect(status.processes).toHaveProperty("team-iris->team-alpha");
-      expect(status.processes).toHaveProperty("team-iris->team-beta");
-      expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
-        status.processes["team-iris->team-alpha"].status,
-      );
-      expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
-        status.processes["team-iris->team-beta"].status,
-      );
-    });
+        // Should have at least these 2 teams (may have more from previous tests)
+        expect(status.totalProcesses).toBeGreaterThanOrEqual(2);
+        expect(status.maxProcesses).toBe(10); // From config.yaml config
+        expect(status.processes).toHaveProperty("team-iris->team-alpha");
+        expect(status.processes).toHaveProperty("team-iris->team-beta");
+        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
+          status.processes["team-iris->team-alpha"].status,
+        );
+        expect([ProcessStatus.IDLE, ProcessStatus.PROCESSING]).toContain(
+          status.processes["team-iris->team-beta"].status,
+        );
+      },
+      sessionInitTimeout,
+    );
 
     it("should get individual process from pool", async () => {
       // Process from earlier test should still be in pool
@@ -369,37 +381,41 @@ describe("ClaudeProcessPool Integration", () => {
   });
 
   describe("health checks", () => {
-    it("should remove stopped processes during health check", async () => {
-      // Get session from SessionManager
-      const session = await sessionManager.getOrCreateSession(
-        "team-iris",
-        "team-alpha",
-      );
+    it(
+      "should remove stopped processes during health check",
+      async () => {
+        // Get session from SessionManager
+        const session = await sessionManager.getOrCreateSession(
+          "team-iris",
+          "team-alpha",
+        );
 
-      // Get initial count
-      const initialCount = pool.getStatus().totalProcesses;
+        // Get initial count
+        const initialCount = pool.getStatus().totalProcesses;
 
-      // Create a process
-      const process = await pool.getOrCreateProcess(
-        "team-alpha",
-        session.sessionId,
-        "team-iris",
-      );
+        // Create a process
+        const process = await pool.getOrCreateProcess(
+          "team-alpha",
+          session.sessionId,
+          "team-iris",
+        );
 
-      // Manually terminate the underlying process (simulate crash)
-      await process.terminate();
+        // Manually terminate the underlying process (simulate crash)
+        await process.terminate();
 
-      // Wait a bit for the process to stop
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Wait a bit for the process to stop
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // Trigger health check by waiting for interval
-      await new Promise((resolve) => setTimeout(resolve, 6000));
+        // Trigger health check by waiting for interval
+        await new Promise((resolve) => setTimeout(resolve, 6000));
 
-      // Process should be removed from pool (back to initial count or less)
-      const status = pool.getStatus();
-      expect(status.totalProcesses).toBeLessThanOrEqual(initialCount);
-      expect(status.processes).not.toHaveProperty("team-iris->team-alpha");
-    });
+        // Process should be removed from pool (back to initial count or less)
+        const status = pool.getStatus();
+        expect(status.totalProcesses).toBeLessThanOrEqual(initialCount);
+        expect(status.processes).not.toHaveProperty("team-iris->team-alpha");
+      },
+      sessionInitTimeout,
+    );
 
     it(
       "should emit health-check event",

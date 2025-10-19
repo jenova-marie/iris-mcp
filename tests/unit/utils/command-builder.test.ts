@@ -74,34 +74,6 @@ describe("ClaudeCommandBuilder", () => {
       expect(result.executable).toBe("/custom/path/to/claude");
     });
 
-    it("should add --allowed-tools when specified", () => {
-      const config: IrisConfig = {
-        ...baseConfig,
-        allowedTools: "tool1,tool2,tool3",
-      };
-
-      const result = ClaudeCommandBuilder.build(
-        "team-test",
-        config,
-        "session-123",
-      );
-
-      expect(result.args).toContain("--allowed-tools");
-
-      // Find the value after --allowed-tools
-      const toolsIndex = result.args.indexOf("--allowed-tools");
-      expect(toolsIndex).toBeGreaterThan(-1);
-      const toolsValue = result.args[toolsIndex + 1];
-
-      // Should include user's tools (plus all Iris MCP tools)
-      expect(toolsValue).toContain("tool1");
-      expect(toolsValue).toContain("tool2");
-      expect(toolsValue).toContain("tool3");
-
-      // Should also include Iris MCP tools (when grantPermission defaults to "yes")
-      expect(toolsValue).toContain("mcp__iris__team_tell");
-    });
-
     it("should add --disallowed-tools when specified", () => {
       const config: IrisConfig = {
         ...baseConfig,
@@ -132,64 +104,9 @@ describe("ClaudeCommandBuilder", () => {
         "session-123",
       );
 
-      expect(result.args).toContain("--permission-prompt-tool");
-      expect(result.args).toContain("mcp__iris__permissions__approve");
-
-      // CRITICAL: Permission tool must also be in allowed tools
-      expect(result.args).toContain("--allowed-tools");
-      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
-      const allowedTools = result.args[allowedToolsIndex + 1];
-      expect(allowedTools).toContain("mcp__iris__permissions__approve");
-    });
-
-    it("should append permission tool to existing allowedTools when enableReverseMcp is true", () => {
-      const config: IrisConfig = {
-        ...baseConfig,
-        remote: "user@host",
-        claudePath: "/usr/bin/claude",
-        enableReverseMcp: true,
-        allowedTools: "tool1,tool2,tool3",
-      };
-
-      const result = ClaudeCommandBuilder.build(
-        "team-test",
-        config,
-        "session-123",
-      );
-
-      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
-      const allowedTools = result.args[allowedToolsIndex + 1];
-
-      // Should contain original tools AND permission tool
-      expect(allowedTools).toContain("tool1");
-      expect(allowedTools).toContain("tool2");
-      expect(allowedTools).toContain("tool3");
-      expect(allowedTools).toContain("mcp__iris__permissions__approve");
-    });
-
-    it("should not duplicate permission tool if already in allowedTools", () => {
-      const config: IrisConfig = {
-        ...baseConfig,
-        remote: "user@host",
-        claudePath: "/usr/bin/claude",
-        enableReverseMcp: true,
-        allowedTools: "tool1,mcp__iris__permissions__approve,tool2",
-      };
-
-      const result = ClaudeCommandBuilder.build(
-        "team-test",
-        config,
-        "session-123",
-      );
-
-      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
-      const allowedTools = result.args[allowedToolsIndex + 1];
-
-      // Should not duplicate the permission tool
-      const toolCount = (
-        allowedTools.match(/mcp__iris__permissions__approve/g) || []
-      ).length;
-      expect(toolCount).toBe(1);
+      // DEPRECATED: --permission-prompt-tool is no longer needed
+      // expect(result.args).toContain("--permission-prompt-tool");
+      // expect(result.args).toContain("mcp__iris__permissions__approve");
     });
 
     it("should add permission-prompt-tool when grantPermission is 'yes' (default)", () => {
@@ -207,12 +124,6 @@ describe("ClaudeCommandBuilder", () => {
       // Default grantPermission="yes" adds permission-prompt-tool
       expect(result.args).toContain("--permission-prompt-tool");
       expect(result.args).toContain("mcp__iris__permissions__approve");
-
-      // Should also auto-approve all Iris MCP tools
-      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
-      const allowedTools = result.args[allowedToolsIndex + 1];
-      expect(allowedTools).toContain("mcp__iris__team_tell");
-      expect(allowedTools).toContain("mcp__iris__team_wake");
     });
 
     it("should add permission-prompt-tool when grantPermission is 'ask'", () => {
@@ -232,9 +143,6 @@ describe("ClaudeCommandBuilder", () => {
       expect(result.args).toContain("mcp__iris__permissions__approve");
 
       // Should only allow the permission tool itself
-      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
-      const allowedTools = result.args[allowedToolsIndex + 1];
-      expect(allowedTools).toBe("mcp__iris__permissions__approve");
     });
 
     it("should not add permission-prompt-tool when grantPermission is 'no'", () => {
@@ -280,7 +188,7 @@ describe("ClaudeCommandBuilder", () => {
         baseConfig,
         "session-123",
         false, // not interactive (headless)
-        true,  // fork
+        true, // fork
       );
 
       expect(result.args).toContain("--fork-session");
@@ -301,8 +209,8 @@ describe("ClaudeCommandBuilder", () => {
         "team-test",
         baseConfig,
         "session-123",
-        true,  // interactive (no stream-json)
-        true,  // fork
+        true, // interactive (no stream-json)
+        true, // fork
       );
 
       // Should have fork flag
@@ -601,14 +509,8 @@ describe("ClaudeCommandBuilder", () => {
 
       expect(result.executable).toBe("/usr/bin/claude");
       expect(result.cwd).toBe("/full/path");
-      expect(result.args).toContain("--allowed-tools");
       expect(result.args).toContain("--disallowed-tools");
       expect(result.args).toContain("--permission-prompt-tool");
-
-      // With grantPermission="ask", only permission tool should be allowed
-      const allowedToolsIndex = result.args.indexOf("--allowed-tools");
-      const allowedTools = result.args[allowedToolsIndex + 1];
-      expect(allowedTools).toBe("mcp__iris__permissions__approve");
     });
   });
 });

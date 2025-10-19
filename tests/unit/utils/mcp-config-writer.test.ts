@@ -177,7 +177,9 @@ describe("MCP Config Writer", () => {
         mockChildProcess.emit("exit", 1, null);
       }, 10);
 
-      await expect(promise).rejects.toThrow(/MCP config script failed.*exit code 1/);
+      await expect(promise).rejects.toThrow(
+        /MCP config script failed.*exit code 1/,
+      );
     });
 
     it("should reject if script does not output file path", async () => {
@@ -206,16 +208,25 @@ describe("MCP Config Writer", () => {
         mockChildProcess.emit("error", error);
       }, 10);
 
-      await expect(promise).rejects.toThrow(/Failed to execute MCP config script/);
+      await expect(promise).rejects.toThrow(
+        /Failed to execute MCP config script/,
+      );
     });
   });
 
   describe("writeMcpConfigLocal()", () => {
     it("should use default local script", async () => {
-      const promise = writeMcpConfigLocal(testMcpConfig, "session-123", testTeamPath);
+      const promise = writeMcpConfigLocal(
+        testMcpConfig,
+        "session-123",
+        testTeamPath,
+      );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${testTeamPath}/.claude/iris/mcp/iris-mcp-session-123.json\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${testTeamPath}/.claude/iris/mcp/iris-mcp-session-123.json\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
@@ -233,11 +244,15 @@ describe("MCP Config Writer", () => {
         testMcpConfig,
         "session-123",
         testTeamPath,
-        customScript,
+        undefined, // sessionMcpPath (use default)
+        customScript, // scriptPath
       );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${testTeamPath}/.claude/iris/mcp/test.json\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${testTeamPath}/.claude/iris/mcp/test.json\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
@@ -255,7 +270,10 @@ describe("MCP Config Writer", () => {
       );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${testTeamPath}/.claude/iris/mcp/test.json\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${testTeamPath}/.claude/iris/mcp/test.json\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
@@ -287,7 +305,11 @@ describe("MCP Config Writer", () => {
 
       const lastCall = (mockSpawn as any).mock.calls[0];
       expect(lastCall[0]).toBe(DEFAULT_REMOTE_SCRIPT);
-      expect(lastCall[1]).toEqual(["session-123", "user@host", testRemoteTeamPath]);
+      expect(lastCall[1]).toEqual([
+        "session-123",
+        "user@host",
+        testRemoteTeamPath,
+      ]);
     });
 
     it("should use custom script when provided", async () => {
@@ -298,11 +320,15 @@ describe("MCP Config Writer", () => {
         "session-123",
         "user@host",
         testRemoteTeamPath,
-        customScript,
+        undefined, // sessionMcpPath (use default)
+        customScript, // scriptPath
       );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${testRemoteTeamPath}/.claude/iris/mcp/test.json\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${testRemoteTeamPath}/.claude/iris/mcp/test.json\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
@@ -321,14 +347,21 @@ describe("MCP Config Writer", () => {
       );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${testRemoteTeamPath}/.claude/iris/mcp/test.json\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${testRemoteTeamPath}/.claude/iris/mcp/test.json\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
       await promise;
 
       const lastCall = (mockSpawn as any).mock.calls[0];
-      expect(lastCall[1]).toEqual(["session-123", "user@host", testRemoteTeamPath]);
+      expect(lastCall[1]).toEqual([
+        "session-123",
+        "user@host",
+        testRemoteTeamPath,
+      ]);
     });
 
     it("should handle SSH aliases", async () => {
@@ -340,23 +373,37 @@ describe("MCP Config Writer", () => {
       );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${testRemoteTeamPath}/.claude/iris/mcp/test.json\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${testRemoteTeamPath}/.claude/iris/mcp/test.json\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
       await promise;
 
       const lastCall = (mockSpawn as any).mock.calls[0];
-      expect(lastCall[1]).toEqual(["session-123", "inanna", testRemoteTeamPath]);
+      expect(lastCall[1]).toEqual([
+        "session-123",
+        "inanna",
+        testRemoteTeamPath,
+      ]);
     });
   });
 
   describe("cross-platform behavior", () => {
     it("should handle Unix line endings in stdout", async () => {
-      const promise = writeMcpConfigLocal(testMcpConfig, "session-123", testTeamPath);
+      const promise = writeMcpConfigLocal(
+        testMcpConfig,
+        "session-123",
+        testTeamPath,
+      );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${testTeamPath}/.claude/iris/mcp/test.json\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${testTeamPath}/.claude/iris/mcp/test.json\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
@@ -366,34 +413,56 @@ describe("MCP Config Writer", () => {
 
     it("should handle Windows line endings in stdout", async () => {
       const windowsTeamPath = "C:\\Users\\test\\projects\\team-alpha";
-      const promise = writeMcpConfigLocal(testMcpConfig, "session-123", windowsTeamPath);
+      const promise = writeMcpConfigLocal(
+        testMcpConfig,
+        "session-123",
+        windowsTeamPath,
+      );
 
       setTimeout(() => {
-        mockChildProcess.stdout.emit("data", `${windowsTeamPath}\\.claude\\iris\\mcp\\test.json\r\n`);
+        mockChildProcess.stdout.emit(
+          "data",
+          `${windowsTeamPath}\\.claude\\iris\\mcp\\test.json\r\n`,
+        );
         mockChildProcess.emit("exit", 0, null);
       }, 10);
 
       const filePath = await promise;
-      expect(filePath).toBe(`${windowsTeamPath}\\.claude\\iris\\mcp\\test.json`);
+      expect(filePath).toBe(
+        `${windowsTeamPath}\\.claude\\iris\\mcp\\test.json`,
+      );
     });
   });
 
   describe("error handling", () => {
     it("should include stderr in error message on failure", async () => {
-      const promise = writeMcpConfigLocal(testMcpConfig, "session-123", testTeamPath);
+      const promise = writeMcpConfigLocal(
+        testMcpConfig,
+        "session-123",
+        testTeamPath,
+      );
 
       setTimeout(() => {
-        mockChildProcess.stderr.emit("data", "Permission denied: .claude/iris/mcp\n");
+        mockChildProcess.stderr.emit(
+          "data",
+          "Permission denied: .claude/iris/mcp\n",
+        );
         mockChildProcess.stderr.emit("data", "Cannot write file\n");
         mockChildProcess.emit("exit", 13, null);
       }, 10);
 
-      await expect(promise).rejects.toThrow(/Permission denied: .claude\/iris\/mcp/);
+      await expect(promise).rejects.toThrow(
+        /Permission denied: .claude\/iris\/mcp/,
+      );
       await expect(promise).rejects.toThrow(/Cannot write file/);
     });
 
     it("should handle script killed by signal", async () => {
-      const promise = writeMcpConfigLocal(testMcpConfig, "session-123", testTeamPath);
+      const promise = writeMcpConfigLocal(
+        testMcpConfig,
+        "session-123",
+        testTeamPath,
+      );
 
       setTimeout(() => {
         mockChildProcess.emit("exit", null, "SIGKILL");

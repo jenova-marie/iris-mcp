@@ -128,12 +128,12 @@ System handles failures gracefully:
 ┌──────────────────────────────────────────────────────────────────┐
 │                      MCP SERVER (index.ts)                        │
 │  ┌────────────────────────────────────────────────────────────┐  │
-│  │ Tool Registration (17 tools)                               │  │
+│  │ Tool Registration (18 tools)                               │  │
 │  │ - send_message     - team_wake        - list_teams        │  │
 │  │ - ask_message      - team_launch      - get_logs          │  │
 │  │ - quick_message    - team_wake_all    - get_date          │  │
-│  │ - session_reboot   - team_sleep       - permissions__appr │  │
-│  │ - session_delete   - team_status                           │  │
+│  │ - session_reboot   - team_sleep       - get_agent         │  │
+│  │ - session_delete   - team_status      - permissions__appr │  │
 │  │ - session_fork     - session_report                        │  │
 │  │ - session_cancel                                           │  │
 │  └────────────────────────────────────────────────────────────┘  │
@@ -1058,8 +1058,8 @@ The refactored Iris MCP architecture achieves:
 
 **Keywords:** architecture, system design, components, data flow, state machine, event-driven, RxJS, observables, cache hierarchy, process pool, two-timeout, responseTimeout, mcpTimeout, Iris orchestrator, ClaudeProcess, business logic layer, transport layer, storage layer
 
-**Last Updated:** 2025-10-18
-**Change Context:** MAJOR ARCHITECTURE DOCUMENTATION UPDATE (v3.0). Corrected Phase 2 status - Dashboard is fully implemented and production-ready (not future). Added comprehensive Transport Abstraction Layer section documenting LocalTransport/SSHTransport split. Fixed tool registration diagram (removed non-existent team_cache_read/team_cache_clear tools). Updated database schema diagram with all actual fields (launch_command, team_config_snapshot, etc.). Corrected Phase 3 & 4 status (HTTP/WS partially implemented, CLI partially implemented). Document now accurately reflects actual implementation state vs. planned features.
+**Last Updated:** 2025-10-19
+**Change Context:** MAJOR ARCHITECTURE DOCUMENTATION UPDATE (v3.0). Corrected Phase 2 status - Dashboard is fully implemented and production-ready (not future). Added comprehensive Transport Abstraction Layer section documenting LocalTransport/SSHTransport split. Fixed tool registration diagram (removed non-existent team_cache_read/team_cache_clear tools). Updated database schema diagram with all actual fields (launch_command, team_config_snapshot, etc.). Corrected Phase 3 & 4 status (HTTP/WS partially implemented, CLI partially implemented). Document now accurately reflects actual implementation state vs. planned features. Minor update 2025-10-19: Added get_agent tool to registration diagram (18 tools total).
 
 **Changes from v2.1 → v3.0:**
 - ✅ Added Transport Abstraction Layer section (fundamental architecture, was completely undocumented)
@@ -1077,5 +1077,5 @@ The refactored Iris MCP architecture achieves:
 ---
 
 **Document Version:** 3.0
-**Last Updated:** October 18, 2025
+**Last Updated:** October 19, 2025
 **Author:** Jenova (with Claude Code)

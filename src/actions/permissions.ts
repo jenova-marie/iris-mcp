@@ -56,10 +56,10 @@ export async function permissionsApprove(
     };
   }
 
-  logger.info("Permission request received", {
+  logger.info({
     sessionId,
     tool_name: request.tool_name,
-  });
+  }, "PLACEHOLDER");
 
   // Delegate to Iris for business logic
   const decision = await iris.handlePermissionRequest(

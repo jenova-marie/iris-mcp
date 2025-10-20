@@ -113,11 +113,11 @@ export class SSHTransport implements Transport {
       // Use environment variable or default to 1615 for Iris HTTP port
       const irisHttpPort = process.env.IRIS_HTTP_PORT || "1615";
       sshArgs.push("-R", `${tunnelPort}:localhost:${irisHttpPort}`);
-      this.logger.debug("Adding reverse MCP tunnel to SSH command", {
+      this.logger.debug({
         teamName: this.teamName,
         tunnelPort,
         irisHttpPort,
-      });
+      }, "PLACEHOLDER");
     }
 
     // Add Iris-managed SSH options
@@ -219,13 +219,13 @@ export class SSHTransport implements Transport {
     commandInfo: CommandInfo,
     spawnTimeout = 20000,
   ): Promise<void> {
-    this.logger.info("Spawning SSH process", {
+    this.logger.info({
       teamName: this.teamName,
       sessionId: this.sessionId,
       remote: this.irisConfig.remote,
       executable: commandInfo.executable,
       argsCount: commandInfo.args.length,
-    });
+    }, "PLACEHOLDER");
 
     // Emit SPAWNING status
     this.statusSubject.next(Status.SPAWNING);
@@ -235,10 +235,10 @@ export class SSHTransport implements Transport {
 
     // Build and write MCP config file if session MCP is enabled
     if (this.irisConfig.sessionMcpEnabled) {
-      this.logger.debug("Building MCP config for remote transport", {
+      this.logger.debug({
         teamName: this.teamName,
         sessionId: this.sessionId,
-      });
+      }, "PLACEHOLDER");
 
       const mcpConfig = ClaudeCommandBuilder.buildMcpConfig(
         this.irisConfig,
@@ -260,11 +260,11 @@ export class SSHTransport implements Transport {
         this.irisConfig.mcpConfigScript,
       );
 
-      this.logger.debug("MCP config file written to remote", {
+      this.logger.debug({
         teamName: this.teamName,
         filePath: this.mcpConfigFilePath,
         sshHost,
-      });
+      }, "PLACEHOLDER");
 
       // Add --mcp-config to args
       commandInfo.args.push("--mcp-config", this.mcpConfigFilePath);
@@ -300,10 +300,10 @@ export class SSHTransport implements Transport {
         shell: false, // Direct execution, no shell interpretation
       });
 
-      this.logger.debug("SSH process spawned", {
+      this.logger.debug({
         teamName: this.teamName,
         pid: this.sshProcess.pid,
-      });
+      }, "PLACEHOLDER");
 
       // Setup stdio handlers
       this.setupStdioHandlers(this.sshProcess);
@@ -327,16 +327,16 @@ export class SSHTransport implements Transport {
         ),
       );
 
-      this.logger.info("SSH transport ready", {
+      this.logger.info({
         teamName: this.teamName,
         pid: this.sshProcess.pid,
         spawnTime: Date.now() - this.startTime,
-      });
+      }, "PLACEHOLDER");
     } catch (error) {
-      this.logger.error("Failed to spawn SSH process", {
+      this.logger.error({
         teamName: this.teamName,
         error: error instanceof Error ? error.message : String(error),
-      });
+      }, "PLACEHOLDER");
 
       // Cleanup on spawn failure
       if (this.sshProcess) {
@@ -374,12 +374,12 @@ export class SSHTransport implements Transport {
 
     // Handle process exit
     process.on("exit", (code, signal) => {
-      this.logger.info("SSH process exited", {
+      this.logger.info({
         teamName: this.teamName,
         code,
         signal,
         uptime: Date.now() - this.startTime,
-      });
+      }, "PLACEHOLDER");
 
       this.ready = false;
 
@@ -401,10 +401,10 @@ export class SSHTransport implements Transport {
 
     // Handle process errors
     process.on("error", (error) => {
-      this.logger.error("SSH process error", {
+      this.logger.error({
         teamName: this.teamName,
         error: error.message,
-      });
+      }, "PLACEHOLDER");
 
       // Emit error to errors$ stream
       this.errorsSubject.next(error);
@@ -443,18 +443,18 @@ export class SSHTransport implements Transport {
           this.currentCacheEntry.addMessage(json);
         }
 
-        this.logger.debug("Received JSON from remote Claude", {
+        this.logger.debug({
           teamName: this.teamName,
           type: json.type,
           subtype: json.subtype,
-        });
+        }, "PLACEHOLDER");
 
         // Special handling for init (resolve spawn promise)
         if (json.type === "system" && json.subtype === "init") {
           if (this.initResolve) {
-            this.logger.debug("Received init message from remote Claude", {
+            this.logger.debug({
               teamName: this.teamName,
-            });
+            }, "PLACEHOLDER");
             this.initResolve();
             this.initResolve = null;
             this.initReject = null;
@@ -472,17 +472,17 @@ export class SSHTransport implements Transport {
           // Emit READY status (back to idle)
           this.statusSubject.next(Status.READY);
 
-          this.logger.debug("Received result from remote Claude", {
+          this.logger.debug({
             teamName: this.teamName,
             messagesProcessed: this.messagesProcessed,
-          });
+          }, "PLACEHOLDER");
         }
       } catch (e) {
         // Not JSON, log warning
-        this.logger.debug("Non-JSON stdout line from remote Claude", {
+        this.logger.debug({
           teamName: this.teamName,
           line: line.substring(0, 200),
-        });
+        }, "PLACEHOLDER");
       }
     }
   }
@@ -546,10 +546,10 @@ export class SSHTransport implements Transport {
 
     this.sshProcess.stdin.write(JSON.stringify(userMessage) + "\n");
 
-    this.logger.debug("Wrote message to remote stdin", {
+    this.logger.debug({
       teamName: this.teamName,
       messageLength: message.length,
-    });
+    }, "PLACEHOLDER");
   }
 
   /**
@@ -563,10 +563,10 @@ export class SSHTransport implements Transport {
       // Timeout if init not received
       const timer = setTimeout(() => {
         if (this.initReject) {
-          this.logger.error("Timeout waiting for init from remote Claude", {
+          this.logger.error({
             teamName: this.teamName,
             timeout,
-          });
+          }, "PLACEHOLDER");
 
           this.initReject(
             new TimeoutError(
@@ -615,10 +615,10 @@ export class SSHTransport implements Transport {
 
     this.currentCacheEntry = cacheEntry;
 
-    this.logger.debug("Executing tell on remote transport", {
+    this.logger.debug({
       teamName: this.teamName,
       tellStringLength: cacheEntry.tellString.length,
-    });
+    }, "PLACEHOLDER");
 
     // Send message via stdin
     this.writeToStdin(cacheEntry.tellString);
@@ -629,16 +629,16 @@ export class SSHTransport implements Transport {
    */
   async terminate(): Promise<void> {
     if (!this.sshProcess) {
-      this.logger.debug("SSH process already terminated", {
+      this.logger.debug({
         teamName: this.teamName,
-      });
+      }, "PLACEHOLDER");
       return;
     }
 
-    this.logger.info("Terminating SSH process", {
+    this.logger.info({
       teamName: this.teamName,
       pid: this.sshProcess.pid,
-    });
+    }, "PLACEHOLDER");
 
     // Emit TERMINATING status
     this.statusSubject.next(Status.TERMINATING);
@@ -660,10 +660,10 @@ export class SSHTransport implements Transport {
 
       // Wait for graceful exit
       const timer = setTimeout(() => {
-        this.logger.warn("SSH process did not exit gracefully, killing", {
+        this.logger.warn({
           teamName: this.teamName,
           pid: process.pid,
-        });
+        }, "PLACEHOLDER");
         process.kill("SIGKILL");
       }, 5000);
 
@@ -688,26 +688,26 @@ export class SSHTransport implements Transport {
 
             rmProc.on("exit", (code) => {
               if (code === 0) {
-                this.logger.debug("Deleted remote MCP config file", {
+                this.logger.debug({
                   teamName: this.teamName,
                   filePath: this.mcpConfigFilePath,
                   sshHost,
-                });
+                }, "PLACEHOLDER");
               } else {
-                this.logger.warn("Failed to delete remote MCP config file", {
+                this.logger.warn({
                   teamName: this.teamName,
                   filePath: this.mcpConfigFilePath,
                   sshHost,
                   exitCode: code,
-                });
+                }, "PLACEHOLDER");
               }
             });
           } catch (error) {
-            this.logger.warn("Error cleaning up remote MCP config file", {
+            this.logger.warn({
               teamName: this.teamName,
               filePath: this.mcpConfigFilePath,
               error: error instanceof Error ? error.message : String(error),
-            });
+            }, "PLACEHOLDER");
           }
           this.mcpConfigFilePath = null;
         }
@@ -728,15 +728,15 @@ export class SSHTransport implements Transport {
    */
   cancel(): void {
     if (!this.sshProcess || !this.sshProcess.stdin) {
-      this.logger.debug("Cannot cancel - SSH process not running", {
+      this.logger.debug({
         teamName: this.teamName,
-      });
+      }, "PLACEHOLDER");
       return;
     }
 
-    this.logger.info("Canceling current operation", {
+    this.logger.info({
       teamName: this.teamName,
-    });
+    }, "PLACEHOLDER");
 
     // Send ESC to stdin (ASCII 27)
     this.sshProcess.stdin.write("\x1b", "utf8");

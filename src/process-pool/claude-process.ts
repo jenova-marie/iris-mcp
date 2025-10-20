@@ -105,11 +105,11 @@ export class ClaudeProcess extends EventEmitter {
     // Subscribe to transport observables (replaces event forwarding)
     this.setupTransportSubscriptions();
 
-    this.logger.debug("ClaudeProcess created with transport", {
+    this.logger.debug({
       teamName,
       sessionId,
       transportType: this.transport.constructor.name,
-    });
+    }, "PLACEHOLDER");
   }
 
   /**
@@ -119,10 +119,10 @@ export class ClaudeProcess extends EventEmitter {
   private setupTransportSubscriptions(): void {
     // Subscribe to transport status changes
     const statusSub = this.transport.status$.subscribe((transportStatus) => {
-      this.logger.debug("Transport status changed", {
+      this.logger.debug({
         teamName: this.teamName,
         transportStatus,
-      });
+      }, "PLACEHOLDER");
 
       // Map TransportStatus → ProcessStatus
       switch (transportStatus) {
@@ -185,12 +185,12 @@ export class ClaudeProcess extends EventEmitter {
     const logger = getChildLogger(`pool:session-init:${irisConfig.path}`);
     const projectPath = irisConfig.path;
 
-    logger.info("Initializing session file", {
+    logger.info({
       sessionId,
       projectPath,
       sessionInitTimeout,
       remote: !!irisConfig.remote,
-    });
+    }, "PLACEHOLDER");
 
     try {
       // Use ClaudePrintExecutor for session initialization
@@ -205,10 +205,10 @@ export class ClaudeProcess extends EventEmitter {
 
       // Log debug log path if captured
       if (result.debugLogPath) {
-        logger.info("Claude debug logs available at", {
+        logger.info({
           sessionId,
           debugLogPath: result.debugLogPath,
-        });
+        }, "PLACEHOLDER");
       }
 
       // Check if execution was successful
@@ -225,7 +225,7 @@ export class ClaudeProcess extends EventEmitter {
       }
 
       // Log successful completion
-      logger.info("Session initialization process completed successfully", {
+      logger.info({
         sessionId,
         exitCode: result.exitCode,
         stdoutLength: result.stdout.length,
@@ -233,7 +233,7 @@ export class ClaudeProcess extends EventEmitter {
         duration: result.duration,
         response: result.stdout.substring(0, 100),
         remote: !!irisConfig.remote,
-      });
+      }, "PLACEHOLDER");
 
       // Verify session file was created (only for local teams)
       // For remote teams, the session file exists on the remote host
@@ -289,12 +289,12 @@ export class ClaudeProcess extends EventEmitter {
     spawnCacheEntry: CacheEntry,
     spawnTimeout = 20000,
   ): Promise<void> {
-    this.logger.info("Spawning Claude process via transport", {
+    this.logger.info({
       teamName: this.teamName,
       sessionId: this.sessionId,
       cacheEntryType: spawnCacheEntry.cacheEntryType,
       transportType: this.transport.constructor.name,
-    });
+    }, "PLACEHOLDER");
 
     this.spawnTime = Date.now();
 
@@ -305,19 +305,19 @@ export class ClaudeProcess extends EventEmitter {
       this.sessionId,
     );
 
-    this.logger.debug("Built Claude command", {
+    this.logger.debug({
       teamName: this.teamName,
       executable: commandInfo.executable,
       argsCount: commandInfo.args.length,
       cwd: commandInfo.cwd,
-    });
+    }, "PLACEHOLDER");
 
     // Delegate to transport (status updates happen via transport.status$ subscription)
     await this.transport.spawn(spawnCacheEntry, commandInfo, spawnTimeout);
 
-    this.logger.info("Process ready via transport", {
+    this.logger.info({
       teamName: this.teamName,
-    });
+    }, "PLACEHOLDER");
   }
 
   /**
@@ -325,11 +325,11 @@ export class ClaudeProcess extends EventEmitter {
    * @param cacheEntry - CacheEntry with type=TELL, tellString=message
    */
   executeTell(cacheEntry: CacheEntry): void {
-    this.logger.debug("Executing tell via transport", {
+    this.logger.debug({
       teamName: this.teamName,
       cacheEntryType: cacheEntry.cacheEntryType,
       tellStringLength: cacheEntry.tellString.length,
-    });
+    }, "PLACEHOLDER");
 
     // Update metrics
     this.messageCount++;
@@ -410,18 +410,18 @@ export class ClaudeProcess extends EventEmitter {
    * This is experimental - may or may not work depending on Claude's headless mode implementation
    */
   cancel(): void {
-    this.logger.info("Canceling via transport", {
+    this.logger.info({
       teamName: this.teamName,
       isBusy: this.transport.isBusy(),
-    });
+    }, "PLACEHOLDER");
 
     // Delegate to transport (if supported)
     if (this.transport.cancel) {
       this.transport.cancel();
     } else {
-      this.logger.warn("Cancel not supported by transport", {
+      this.logger.warn({
         transportType: this.transport.constructor.name,
-      });
+      }, "PLACEHOLDER");
     }
   }
 
@@ -443,10 +443,10 @@ export class ClaudeProcess extends EventEmitter {
    * Terminate process via transport
    */
   async terminate(): Promise<void> {
-    this.logger.info("Terminating process via transport", {
+    this.logger.info({
       teamName: this.teamName,
       transportType: this.transport.constructor.name,
-    });
+    }, "PLACEHOLDER");
 
     // Delegate to transport (status updates happen via transport.status$ subscription)
     await this.transport.terminate();
@@ -462,8 +462,8 @@ export class ClaudeProcess extends EventEmitter {
     this.statusSubject.complete();
     this.errorsSubject.complete();
 
-    this.logger.info("Process terminated via transport", {
+    this.logger.info({
       teamName: this.teamName,
-    });
+    }, "PLACEHOLDER");
   }
 }

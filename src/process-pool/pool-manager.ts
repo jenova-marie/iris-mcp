@@ -62,23 +62,29 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Subscribe to process status changes
     const statusSub = process.status$.subscribe((status) => {
-      this.logger.debug("Process status changed", {
-        poolKey,
-        sessionId,
-        status,
-      });
+      this.logger.debug(
+        {
+          poolKey,
+          sessionId,
+          status,
+        },
+        "Process status changed",
+      );
 
       // Handle terminal states - clean up process from pool
       if (status === ProcessStatus.STOPPED) {
-        this.logger.info("Process stopped, cleaning up from pool", {
-          poolKey,
-          sessionId,
-        });
+        this.logger.info(
+          {
+            poolKey,
+            sessionId,
+          },
+          "Process stopped, cleaning up from pool",
+        );
 
         // Clean up subscriptions
         const subs = this.processSubscriptions.get(poolKey);
         if (subs) {
-          subs.forEach(sub => sub.unsubscribe());
+          subs.forEach((sub) => sub.unsubscribe());
           this.processSubscriptions.delete(poolKey);
         }
 
@@ -141,11 +147,14 @@ export class ClaudeProcessPool extends EventEmitter {
       throw new TeamNotFoundError(teamName);
     }
 
-    this.logger.debug("Using session for team pair", {
-      fromTeam,
-      toTeam: teamName,
-      sessionId,
-    });
+    this.logger.debug(
+      {
+        fromTeam,
+        toTeam: teamName,
+        sessionId,
+      },
+      "Using session for team pair",
+    );
 
     // Generate pool key for this team pair
     const poolKey = this.getPoolKey(fromTeam, teamName);
@@ -155,8 +164,11 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Return existing process if available
     const existing = this.processes.get(poolKey);
-    if (existing && existing.getBasicMetrics().status !== ProcessStatus.STOPPED) {
-      this.logger.debug("Using existing process", { poolKey, sessionId });
+    if (
+      existing &&
+      existing.getBasicMetrics().status !== ProcessStatus.STOPPED
+    ) {
+      this.logger.debug({ poolKey, sessionId }, "Using existing process");
       return existing;
     }
 
@@ -166,13 +178,16 @@ export class ClaudeProcessPool extends EventEmitter {
     }
 
     // Create new process
-    this.logger.info("Creating new process", {
-      poolKey,
-      teamName,
-      sessionId,
-      fromTeam,
-      toTeam: teamName,
-    });
+    this.logger.info(
+      {
+        poolKey,
+        teamName,
+        sessionId,
+        fromTeam,
+        toTeam: teamName,
+      },
+      "Creating new process",
+    );
 
     const process = new ClaudeProcess(teamName, irisConfig, sessionId);
 
@@ -192,12 +207,15 @@ export class ClaudeProcessPool extends EventEmitter {
       const spawnTimeout = this.config.spawnTimeout || 20000;
       await process.spawn(spawnCacheEntry, spawnTimeout);
 
-      this.logger.info("Process successfully added to pool", {
-        poolKey,
-        teamName,
-        sessionId,
-        totalProcesses: this.processes.size,
-      });
+      this.logger.info(
+        {
+          poolKey,
+          teamName,
+          sessionId,
+          totalProcesses: this.processes.size,
+        },
+        "Process successfully added to pool",
+      );
 
       return process;
     } catch (error) {
@@ -268,7 +286,7 @@ export class ClaudeProcessPool extends EventEmitter {
 
     // Clean up all subscriptions
     for (const subs of this.processSubscriptions.values()) {
-      subs.forEach(sub => sub.unsubscribe());
+      subs.forEach((sub) => sub.unsubscribe());
     }
     this.processSubscriptions.clear();
 
@@ -322,21 +340,24 @@ export class ClaudeProcessPool extends EventEmitter {
   logPoolState(context: string): void {
     const status = this.getStatus();
 
-    this.logger.debug("Pool state snapshot", {
-      context,
-      totalProcesses: status.totalProcesses,
-      maxProcesses: status.maxProcesses,
-      activeSessions: status.activeSessions,
-      processes: Object.entries(status.processes).map(([key, proc]) => ({
-        poolKey: key,
-        status: proc.status,
-        pid: proc.pid,
-        sessionId: proc.sessionId,
-        messageCount: proc.messageCount,
-      })),
-      accessOrder: this.accessOrder,
-      sessionMappings: Array.from(this.sessionToProcess.entries()),
-    });
+    this.logger.debug(
+      {
+        context,
+        totalProcesses: status.totalProcesses,
+        maxProcesses: status.maxProcesses,
+        activeSessions: status.activeSessions,
+        processes: Object.entries(status.processes).map(([key, proc]) => ({
+          poolKey: key,
+          status: proc.status,
+          pid: proc.pid,
+          sessionId: proc.sessionId,
+          messageCount: proc.messageCount,
+        })),
+        accessOrder: this.accessOrder,
+        sessionMappings: Array.from(this.sessionToProcess.entries()),
+      },
+      "Pool state snapshot",
+    );
   }
 
   /**
@@ -363,7 +384,7 @@ export class ClaudeProcessPool extends EventEmitter {
   ): Promise<string | null> {
     const process = this.getProcessBySessionId(sessionId);
     if (!process) {
-      this.logger.warn("No process found for session", { sessionId });
+      this.logger.warn({ sessionId }, "No process found for session");
       return null;
     }
 
@@ -449,7 +470,7 @@ export class ClaudeProcessPool extends EventEmitter {
       return this.evictLRU();
     }
 
-    this.logger.info("Evicting LRU process", { poolKey: victimPoolKey });
+    this.logger.info({ poolKey: victimPoolKey }, "Evicting LRU process");
 
     // Directly terminate the process - event handlers will clean up the maps
     await victimProcess.terminate();
@@ -501,18 +522,21 @@ export class ClaudeProcessPool extends EventEmitter {
       }
 
       // Log metrics
-      this.logger.debug("Process health check", {
-        teamName,
-        status: metrics.status,
-        messagesProcessed: metrics.messagesProcessed,
-        uptime: metrics.uptime,
-        queueLength: metrics.queueLength,
-      });
+      this.logger.debug(
+        {
+          teamName,
+          status: metrics.status,
+          messagesProcessed: metrics.messagesProcessed,
+          uptime: metrics.uptime,
+          queueLength: metrics.queueLength,
+        },
+        "Process health check",
+      );
     }
 
     // Clean up stopped processes
     for (const teamName of processesToRemove) {
-      this.logger.info("Removing stopped process from pool", { teamName });
+      this.logger.info({ teamName }, "Removing stopped process from pool");
       this.processes.delete(teamName);
       this.removeFromAccessOrder(teamName);
     }

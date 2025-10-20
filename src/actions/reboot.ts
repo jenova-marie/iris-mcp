@@ -181,11 +181,11 @@ export async function reboot(
         launchCommand,
         teamConfigSnapshot,
       );
-      logger.info("Updated session debug info after reboot", {
+      logger.info({
         sessionId: newSession.sessionId,
         commandLength: launchCommand.length,
         configLength: teamConfigSnapshot.length,
-      });
+      }, "PLACEHOLDER");
     }
 
     logger.info(

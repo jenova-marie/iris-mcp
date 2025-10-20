@@ -186,11 +186,14 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const logger = getChildLogger("test:remote-spawn");
 
-        logger.info("Starting remote spawn test (OpenSSH client)", {
-          remoteTeam: REMOTE_TEAM,
-          fromTeam: FROM_TEAM,
-          transport: "SSHTransport",
-        });
+        logger.info(
+          {
+            remoteTeam: REMOTE_TEAM,
+            fromTeam: FROM_TEAM,
+            transport: "SSHTransport",
+          },
+          "Starting remote spawn test (OpenSSH client)",
+        );
 
         // Wake the remote team (spawns SSH connection via OpenSSH client)
         // Get or create session for this team pair
@@ -212,17 +215,20 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         expect(process.getBasicMetrics().isReady).toBe(true);
         expect(process.getBasicMetrics().isBusy).toBe(false);
 
-        logger.info("Remote spawn successful via OpenSSH", {
-          teamName: process.teamName,
-          isReady: process.getBasicMetrics().isReady,
-        });
+        logger.info(
+          {
+            teamName: process.teamName,
+            isReady: process.getBasicMetrics().isReady,
+          },
+          "Remote spawn successful via OpenSSH",
+        );
 
         // Get metrics
         const metrics = process.getBasicMetrics();
         expect(metrics.status).toBe("idle");
         expect(metrics.uptime).toBeGreaterThan(0);
 
-        logger.info("Remote process metrics", { metrics });
+        logger.info({ metrics }, "Remote process metrics");
       },
       TEST_TIMEOUT,
     );
@@ -268,9 +274,9 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         expect(process.getBasicMetrics().isReady).toBe(true);
 
-        logger.info("Executing remote tell command", {
+        logger.info(, {
           message: "What is 2+2?",
-        });
+        }, "Executing remote tell command");
 
         // Create CacheEntry for the tell operation
         const { CacheEntryImpl } = await import(
@@ -330,7 +336,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
         const { firstValueFrom, filter, timeout } = await import("rxjs");
 
         for (const message of messages) {
-          logger.info("Sending message", { message });
+          logger.info({ message }, "Executing remote tell command");
 
           // Create CacheEntry for the tell operation
           const tellEntry = new CacheEntryImpl(CacheEntryType.TELL, message);
@@ -346,15 +352,15 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
             ),
           );
 
-          logger.info("Message completed", { message });
+          logger.info({ message }, "Message completed");
         }
 
         const metrics = process.getBasicMetrics();
         expect(metrics.messagesProcessed).toBeGreaterThanOrEqual(5); // spawn ping + 3 tells + previous test tell
 
-        logger.info("All sequential messages completed", {
+        logger.info({
           totalMessages: metrics.messagesProcessed,
-        });
+        }, "All sequential messages completed");
       },
       TEST_TIMEOUT * 3,
     );
@@ -428,9 +434,9 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         expect(process.getBasicMetrics().isReady).toBe(true);
 
-        logger.info("Terminating remote process", {
+        logger.info({
           teamName: REMOTE_TEAM,
-        });
+        }, "Starting remote process");
 
         // Terminate
         await process.terminate();
@@ -487,10 +493,10 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         expect(process.getBasicMetrics().isReady).toBe(true);
 
-        logger.info("Remote spawn performance", {
+        logger.info({
           spawnTime: `${spawnTime}ms`,
           baseline: "7000-15000ms expected for SSH",
-        });
+        }, "Remote spawn performance");
 
         console.log("\n📊 Remote Spawn Performance:");
         console.log(`   Spawn Time: ${spawnTime}ms`);
@@ -557,10 +563,10 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         const latency = Date.now() - startTime;
 
-        logger.info("Remote tell performance", {
+        logger.info({
           latency: `${latency}ms`,
           baseline: "2000-5000ms expected",
-        });
+        }, "Remote tell performance");
 
         console.log("\n📊 Remote Tell Latency:");
         console.log(`   Latency: ${latency}ms`);

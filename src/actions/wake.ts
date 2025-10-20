@@ -114,17 +114,17 @@ export async function wake(
           launchCommand,
           teamConfigSnapshot,
         );
-        logger.info("Updated session debug info after wake", {
+        logger.info({
           sessionId: session.sessionId,
           commandLength: launchCommand.length,
           configLength: teamConfigSnapshot.length,
-        });
+        }, "PLACEHOLDER");
       } else {
-        logger.warn("Debug info not available from transport after wake", {
+        logger.warn({
           sessionId: session.sessionId,
           hasLaunchCommand: !!launchCommand,
           hasTeamConfig: !!teamConfigSnapshot,
-        });
+        }, "PLACEHOLDER");
       }
 
       // Update session state to idle after spawn completes

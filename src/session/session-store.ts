@@ -85,7 +85,7 @@ export class SessionStore {
     // Initialize schema
     this.initializeSchema();
 
-    logger.info("Session store initialized", { dbPath: absoluteDbPath, inMemory });
+    logger.info({ dbPath: absoluteDbPath, inMemory }, "Session store initialized");
   }
 
   /**
@@ -173,12 +173,12 @@ export class SessionStore {
       teamConfigSnapshot ?? null,
     );
 
-    logger.info("Session created", {
+    logger.info({
       fromTeam,
       toTeam,
       sessionId,
       id: result.lastInsertRowid,
-    });
+    }, "Session created");
 
     return this.rowToSessionInfo({
       id: Number(result.lastInsertRowid),
@@ -290,7 +290,7 @@ export class SessionStore {
 
     stmt.run(Date.now(), sessionId);
 
-    logger.debug("Updated last used timestamp", { sessionId });
+    logger.debug({ sessionId }, "Updated last used timestamp");
   }
 
   /**
@@ -305,7 +305,7 @@ export class SessionStore {
 
     stmt.run(count, sessionId);
 
-    logger.debug("Incremented message count", { sessionId, count });
+    logger.debug({ sessionId, count }, "Incremented message count");
   }
 
   /**
@@ -320,7 +320,7 @@ export class SessionStore {
 
     stmt.run(sessionId);
 
-    logger.debug("Reset message count", { sessionId });
+    logger.debug({ sessionId }, "Reset message count");
   }
 
   /**
@@ -335,7 +335,7 @@ export class SessionStore {
 
     stmt.run(status, sessionId);
 
-    logger.info("Updated session status", { sessionId, status });
+    logger.info({ sessionId, status }, "Updated session status");
   }
 
   /**
@@ -349,7 +349,7 @@ export class SessionStore {
 
     stmt.run(sessionId);
 
-    logger.info("Session deleted", { sessionId });
+    logger.info({ sessionId }, "Session deleted");
   }
 
   /**
@@ -363,7 +363,7 @@ export class SessionStore {
 
     stmt.run(fromTeam, toTeam);
 
-    logger.info("Sessions deleted for team pair", { fromTeam, toTeam });
+    logger.info({ fromTeam, toTeam }, "Sessions deleted for team pair");
   }
 
   /**
@@ -447,7 +447,7 @@ export class SessionStore {
       }
     });
 
-    logger.info("Batch updated session statuses", { count: updates.length });
+    logger.info({ count: updates.length }, "Batch updated session statuses");
   }
 
   /**
@@ -462,7 +462,7 @@ export class SessionStore {
 
     stmt.run(processState, sessionId);
 
-    logger.debug("Updated process state", { sessionId, processState });
+    logger.debug({ sessionId, processState }, "Updated process state");
   }
 
   /**
@@ -480,10 +480,10 @@ export class SessionStore {
 
     stmt.run(cacheSessionId, sessionId);
 
-    logger.debug("Updated current cache session ID", {
+    logger.debug({
       sessionId,
       cacheSessionId,
-    });
+    }, "Updated current cache session ID");
   }
 
   /**
@@ -498,7 +498,7 @@ export class SessionStore {
 
     stmt.run(timestamp, sessionId);
 
-    logger.debug("Updated last response timestamp", { sessionId, timestamp });
+    logger.debug({ sessionId, timestamp }, "Updated last response timestamp");
   }
 
   /**
@@ -517,7 +517,7 @@ export class SessionStore {
 
     stmt.run(launchCommand, teamConfigSnapshot, sessionId);
 
-    logger.debug("Updated debug info", { sessionId });
+    logger.debug({ sessionId }, "Updated debug info");
   }
 
   /**
@@ -534,9 +534,9 @@ export class SessionStore {
 
     const result = stmt.run();
 
-    logger.info("Reset process states on startup", {
+    logger.info({
       sessionsReset: result.changes,
-    });
+    }, "Reset process states on startup");
   }
 
   /**

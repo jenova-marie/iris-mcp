@@ -89,13 +89,16 @@ export class LocalTransport implements Transport {
       throw new ProcessError("Process already spawned", this.teamName);
     }
 
-    this.logger.info("Spawning local Claude process", {
-      teamName: this.teamName,
-      sessionId: this.sessionId,
-      cacheEntryType: spawnCacheEntry.cacheEntryType,
-      executable: commandInfo.executable,
-      argsCount: commandInfo.args.length,
-    });
+    this.logger.info(
+      {
+        teamName: this.teamName,
+        sessionId: this.sessionId,
+        cacheEntryType: spawnCacheEntry.cacheEntryType,
+        executable: commandInfo.executable,
+        argsCount: commandInfo.args.length,
+      },
+      "Spawning local Claude process",
+    );
 
     // Emit SPAWNING status
     this.statusSubject.next(Status.SPAWNING);
@@ -117,10 +120,13 @@ export class LocalTransport implements Transport {
 
     // Build and write MCP config file if session MCP is enabled
     if (this.irisConfig.sessionMcpEnabled) {
-      this.logger.debug("Building MCP config for local transport", {
-        teamName: this.teamName,
-        sessionId: this.sessionId,
-      });
+      this.logger.debug(
+        {
+          teamName: this.teamName,
+          sessionId: this.sessionId,
+        },
+        "Building MCP config for local transport",
+      );
 
       const mcpConfig = ClaudeCommandBuilder.buildMcpConfig(
         this.irisConfig,
@@ -138,10 +144,13 @@ export class LocalTransport implements Transport {
         this.irisConfig.mcpConfigScript,
       );
 
-      this.logger.debug("MCP config file written", {
-        teamName: this.teamName,
-        filePath: this.mcpConfigFilePath,
-      });
+      this.logger.debug(
+        {
+          teamName: this.teamName,
+          filePath: this.mcpConfigFilePath,
+        },
+        "MCP config file written",
+      );
 
       // Add --mcp-config to args
       commandInfo.args.push("--mcp-config", this.mcpConfigFilePath);
@@ -171,10 +180,13 @@ export class LocalTransport implements Transport {
       env: process.env,
     });
 
-    this.logger.info("Local process spawned", {
-      teamName: this.teamName,
-      pid: this.childProcess.pid,
-    });
+    this.logger.info(
+      {
+        teamName: this.teamName,
+        pid: this.childProcess.pid,
+      },
+      "Local process spawned",
+    );
 
     // Setup stdio handlers
     this.setupStdioHandlers();
@@ -198,7 +210,7 @@ export class LocalTransport implements Transport {
       ),
     );
 
-    this.logger.info("Local transport ready", { teamName: this.teamName });
+    this.logger.info({ teamName: this.teamName }, "Local transport ready");
   }
 
   /**
@@ -213,11 +225,14 @@ export class LocalTransport implements Transport {
       throw new ProcessBusyError("Process already processing a request");
     }
 
-    this.logger.debug("Executing tell on local transport", {
-      teamName: this.teamName,
-      cacheEntryType: cacheEntry.cacheEntryType,
-      tellStringLength: cacheEntry.tellString.length,
-    });
+    this.logger.debug(
+      {
+        teamName: this.teamName,
+        cacheEntryType: cacheEntry.cacheEntryType,
+        tellStringLength: cacheEntry.tellString.length,
+      },
+      "Executing tell on local transport",
+    );
 
     // Emit BUSY status
     this.statusSubject.next(Status.BUSY);
@@ -235,7 +250,7 @@ export class LocalTransport implements Transport {
   async terminate(): Promise<void> {
     if (!this.childProcess) return;
 
-    this.logger.info("Terminating local process", { teamName: this.teamName });
+    this.logger.info({ teamName: this.teamName }, "Terminating local process");
 
     // Emit TERMINATING status
     this.statusSubject.next(Status.TERMINATING);
@@ -266,16 +281,22 @@ export class LocalTransport implements Transport {
           try {
             const fs = await import("fs/promises");
             await fs.unlink(this.mcpConfigFilePath);
-            this.logger.debug("Deleted MCP config file", {
-              teamName: this.teamName,
-              filePath: this.mcpConfigFilePath,
-            });
+            this.logger.debug(
+              {
+                teamName: this.teamName,
+                filePath: this.mcpConfigFilePath,
+              },
+              "Deleted MCP config file",
+            );
           } catch (error) {
-            this.logger.warn("Failed to delete MCP config file", {
-              teamName: this.teamName,
-              filePath: this.mcpConfigFilePath,
-              error: error instanceof Error ? error.message : String(error),
-            });
+            this.logger.warn(
+              {
+                teamName: this.teamName,
+                filePath: this.mcpConfigFilePath,
+                error: error instanceof Error ? error.message : String(error),
+              },
+              "Failed to delete MCP config file",
+            );
           }
           this.mcpConfigFilePath = null;
         }
@@ -328,18 +349,24 @@ export class LocalTransport implements Transport {
    */
   cancel(): void {
     if (!this.childProcess || !this.childProcess.stdin) {
-      this.logger.warn("Cancel called but process stdin not available", {
-        teamName: this.teamName,
-        hasProcess: !!this.childProcess,
-      });
+      this.logger.warn(
+        {
+          teamName: this.teamName,
+          hasProcess: !!this.childProcess,
+        },
+        "Cancel called but process stdin not available",
+      );
       return; // Gracefully handle unspawned transport
     }
 
-    this.logger.info("Sending ESC to local stdin (cancel attempt)", {
-      teamName: this.teamName,
-      pid: this.childProcess.pid,
-      isBusy: this.currentCacheEntry !== null,
-    });
+    this.logger.info(
+      {
+        teamName: this.teamName,
+        pid: this.childProcess.pid,
+        isBusy: this.currentCacheEntry !== null,
+      },
+      "Sending ESC to local stdin (cancel attempt)",
+    );
 
     // Send ESC character (ASCII 27 / 0x1B)
     this.childProcess.stdin.write("\x1B");
@@ -360,19 +387,25 @@ export class LocalTransport implements Transport {
 
     // Stderr handler
     this.childProcess.stderr!.on("data", (data) => {
-      this.logger.debug("Local Claude stderr", {
-        teamName: this.teamName,
-        output: data.toString().substring(0, 500),
-      });
+      this.logger.debug(
+        {
+          teamName: this.teamName,
+          output: data.toString().substring(0, 500),
+        },
+        "Local Claude stderr",
+      );
     });
 
     // Exit handler
     this.childProcess.on("exit", (code, signal) => {
-      this.logger.info("Local process exited", {
-        teamName: this.teamName,
-        code,
-        signal,
-      });
+      this.logger.info(
+        {
+          teamName: this.teamName,
+          code,
+          signal,
+        },
+        "Local process exited",
+      );
 
       this.childProcess = null;
       this.ready = false;
@@ -418,10 +451,13 @@ export class LocalTransport implements Transport {
       try {
         const json = JSON.parse(line);
 
-        this.logger.debug("Parsed JSON message from local transport", {
-          type: json.type,
-          subtype: json.subtype,
-        });
+        this.logger.debug(
+          {
+            type: json.type,
+            subtype: json.subtype,
+          },
+          "Parsed JSON message from local transport",
+        );
 
         // DUMB PIPE: Just write to current cache entry
         if (this.currentCacheEntry) {
@@ -439,9 +475,12 @@ export class LocalTransport implements Transport {
 
         // Clear current cache entry on result
         if (json.type === "result") {
-          this.logger.debug("Result message received, clearing cache entry", {
-            teamName: this.teamName,
-          });
+          this.logger.debug(
+            {
+              teamName: this.teamName,
+            },
+            "Result message received, clearing cache entry",
+          );
 
           // Update metrics
           this.messagesProcessed++;
@@ -454,9 +493,12 @@ export class LocalTransport implements Transport {
         }
       } catch (e) {
         // Not JSON, ignore
-        this.logger.debug("Non-JSON stdout line from local transport", {
-          line: line.substring(0, 200),
-        });
+        this.logger.debug(
+          {
+            line: line.substring(0, 200),
+          },
+          "Non-JSON stdout line from local transport",
+        );
       }
     }
   }
@@ -479,10 +521,13 @@ export class LocalTransport implements Transport {
 
     this.childProcess.stdin.write(JSON.stringify(userMessage) + "\n");
 
-    this.logger.debug("Wrote message to local stdin", {
-      teamName: this.teamName,
-      messageLength: message.length,
-    });
+    this.logger.debug(
+      {
+        teamName: this.teamName,
+        messageLength: message.length,
+      },
+      "Wrote message to local stdin",
+    );
   }
 
   /**

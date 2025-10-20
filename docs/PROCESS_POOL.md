@@ -180,7 +180,7 @@ try {
 } catch (error) {
   // CRITICAL: Clean up the zombie process
   await process.terminate().catch((termError) => {
-    logger.warn("Failed to terminate zombie process", { error: termError });
+    logger.warn({ error: termError }, "Failed to terminate zombie process");
   });
 
   // Re-throw the original error

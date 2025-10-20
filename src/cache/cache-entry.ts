@@ -47,31 +47,31 @@ export class CacheEntryImpl implements CacheEntry {
     this.messages$ = this.messagesSubject.asObservable();
     this.status$ = this.statusSubject.asObservable();
 
-    logger.debug("CacheEntry created", {
+    logger.debug({
       cacheEntryType,
       debugId: this.__debugId,
       tellStringLength: tellString.length,
       tellStringPreview: tellString.substring(0, 50),
-    });
+    }, "PLACEHOLDER");
   }
 
   /**
    * Add message from Claude (called by ClaudeProcess)
    */
   addMessage(data: any): void {
-    logger.debug("addMessage called", {
+    logger.debug({
       cacheEntryType: this.cacheEntryType,
       debugId: this.__debugId,
       messageType: data.type,
       currentStatus: this.status,
       currentMessageCount: this.messages.length,
-    });
+    }, "PLACEHOLDER");
 
     if (this.status !== CacheEntryStatus.ACTIVE) {
-      logger.warn("Attempted to add message to non-active entry", {
+      logger.warn({
         status: this.status,
         messageType: data.type,
-      });
+      }, "PLACEHOLDER");
       return;
     }
 
@@ -83,27 +83,27 @@ export class CacheEntryImpl implements CacheEntry {
 
     this.messages.push(message);
 
-    logger.debug("About to emit message via ReplaySubject", {
+    logger.debug({
       cacheEntryType: this.cacheEntryType,
       debugId: this.__debugId,
       messageType: message.type,
       totalMessages: this.messages.length,
       subjectClosed: (this.messagesSubject as any).closed || false,
-    });
+    }, "PLACEHOLDER");
 
     this.messagesSubject.next(message);
 
-    logger.debug("Message emitted via ReplaySubject", {
+    logger.debug({
       cacheEntryType: this.cacheEntryType,
       debugId: this.__debugId,
       messageType: message.type,
-    });
+    }, "PLACEHOLDER");
 
-    logger.debug("Message added to entry", {
+    logger.debug({
       cacheEntryType: this.cacheEntryType,
       messageType: message.type,
       totalMessages: this.messages.length,
-    });
+    }, "PLACEHOLDER");
   }
 
   /**
@@ -124,19 +124,19 @@ export class CacheEntryImpl implements CacheEntry {
    * Mark entry as completed (called by Iris)
    */
   complete(): void {
-    logger.debug("complete() called", {
+    logger.debug({
       cacheEntryType: this.cacheEntryType,
       debugId: this.__debugId,
       currentStatus: this.status,
       messageCount: this.messages.length,
       subjectClosed: (this.messagesSubject as any).closed || false,
-    });
+    }, "PLACEHOLDER");
 
     if (this.status !== CacheEntryStatus.ACTIVE) {
-      logger.warn("Attempted to complete non-active entry", {
+      logger.warn({
         status: this.status,
         cacheEntryType: this.cacheEntryType,
-      });
+      }, "PLACEHOLDER");
       return;
     }
 
@@ -146,26 +146,26 @@ export class CacheEntryImpl implements CacheEntry {
     // Emit the new status
     this.statusSubject.next(CacheEntryStatus.COMPLETED);
 
-    logger.debug("About to complete ReplaySubject", {
+    logger.debug({
       cacheEntryType: this.cacheEntryType,
       debugId: this.__debugId,
       messageCount: this.messages.length,
-    });
+    }, "PLACEHOLDER");
 
     this.messagesSubject.complete();
     this.statusSubject.complete();
 
-    logger.debug("ReplaySubject completed", {
+    logger.debug({
       cacheEntryType: this.cacheEntryType,
       debugId: this.__debugId,
       subjectClosed: (this.messagesSubject as any).closed || false,
-    });
+    }, "PLACEHOLDER");
 
-    logger.info("CacheEntry completed", {
+    logger.info({
       cacheEntryType: this.cacheEntryType,
       messageCount: this.messages.length,
       duration: this.completedAt - this.createdAt,
-    });
+    }, "PLACEHOLDER");
   }
 
   /**
@@ -176,10 +176,10 @@ export class CacheEntryImpl implements CacheEntry {
       this.status !== CacheEntryStatus.ACTIVE &&
       this.status !== CacheEntryStatus.COMPLETED
     ) {
-      logger.warn("Attempted to terminate already terminated entry", {
+      logger.warn({
         status: this.status,
         cacheEntryType: this.cacheEntryType,
-      });
+      }, "PLACEHOLDER");
       return;
     }
 
@@ -193,11 +193,11 @@ export class CacheEntryImpl implements CacheEntry {
     this.messagesSubject.complete();
     this.statusSubject.complete();
 
-    logger.warn("CacheEntry terminated", {
+    logger.warn({
       cacheEntryType: this.cacheEntryType,
       reason,
       messageCount: this.messages.length,
       duration: this.completedAt - this.createdAt,
-    });
+    }, "PLACEHOLDER");
   }
 }

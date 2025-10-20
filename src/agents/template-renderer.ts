@@ -64,9 +64,9 @@ export class TemplateRenderer {
       return values.every((v) => !!v);
     });
 
-    logger.debug("Handlebars helpers registered", {
+    logger.debug({
       helpers: ["eq", "includes", "upper", "lower", "json", "hasPackage", "not", "or", "and"],
-    });
+    }, "PLACEHOLDER");
   }
 
   /**

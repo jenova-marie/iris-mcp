@@ -122,14 +122,14 @@ export class ClaudePrintExecutor {
     let lastError: Error | null = null;
     let retryCount = 0;
 
-    logger.info("Executing claude --print command", {
+    logger.info({
       command,
       sessionId: this.sessionId,
       remote: !!this.irisConfig.remote,
       resume,
       timeout,
       maxAttempts,
-    });
+    }, "PLACEHOLDER");
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
@@ -265,10 +265,10 @@ export class ClaudePrintExecutor {
       command,
     ];
 
-    logger.debug("Spawning local claude process", {
+    logger.debug({
       command: `${claudeExecutable} ${args.join(" ")}`,
       cwd: this.irisConfig.path,
-    });
+    }, "PLACEHOLDER");
 
     // Spawn Claude
     const claudeProcess = spawn(claudeExecutable, args, {
@@ -315,10 +315,10 @@ export class ClaudePrintExecutor {
     // Build SSH command: ssh <host> "cd <path> && claude ..."
     const fullArgs = [...sshArgs, remoteCommand];
 
-    logger.debug("Spawning remote claude process via SSH", {
+    logger.debug({
       command: `${sshExecutable} ${fullArgs.join(" ")}`,
       remote: this.irisConfig.remote,
-    });
+    }, "PLACEHOLDER");
 
     // Spawn SSH process
     const sshProcess = spawn(sshExecutable, fullArgs, {
@@ -354,10 +354,10 @@ export class ClaudePrintExecutor {
         const output = data.toString();
         stdoutData += output;
 
-        logger.debug("Print command stdout", {
+        logger.debug({
           sessionId: this.sessionId,
           output: output.substring(0, 500),
-        });
+        }, "PLACEHOLDER");
 
         if (output.length > 0) {
           responseReceived = true;
@@ -373,16 +373,16 @@ export class ClaudePrintExecutor {
         const logPathMatch = errorOutput.match(/Logging to: (.+)/);
         if (logPathMatch && !debugLogPath) {
           debugLogPath = logPathMatch[1].trim();
-          logger.debug("Debug logs available", {
+          logger.debug({
             sessionId: this.sessionId,
             debugLogPath,
-          });
+          }, "PLACEHOLDER");
         }
 
-        logger.debug("Print command stderr", {
+        logger.debug({
           sessionId: this.sessionId,
           stderr: errorOutput,
-        });
+        }, "PLACEHOLDER");
       });
 
       // Handle spawn errors
@@ -457,12 +457,12 @@ export class ClaudePrintExecutor {
           });
         } else {
           // Success
-          logger.info("Command completed successfully", {
+          logger.info({
             sessionId: this.sessionId,
             exitCode,
             stdoutLength: stdoutData.length,
             duration,
-          });
+          }, "PLACEHOLDER");
 
           resolve({
             exitCode,

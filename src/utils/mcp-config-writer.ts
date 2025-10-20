@@ -44,11 +44,11 @@ export async function writeMcpConfig(
   mcpConfig: object,
   ...scriptArgs: string[]
 ): Promise<string> {
-  logger.debug("Writing MCP config via script", {
+  logger.debug({
     scriptPath,
     scriptArgs,
     configKeys: Object.keys(mcpConfig),
-  });
+  }, "PLACEHOLDER");
 
   return new Promise((resolve, reject) => {
     // Determine shell/interpreter based on script extension
@@ -78,12 +78,12 @@ export async function writeMcpConfig(
     // Handle process exit
     proc.on("exit", (code, signal) => {
       if (code !== 0) {
-        logger.error("MCP config script failed", {
+        logger.error({
           scriptPath,
           exitCode: code,
           signal,
           stderr: stderr.trim(),
-        });
+        }, "PLACEHOLDER");
 
         reject(
           new ProcessError(
@@ -111,20 +111,20 @@ export async function writeMcpConfig(
         return;
       }
 
-      logger.debug("MCP config written successfully", {
+      logger.debug({
         scriptPath,
         filePath,
-      });
+      }, "PLACEHOLDER");
 
       resolve(filePath);
     });
 
     // Handle process errors
     proc.on("error", (error) => {
-      logger.error("Failed to execute MCP config script", {
+      logger.error({
         err: error,
         scriptPath,
-      });
+      }, "PLACEHOLDER");
 
       reject(
         new ProcessError(

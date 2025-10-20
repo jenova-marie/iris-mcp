@@ -92,18 +92,17 @@ export class SessionManager {
 
         // Skip path validation for remote teams - paths exist on remote host
         if (irisConfig.remote) {
-          logger.debug("Skipping path validation for remote team", {
-            teamName,
-            remote: irisConfig.remote,
-            path: irisConfig.path
-          });
+          logger.debug(
+            { teamName, remote: irisConfig.remote, path: irisConfig.path },
+            "Skipping path validation for remote team",
+          );
           continue;
         }
 
         // Validate local team paths
         const projectPath = this.getProjectPath(irisConfig);
         validateSecureProjectPath(projectPath);
-        logger.debug("Validated team project path", { teamName, projectPath });
+        logger.debug({ teamName, projectPath }, "Validated team project path");
       } catch (error) {
         throw new ConfigurationError(
           `Invalid configuration for team '${teamName}': ${error instanceof Error ? error.message : String(error)}`,
@@ -147,11 +146,14 @@ export class SessionManager {
     const existing = this.store.getByTeamPair(fromTeam, toTeam);
 
     if (existing) {
-      logger.debug("Using existing session", {
-        fromTeam,
-        toTeam,
-        sessionId: existing.sessionId,
-      });
+      logger.debug(
+        {
+          fromTeam,
+          toTeam,
+          sessionId: existing.sessionId,
+        },
+        "Using existing session",
+      );
       return existing;
     }
 
@@ -181,12 +183,15 @@ export class SessionManager {
     const projectPath = this.getProjectPath(irisConfig);
     const sessionId = generateSecureUUID();
 
-    logger.info("Creating new session", {
-      fromTeam,
-      toTeam,
-      sessionId,
-      projectPath,
-    });
+    logger.info(
+      {
+        fromTeam,
+        toTeam,
+        sessionId,
+        projectPath,
+      },
+      "Creating new session",
+    );
 
     try {
       // Initialize the session file using ClaudeProcess static method
@@ -209,11 +214,14 @@ export class SessionManager {
       this.sessionCache.set(cacheKey, sessionInfo);
       this.cacheTimestamps.set(cacheKey, Date.now());
 
-      logger.info("Session created successfully", {
-        fromTeam,
-        toTeam,
-        sessionId,
-      });
+      logger.info(
+        {
+          fromTeam,
+          toTeam,
+          sessionId,
+        },
+        "Session created successfully",
+      );
 
       return sessionInfo;
     } catch (error) {
@@ -261,7 +269,7 @@ export class SessionManager {
     const cached = this.sessionCache.get(cacheKey);
 
     if (cached && this.isCacheValid(cacheKey)) {
-      logger.debug("Session cache hit", { fromTeam, toTeam });
+      logger.debug({ fromTeam, toTeam }, "Session cache hit");
       return cached;
     }
 
@@ -343,11 +351,14 @@ export class SessionManager {
       this.invalidateCache(session.fromTeam, session.toTeam);
     }
 
-    logger.debug("Updated session debug info", {
-      sessionId,
-      commandLength: launchCommand.length,
-      configLength: teamConfigSnapshot.length,
-    });
+    logger.debug(
+      {
+        sessionId,
+        commandLength: launchCommand.length,
+        configLength: teamConfigSnapshot.length,
+      },
+      "Updated session debug info",
+    );
   }
 
   /**
@@ -372,7 +383,7 @@ export class SessionManager {
 
     const session = this.store.getBySessionId(sessionId);
     if (!session) {
-      logger.warn("Attempted to delete non-existent session", { sessionId });
+      logger.warn({ sessionId }, "Attempted to delete non-existent session");
       return;
     }
 
@@ -419,16 +430,19 @@ export class SessionManager {
 
     const session = this.store.getBySessionId(sessionId);
     if (!session) {
-      logger.warn("Attempted to compact non-existent session", { sessionId });
+      logger.warn({ sessionId }, "Attempted to compact non-existent session");
       return;
     }
 
-    logger.info("Compacting session metadata", {
-      sessionId,
-      fromTeam: session.fromTeam,
-      toTeam: session.toTeam,
-      messageCount: session.messageCount,
-    });
+    logger.info(
+      {
+        sessionId,
+        fromTeam: session.fromTeam,
+        toTeam: session.toTeam,
+        messageCount: session.messageCount,
+      },
+      "Compacting session metadata",
+    );
 
     // Mark as compacting
     this.store.updateStatus(sessionId, "compacting");

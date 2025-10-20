@@ -96,12 +96,12 @@ export class IrisOrchestrator {
   ): Promise<string | object> {
     const { timeout = 30000 } = options;
 
-    logger.info("Sending message", {
+    logger.info({
       fromTeam,
       toTeam,
       messageLength: message.length,
       timeout,
-    });
+    }, "Sending message";
 
     // Step 1: Get or create session
     const session = await this.sessionManager.getOrCreateSession(
@@ -109,12 +109,15 @@ export class IrisOrchestrator {
       toTeam,
     );
 
-    logger.debug("Session obtained", {
-      sessionId: session.sessionId,
-      fromTeam: session.fromTeam,
-      toTeam: session.toTeam,
-      processState: session.processState,
-    });
+    logger.debug(
+      {
+        sessionId: session.sessionId,
+        fromTeam: session.fromTeam,
+        toTeam: session.toTeam,
+        processState: session.processState,
+      },
+      "Session obtained",
+    );
 
     // Step 2: Check if process is busy
     const processState = this.sessionManager.getProcessState(session.sessionId);
@@ -158,13 +161,21 @@ export class IrisOrchestrator {
     const launchCommand = process.getLaunchCommand?.();
     const teamConfigSnapshot = process.getTeamConfigSnapshot?.();
 
-    logger.debug("Checking debug info from process", {
-      sessionId: session.sessionId,
-      hasGetLaunchCommand: typeof process.getLaunchCommand === 'function',
-      hasGetTeamConfigSnapshot: typeof process.getTeamConfigSnapshot === 'function',
-      launchCommandValue: launchCommand ? `${launchCommand.length} chars` : 'NULL',
-      teamConfigValue: teamConfigSnapshot ? `${teamConfigSnapshot.length} chars` : 'NULL',
-    });
+    logger.debug(
+      {
+        sessionId: session.sessionId,
+        hasGetLaunchCommand: typeof process.getLaunchCommand === "function",
+        hasGetTeamConfigSnapshot:
+          typeof process.getTeamConfigSnapshot === "function",
+        launchCommandValue: launchCommand
+          ? `${launchCommand.length} chars`
+          : "NULL",
+        teamConfigValue: teamConfigSnapshot
+          ? `${teamConfigSnapshot.length} chars`
+          : "NULL",
+      },
+      "Checking debug info from process",
+    );
 
     if (launchCommand && teamConfigSnapshot) {
       this.sessionManager.updateDebugInfo(
@@ -172,26 +183,35 @@ export class IrisOrchestrator {
         launchCommand,
         teamConfigSnapshot,
       );
-      logger.info("Updated session debug info", {
-        sessionId: session.sessionId,
-        commandLength: launchCommand.length,
-        configLength: teamConfigSnapshot.length,
-      });
+      logger.info(
+        {
+          sessionId: session.sessionId,
+          commandLength: launchCommand.length,
+          configLength: teamConfigSnapshot.length,
+        },
+        "Updated session debug info",
+      );
     } else {
-      logger.warn("Debug info not available from transport", {
-        sessionId: session.sessionId,
-        hasLaunchCommand: !!launchCommand,
-        hasTeamConfig: !!teamConfigSnapshot,
-      });
+      logger.warn(
+        {
+          sessionId: session.sessionId,
+          hasLaunchCommand: !!launchCommand,
+          hasTeamConfig: !!teamConfigSnapshot,
+        },
+        "Debug info not available from transport",
+      );
     }
 
     // Step 5: Create CacheEntry for this tell
     const tellEntry = messageCache.createEntry(CacheEntryType.TELL, message);
 
-    logger.debug("Created tell CacheEntry", {
-      sessionId: session.sessionId,
-      tellStringLength: message.length,
-    });
+    logger.debug(
+      {
+        sessionId: session.sessionId,
+        tellStringLength: message.length,
+      },
+      "Created tell CacheEntry",
+    );
 
     // Step 6: Update session state
     this.sessionManager.updateProcessState(session.sessionId, "processing");
@@ -233,12 +253,15 @@ export class IrisOrchestrator {
     sessionId: string,
     cacheEntry: CacheEntry,
   ): void {
-    logger.debug("startResponseTimeout called", {
-      sessionId,
-      cacheEntryId: (cacheEntry as any).__debugId || "unknown",
-      cacheEntryStatus: cacheEntry.status,
-      currentMessageCount: cacheEntry.getMessages().length,
-    });
+    logger.debug(
+      {
+        sessionId,
+        cacheEntryId: (cacheEntry as any).__debugId || "unknown",
+        cacheEntryStatus: cacheEntry.status,
+        currentMessageCount: cacheEntry.getMessages().length,
+      },
+      "startResponseTimeout called",
+    );
 
     const responseTimeout = this.config.settings.responseTimeout ?? 120000;
 
@@ -255,19 +278,25 @@ export class IrisOrchestrator {
     };
 
     // Subscribe to cache messages to reset timer
-    logger.debug("Creating startResponseTimeout subscription", {
-      sessionId,
-      cacheEntryId: (cacheEntry as any).__debugId || "unknown",
-    });
+    logger.debug(
+      {
+        sessionId,
+        cacheEntryId: (cacheEntry as any).__debugId || "unknown",
+      },
+      "Creating startResponseTimeout subscription",
+    );
 
     const subscription = cacheEntry.messages$.subscribe((msg) => {
       this.sessionManager.updateLastResponse(sessionId);
       resetTimer(); // Reset timer on each message
 
-      logger.debug("Cache message received, timer reset", {
-        sessionId,
-        messageType: msg.type,
-      });
+      logger.debug(
+        {
+          sessionId,
+          messageType: msg.type,
+        },
+        "Cache message received, timer reset",
+      );
 
       // Check for completion
       if (msg.type === "result") {
@@ -283,10 +312,13 @@ export class IrisOrchestrator {
     // Start initial timer
     resetTimer();
 
-    logger.debug("Response timeout timer started", {
-      sessionId,
-      responseTimeout,
-    });
+    logger.debug(
+      {
+        sessionId,
+        responseTimeout,
+      },
+      "Response timeout timer started",
+    );
   }
 
   /**
@@ -296,18 +328,21 @@ export class IrisOrchestrator {
     sessionId: string,
     cacheEntry: CacheEntry,
   ): void {
-    logger.info("Tell completed successfully", {
-      sessionId,
-      cacheEntryType: cacheEntry.cacheEntryType,
-      messageCount: cacheEntry.getMessages().length,
-    });
+    logger.info(
+      {
+        sessionId,
+        cacheEntryType: cacheEntry.cacheEntryType,
+        messageCount: cacheEntry.getMessages().length,
+      },
+      "Tell completed successfully",
+    );
 
     // Defer complete() to allow all subscribers to receive the result message
     // This prevents a race condition where complete() is called synchronously
     // during messagesSubject.next(), blocking later subscribers from receiving
     // the message.
     setImmediate(() => {
-      logger.debug("Deferred complete() executing", { sessionId });
+      logger.debug({ sessionId }, "Deferred complete() executing");
       cacheEntry.complete();
     });
 
@@ -326,7 +361,7 @@ export class IrisOrchestrator {
       this.responseSubscriptions.delete(sessionId);
     }
 
-    logger.debug("Tell completion cleanup complete", { sessionId });
+    logger.debug({ sessionId }, "Deferred complete() cleanup complete");
   }
 
   /**
@@ -337,12 +372,15 @@ export class IrisOrchestrator {
     sessionId: string,
     cacheEntry: CacheEntry,
   ): Promise<void> {
-    logger.error("Response timeout - recreating process", {
-      sessionId,
-      cacheEntryType: cacheEntry.cacheEntryType,
-      timeout: this.config.settings.responseTimeout,
-      messageCount: cacheEntry.getMessages().length,
-    });
+    logger.error(
+      {
+        sessionId,
+        cacheEntryType: cacheEntry.cacheEntryType,
+        timeout: this.config.settings.responseTimeout,
+        messageCount: cacheEntry.getMessages().length,
+      },
+      "Response timeout - recreating process",
+    );
 
     // Mark entry as terminated
     cacheEntry.terminate(TerminationReason.RESPONSE_TIMEOUT);
@@ -390,13 +428,16 @@ export class IrisOrchestrator {
     cacheEntry: CacheEntry,
     mcpTimeout: number,
   ): Promise<string | object> {
-    logger.debug("waitForCompletion starting", {
-      sessionId,
-      mcpTimeout,
-      cacheEntryStatus: cacheEntry.status,
-      currentMessageCount: cacheEntry.getMessages().length,
-      cacheEntryId: (cacheEntry as any).__debugId || "unknown",
-    });
+    logger.debug(
+      {
+        sessionId,
+        mcpTimeout,
+        cacheEntryStatus: cacheEntry.status,
+        currentMessageCount: cacheEntry.getMessages().length,
+        cacheEntryId: (cacheEntry as any).__debugId || "unknown",
+      },
+      "waitForCompletion starting",
+    );
 
     return new Promise((resolve) => {
       let mcpTimeoutId: NodeJS.Timeout | null = null;
@@ -409,11 +450,14 @@ export class IrisOrchestrator {
             completed = true;
             subscription.unsubscribe();
 
-            logger.info("MCP timeout reached, returning partial results", {
-              sessionId,
-              mcpTimeout,
-              messagesReceived: cacheEntry.getMessages().length,
-            });
+            logger.info(
+              {
+                sessionId,
+                mcpTimeout,
+                messagesReceived: cacheEntry.getMessages().length,
+              },
+              "MCP timeout reached, returning partial results",
+            );
 
             // Return partial results
             resolve({
@@ -428,46 +472,61 @@ export class IrisOrchestrator {
       }
 
       // Subscribe to completion
-      logger.debug("Creating waitForCompletion subscription", {
-        sessionId,
-        cacheEntryStatus: cacheEntry.status,
-        currentMessageCount: cacheEntry.getMessages().length,
-      });
+      logger.debug(
+        {
+          sessionId,
+          cacheEntryStatus: cacheEntry.status,
+          currentMessageCount: cacheEntry.getMessages().length,
+        },
+        "Creating waitForCompletion subscription",
+      );
 
       const subscription = cacheEntry.messages$
         .pipe(
           tap((msg) =>
-            logger.debug("waitForCompletion received message (before filter)", {
-              sessionId,
-              messageType: msg.type,
-              totalMessages: cacheEntry.getMessages().length,
-            }),
+            logger.debug(
+              {
+                sessionId,
+                messageType: msg.type,
+                totalMessages: cacheEntry.getMessages().length,
+              },
+              "waitForCompletion received message (before filter)",
+            ),
           ),
           filter((msg) => {
             const matches = msg.type === "result";
-            logger.debug("waitForCompletion filter check", {
-              sessionId,
-              messageType: msg.type,
-              matches,
-            });
+            logger.debug(
+              {
+                sessionId,
+                messageType: msg.type,
+                matches,
+              },
+              "waitForCompletion filter check",
+            );
             return matches;
           }),
         )
         .subscribe(() => {
-          logger.debug("waitForCompletion subscription callback invoked", {
-            sessionId,
-            completed,
-          });
+          logger.debug(
+            {
+              sessionId,
+              completed,
+            },
+            "waitForCompletion subscription callback invoked",
+          );
 
           if (!completed) {
             completed = true;
             if (mcpTimeoutId) clearTimeout(mcpTimeoutId);
             subscription.unsubscribe();
 
-            logger.info("Tell completed within MCP timeout", {
-              sessionId,
-              responseLength: this.extractFullResponse(cacheEntry).length,
-            });
+            logger.info(
+              {
+                sessionId,
+                responseLength: this.extractFullResponse(cacheEntry).length,
+              },
+              "Tell completed within MCP timeout",
+            );
 
             // Extract full response
             const response = this.extractFullResponse(cacheEntry);
@@ -475,10 +534,13 @@ export class IrisOrchestrator {
           }
         });
 
-      logger.debug("waitForCompletion subscription created", {
-        sessionId,
-        subscriptionClosed: subscription.closed,
-      });
+      logger.debug(
+        {
+          sessionId,
+          subscriptionClosed: subscription.closed,
+        },
+        "waitForCompletion subscription created",
+      );
 
       // Handle terminated case
       if (cacheEntry.status === "terminated") {
@@ -487,10 +549,13 @@ export class IrisOrchestrator {
           if (mcpTimeoutId) clearTimeout(mcpTimeoutId);
           subscription.unsubscribe();
 
-          logger.warn("Cache entry already terminated", {
-            sessionId,
-            reason: cacheEntry.terminationReason,
-          });
+          logger.warn(
+            {
+              sessionId,
+              reason: cacheEntry.terminationReason,
+            },
+            "Cache entry already terminated",
+          );
 
           resolve({
             status: "terminated",
@@ -540,7 +605,7 @@ export class IrisOrchestrator {
       this.responseSubscriptions.delete(sessionId);
     }
 
-    logger.debug("Tell cleanup complete", { sessionId });
+    logger.debug({ sessionId }, "Tell cleanup complete");
   }
 
   /**
@@ -651,11 +716,14 @@ export class IrisOrchestrator {
     toolInput: Record<string, unknown>,
     reason?: string,
   ): Promise<PermissionDecision> {
-    logger.info("Processing permission request", {
-      sessionId,
-      toolName,
-      reason,
-    });
+    logger.info(
+      {
+        sessionId,
+        toolName,
+        reason,
+      },
+      "Processing permission request",
+    );
 
     // Lookup process from session
     const process = this.processPool.getProcessBySessionId(sessionId);
@@ -687,17 +755,23 @@ export class IrisOrchestrator {
     // Get permission mode (default: "ask")
     const mode = teamConfig.grantPermission || "ask";
 
-    logger.info({
-      teamName,
-      mode,
-      toolName,
-    }, "Checking permission mode");
+    logger.info(
+      {
+        teamName,
+        mode,
+        toolName,
+      },
+      "Checking permission mode",
+    );
 
     // Apply permission rules
     switch (mode) {
       case "yes":
         // Auto-approve all actions
-        logger.info({ teamName, toolName }, "Auto-approving (grantPermission: yes)");
+        logger.info(
+          { teamName, toolName },
+          "Auto-approving (grantPermission: yes)",
+        );
         return {
           allow: true,
           teamName,
@@ -706,7 +780,10 @@ export class IrisOrchestrator {
 
       case "no":
         // Auto-deny all actions (read-only mode)
-        logger.warn({ teamName, toolName }, "Auto-denying (grantPermission: no)");
+        logger.warn(
+          { teamName, toolName },
+          "Auto-denying (grantPermission: no)",
+        );
         return {
           allow: false,
           message: `Permission denied: Team '${teamName}' is in read-only mode (grantPermission: no)`,
@@ -717,7 +794,10 @@ export class IrisOrchestrator {
       case "ask":
         // Broadcast to dashboard for manual approval
         if (!this.pendingPermissions) {
-          logger.warn({ teamName, toolName }, "Ask mode not available - no permissions manager");
+          logger.warn(
+            { teamName, toolName },
+            "Ask mode not available - no permissions manager",
+          );
           return {
             allow: false,
             message: `Permission denied: Dashboard not available for approval`,
@@ -726,36 +806,48 @@ export class IrisOrchestrator {
           };
         }
 
-        logger.info({ teamName, toolName }, "Creating pending permission request for dashboard approval");
+        logger.info(
+          { teamName, toolName },
+          "Creating pending permission request for dashboard approval",
+        );
 
         try {
           // Create pending permission - this will be broadcasted to dashboard via events
-          const response = await this.pendingPermissions.createPendingPermission(
-            sessionId,
-            teamName,
-            toolName,
-            toolInput,
-            reason,
-          );
+          const response =
+            await this.pendingPermissions.createPendingPermission(
+              sessionId,
+              teamName,
+              toolName,
+              toolInput,
+              reason,
+            );
 
-          logger.info({
-            teamName,
-            toolName,
-            approved: response.approved,
-          }, "Permission request resolved by dashboard");
+          logger.info(
+            {
+              teamName,
+              toolName,
+              approved: response.approved,
+            },
+            "Permission request resolved by dashboard",
+          );
 
           return {
             allow: response.approved,
-            message: response.reason || (response.approved ? undefined : "Permission denied by user"),
+            message:
+              response.reason ||
+              (response.approved ? undefined : "Permission denied by user"),
             teamName,
             mode,
           };
         } catch (error) {
-          logger.error({
-            err: error instanceof Error ? error : new Error(String(error)),
-            teamName,
-            toolName,
-          }, "Error creating pending permission");
+          logger.error(
+            {
+              err: error instanceof Error ? error : new Error(String(error)),
+              teamName,
+              toolName,
+            },
+            "Error creating pending permission",
+          );
 
           return {
             allow: false,
@@ -768,7 +860,10 @@ export class IrisOrchestrator {
       case "forward":
         // TODO: Forward permission request to parent team
         // For now, deny with message explaining feature not yet implemented
-        logger.warn({ teamName, toolName }, "Forward mode not yet implemented, denying");
+        logger.warn(
+          { teamName, toolName },
+          "Forward mode not yet implemented, denying",
+        );
         return {
           allow: false,
           message: `Permission denied: Forward mode (grantPermission: forward) not yet implemented for team '${teamName}'`,
@@ -795,32 +890,38 @@ export class IrisOrchestrator {
     // Check if session exists
     const session = this.sessionManager.getSession(fromTeam, toTeam);
     if (!session) {
-      logger.debug("Team not awake: no session", { fromTeam, toTeam });
+      logger.debug({ fromTeam, toTeam }, "Team not awake: no session");
       return false;
     }
 
     // Check if process exists for this session
     const process = this.processPool.getProcessBySessionId(session.sessionId);
     if (!process) {
-      logger.debug("Team not awake: no process", {
-        fromTeam,
-        toTeam,
-        sessionId: session.sessionId,
-      });
+      logger.debug(
+        {
+          fromTeam,
+          toTeam,
+          sessionId: session.sessionId,
+        },
+        "Team not awake: no process",
+      );
       return false;
     }
 
     const metrics = process.getBasicMetrics();
     const isReady = metrics.isReady && !metrics.isBusy;
 
-    logger.debug("Team awake check", {
-      fromTeam,
-      toTeam,
-      sessionId: session.sessionId,
-      isReady: metrics.isReady,
-      isBusy: metrics.isBusy,
-      result: isReady,
-    });
+    logger.debug(
+      {
+        fromTeam,
+        toTeam,
+        sessionId: session.sessionId,
+        isReady: metrics.isReady,
+        isBusy: metrics.isBusy,
+        result: isReady,
+      },
+      "Team awake check",
+    );
 
     return isReady;
   }

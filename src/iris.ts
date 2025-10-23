@@ -101,7 +101,7 @@ export class IrisOrchestrator {
       toTeam,
       messageLength: message.length,
       timeout,
-    }, "Sending message";
+    }, "Sending message");
 
     // Step 1: Get or create session
     const session = await this.sessionManager.getOrCreateSession(

@@ -107,14 +107,6 @@ export class LocalTransport implements Transport {
     this.currentCacheEntry = spawnCacheEntry;
     this.startTime = Date.now();
 
-    // Capture launch command for debugging
-    const quotedArgs = commandInfo.args.map((arg) =>
-      arg.includes(" ") || arg.includes('"')
-        ? `"${arg.replace(/"/g, '\\"')}"`
-        : arg,
-    );
-    this.launchCommand = `${commandInfo.executable} ${quotedArgs.join(" ")}`;
-
     // Capture team config snapshot for debugging
     this.teamConfigSnapshot = this.buildTeamConfigSnapshot();
 
@@ -154,15 +146,12 @@ export class LocalTransport implements Transport {
 
       // Add --mcp-config to args
       commandInfo.args.push("--mcp-config", this.mcpConfigFilePath);
-
-      // Update launch command for debugging
-      const updatedQuotedArgs = commandInfo.args.map((arg) =>
-        arg.includes(" ") || arg.includes('"')
-          ? `"${arg.replace(/"/g, '\\"')}"`
-          : arg,
-      );
-      this.launchCommand = `${commandInfo.executable} ${updatedQuotedArgs.join(" ")}`;
     }
+
+    // Capture launch command for debugging (after all args are finalized)
+    // Use single-quote escaping to match SSH transport formatting
+    const quotedArgs = commandInfo.args.map((arg) => this.escapeShellArg(arg));
+    this.launchCommand = `${commandInfo.executable} ${quotedArgs.join(" ")}`;
 
     this.logger.debug(
       {
@@ -598,5 +587,15 @@ export class LocalTransport implements Transport {
     };
 
     return JSON.stringify(snapshot, null, 2);
+  }
+
+  /**
+   * Escape shell argument (basic single-quote escaping)
+   * Used for debug logging to match SSH transport formatting
+   * Example: "/path with spaces" -> '/path with spaces'
+   */
+  private escapeShellArg(arg: string): string {
+    // Replace single quotes with '\'' (end quote, escaped quote, start quote)
+    return `'${arg.replace(/'/g, "'\\''")}'`;
   }
 }

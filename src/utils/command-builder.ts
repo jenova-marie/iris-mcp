@@ -128,7 +128,10 @@ export class ClaudeCommandBuilder {
     // 5. Build tool allowlist based on grantPermission setting
     const allowedTools = new Set<string>();
     const grantPermission = irisConfig.grantPermission || "yes"; // Default to "yes" for backwards compatibility
-    const permissionTool = "mcp__iris__permissions__approve";
+
+    // Use session-specific server name to match the MCP config
+    // This ensures permissions__approve gets session context via the session-specific MCP connection
+    const permissionTool = `mcp__iris-${sessionId}__permissions__approve`;
 
     if (grantPermission === "yes") {
       // Auto-approve all Iris MCP tools
@@ -209,9 +212,13 @@ export class ClaudeCommandBuilder {
     // Build session-specific URL
     const mcpUrl = `${protocol}://localhost:${mcpPort}/mcp/${sessionId}`;
 
+    // Use session-specific server name so it doesn't conflict with global iris config
+    // This allows permissions__approve to get session context while other tools use global config
+    const serverName = `iris-${sessionId}`;
+
     return {
       mcpServers: {
-        iris: {
+        [serverName]: {
           type: "http",
           url: mcpUrl,
         },

@@ -100,33 +100,75 @@ switch (teamConfig.grantPermission) {
 
 ### MCP Config Injection
 
-**LocalTransport** (for local teams):
+**CRITICAL UPDATE (2025-10-23): Session-Specific Server Naming**
+
+To avoid conflicts with global `~/.claude.json` MCP configurations, session-specific MCP configs now use a **unique server name** per session:
+
 ```typescript
+// Session-specific server name prevents conflicts with global "iris" config
+const serverName = `iris-${sessionId}`;
+
 const mcpConfig = {
   mcpServers: {
-    iris: {
+    [serverName]: {  // e.g., "iris-abc-123-def-456"
       type: "http",
       url: `http://localhost:1615/mcp/${this.sessionId}`
     }
   }
 };
-
-args.push('--mcp-config', JSON.stringify(mcpConfig));
 ```
 
-**SSH2Transport** (for remote teams):
+**Why This Matters:**
+
+Without unique naming, local teams had **two simultaneous connections** to iris-mcp:
+1. Global connection via `~/.claude.json` (server name: `"iris"`) - **NO session context**
+2. Session-specific connection via `--mcp-config` (server name: `"iris"`) - **HAS session context**
+
+When Claude called tools, it used the global connection by default, causing `permissions__approve` to fail with "No session context" errors.
+
+**The Fix:**
+
+By naming the session-specific server `iris-${sessionId}`, we create separate namespaces:
+- Regular tools use global `mcp__iris__*` (no session needed)
+- Permission tool uses session-specific `mcp__iris-${sessionId}__permissions__approve` (has session context)
+
+**Implementation:**
+
+**ClaudeCommandBuilder** (`src/utils/command-builder.ts:199-224`):
 ```typescript
-const mcpConfig = {
-  mcpServers: {
-    iris: {
-      type: "http",
-      url: `${protocol}://localhost:${mcpPort}/mcp/${this.sessionId}`
-    }
-  }
-};
+static buildMcpConfig(irisConfig: IrisConfig, sessionId: string): McpConfig {
+  const mcpUrl = `${protocol}://localhost:${mcpPort}/mcp/${sessionId}`;
 
-args.push('--mcp-config', `'${JSON.stringify(mcpConfig)}'`);
+  // Use session-specific server name to avoid global config conflicts
+  const serverName = `iris-${sessionId}`;
+
+  return {
+    mcpServers: {
+      [serverName]: {
+        type: "http",
+        url: mcpUrl,
+      },
+    },
+  };
+}
 ```
+
+**Permission Tool Flag** (`src/utils/command-builder.ts:128-154`):
+```typescript
+// Match the session-specific server name
+const permissionTool = `mcp__iris-${sessionId}__permissions__approve`;
+
+if (grantPermission === "yes" || grantPermission === "ask") {
+  args.push("--permission-prompt-tool", permissionTool);
+}
+```
+
+**Benefits:**
+- ✅ No naming conflicts between global and session configs
+- ✅ Permission tool gets session context via dedicated connection
+- ✅ Regular tools continue using global connection (efficient)
+- ✅ No need for `--strict-mcp-config` flag
+- ✅ Works for both local and remote teams
 
 ## What We Don't Need
 
@@ -166,3 +208,32 @@ A: Same sessionId = same team context = same permissions → works perfectly
 When a permission request arrives at `/mcp/:sessionId`, we look up that session in the ProcessPool to find the `toTeam` (the agent requesting permission). The `toTeam` is ALWAYS the one asking for permission because only autonomous agents call `permissions__approve` - users have keyboards.
 
 This is beautiful, simple, and requires no additional infrastructure beyond what we already have.
+
+---
+
+## Changelog
+
+### 2025-10-23: Session-Specific Server Naming
+
+**Problem Discovered:** Local teams experienced "No session context" errors when calling `permissions__approve`.
+
+**Root Cause:** MCP server name collision
+- Global `~/.claude.json` config: server name `"iris"`
+- Session-specific `--mcp-config`: server name `"iris"` (same!)
+- Claude defaulted to global connection → no session context in URL
+
+**Solution Implemented:** Unique server names per session
+- Global config remains: `"iris"` → tools use `mcp__iris__*`
+- Session configs now use: `"iris-${sessionId}"` → permission tool uses `mcp__iris-${sessionId}__permissions__approve`
+
+**Files Modified:**
+- `src/utils/command-builder.ts:199-224` - buildMcpConfig() generates unique server name
+- `src/utils/command-builder.ts:128-154` - Permission tool flag matches session-specific name
+
+**Result:**
+- ✅ Dual-connection architecture works perfectly
+- ✅ Regular tools use efficient global connection
+- ✅ Permission tool gets session context via dedicated connection
+- ✅ No conflicts, no "No session context" errors
+
+**Credit:** Human insight identified that only `permissions__approve` requires session context, enabling this elegant namespace-based solution instead of heavy-handed `--strict-mcp-config` approach.

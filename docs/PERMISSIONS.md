@@ -219,24 +219,58 @@ This allows:
 
 ### 2. MCP Config Injection
 
-Each spawned Claude process receives a unique MCP config with session-specific URL:
+**CRITICAL UPDATE (2025-10-23): Session-Specific Server Naming**
 
-**LocalTransport** (`src/transport/local-transport.ts:157-171`):
+Each spawned Claude process receives a unique MCP config with **session-specific server name** to avoid conflicts with global configurations:
+
+**ClaudeCommandBuilder** (`src/utils/command-builder.ts:199-224`):
 ```typescript
-const mcpConfig = {
-  mcpServers: {
-    iris: {
-      type: "http",
-      url: `http://localhost:1615/mcp/${this.sessionId}`
-    }
-  }
-};
+static buildMcpConfig(irisConfig: IrisConfig, sessionId: string): McpConfig {
+  const mcpUrl = `${protocol}://localhost:${mcpPort}/mcp/${sessionId}`;
 
-args.push('--mcp-config', JSON.stringify(mcpConfig));
+  // Use session-specific server name to prevent conflicts with global ~/.claude.json
+  const serverName = `iris-${sessionId}`;
+
+  return {
+    mcpServers: {
+      [serverName]: {  // e.g., "iris-97b5b2c9-1b34-4c83-86b8-2f4e711aac89"
+        type: "http",
+        url: mcpUrl,
+      },
+    },
+  };
+}
 ```
 
-args.push('--mcp-config', `'${JSON.stringify(mcpConfig)}'`);
+**Why Session-Specific Naming Matters:**
+
+Without unique server names, local teams connected to iris-mcp through **two simultaneous channels**:
+1. **Global connection** via `~/.claude.json` (server name: `"iris"`) - NO session context in URL
+2. **Session-specific connection** via `--mcp-config` (server name: `"iris"`) - HAS session context
+
+When Claude invoked tools, it defaulted to the global connection, causing `permissions__approve` to fail with "No session context (server configuration error)" because the request arrived at `/mcp/:sessionId` but through a connection that wasn't bound to that sessionId.
+
+**The Solution:**
+
+By naming the session-specific MCP server `iris-${sessionId}`, we create **distinct namespaces**:
+- Regular iris tools use global `mcp__iris__*` connection (efficient, no session needed)
+- Permission tool uses session-specific `mcp__iris-${sessionId}__permissions__approve` connection (has session context)
+
+**Permission Tool Flag** (`src/utils/command-builder.ts:128-154`):
+```typescript
+// Match the session-specific server name
+const permissionTool = `mcp__iris-${sessionId}__permissions__approve`;
+
+if (grantPermission === "yes" || grantPermission === "ask") {
+  args.push("--permission-prompt-tool", permissionTool);
+}
 ```
+
+**Result:**
+- ✅ `permissions__approve` always gets session context via dedicated connection
+- ✅ Other iris tools work efficiently through global connection
+- ✅ No naming conflicts, no "No session context" errors
+- ✅ Works for both local and remote teams
 
 The `sessionId` in the URL naturally routes permission requests to the correct team context.
 
@@ -503,11 +537,34 @@ ps aux | grep claude
 
 **Symptom:** Permission requests return "No session context (server configuration error)"
 
-**Cause:** AsyncLocalStorage context not set (request not going through `/mcp/:sessionId` route)
+**Root Cause (Fixed in v0.1.0):** MCP server name collision between global and session-specific configs
 
-**Fix:**
-- Ensure reverse MCP tunnel uses session-specific URL: `http://localhost:1615/mcp/{sessionId}`
+**Historical Issue:**
+Before v0.1.0, both global (`~/.claude.json`) and session-specific (`--mcp-config`) MCP configurations used the same server name: `"iris"`. This caused Claude to connect through the global configuration (which lacked session context in the URL) instead of the session-specific one.
+
+**The Fix (2025-10-23):**
+Session-specific MCP configs now use unique server names: `iris-${sessionId}`
+
+Example:
+- Global config: `mcp__iris__*` (server name: `"iris"`)
+- Session config: `mcp__iris-97b5b2c9-1b34-4c83-86b8-2f4e711aac89__*` (server name: `"iris-97b5b2c9-..."`)
+
+This ensures the permission tool (`mcp__iris-${sessionId}__permissions__approve`) always uses the session-specific connection with proper context.
+
+**If you still see this error:**
+- Ensure you're running Iris MCP v0.1.0 or later
+- Verify the `--permission-prompt-tool` flag includes the sessionId: `mcp__iris-${sessionId}__permissions__approve`
+- Check that session-specific MCP config file uses unique server name
 - Verify Express route handler wraps request in `runWithContext()`
+
+**Debug:**
+```bash
+# Check spawned Claude process args
+ps aux | grep claude | grep permission-prompt-tool
+
+# Should show: --permission-prompt-tool mcp__iris-<uuid>__permissions__approve
+# NOT: --permission-prompt-tool mcp__iris__permissions__approve
+```
 
 ### Permission Timeout
 
@@ -717,6 +774,9 @@ pnpm start
 
 **Keywords:** permissions, grantPermission, ask mode, PendingPermissionsManager, permission approval, dashboard modal, WebSocket events, AsyncLocalStorage, sessionId, team detection, reverse MCP, remote teams, security, timeout handling, permission:request, permission:resolved
 
-**Last Updated:** 2025-10-18
-**Change Context:** Updated MCP tool name in troubleshooting section. Changed: team_isAwake → team_status. Previous update (2025-10-17): Updated "ask" mode from planned to fully implemented (✅). Added details on PendingPermissionsManager implementation, dashboard WebSocket integration, and Permission Approval Modal UI. Changed default permission mode from "yes" to "ask" for safer defaults.
-**Related Files:** ACTIONS.md (complete tool API reference), DASHBOARD.md (permission modal UI), CONFIG.md (grantPermission configuration), REMOTE.md (reverse MCP integration), REVERSE_MCP.md (bidirectional tunneling), TEAM_IDENTIFICATION.md (sessionId-based detection)
+**Last Updated:** 2025-10-23
+**Change Context:** **CRITICAL FIX** - Documented session-specific MCP server naming solution (iris-${sessionId}) that resolves "No session context" errors for local teams. Root cause: naming collision between global ~/.claude.json config (server name "iris") and session-specific --mcp-config (also "iris") caused Claude to use global connection without session context. Fix: unique server names per session enables dual connections - global for regular tools, session-specific for permissions__approve. Updated MCP Config Injection section with detailed explanation and code references. Updated troubleshooting section with historical context and debug commands.
+
+Previous update (2025-10-18): Updated MCP tool name in troubleshooting section. Changed: team_isAwake → team_status. Previous update (2025-10-17): Updated "ask" mode from planned to fully implemented (✅). Added details on PendingPermissionsManager implementation, dashboard WebSocket integration, and Permission Approval Modal UI. Changed default permission mode from "yes" to "ask" for safer defaults.
+
+**Related Files:** SESSION_IDENTIFICATION.md (detailed explanation of session-specific naming), ACTIONS.md (complete tool API reference), DASHBOARD.md (permission modal UI), CONFIG.md (grantPermission configuration), REMOTE.md (reverse MCP integration), REVERSE_MCP.md (bidirectional tunneling)

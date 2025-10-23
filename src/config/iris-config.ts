@@ -89,7 +89,7 @@ const TeamsConfigSchema = z.object({
     spawnTimeout: z.number().positive().optional().default(20000),
     responseTimeout: z.number().positive().optional().default(120000),
     idleTimeout: z.number().positive().optional().default(3600000),
-    maxProcesses: z.number().int().min(1).max(50).optional().default(10),
+    maxProcesses: z.number().int().min(1).optional().default(10),
     healthCheckInterval: z.number().positive().optional().default(30000),
     httpPort: z.number().int().min(1).max(65535).optional().default(1615),
     defaultTransport: z.enum(["stdio", "http"]).optional().default("stdio"),

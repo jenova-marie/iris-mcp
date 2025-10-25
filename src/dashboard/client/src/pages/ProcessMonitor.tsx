@@ -50,6 +50,20 @@ interface SessionProcessInfo {
   teamConfigSnapshot: string | null;
 }
 
+// Helper to extract team color from config snapshot
+function getTeamColor(session: SessionProcessInfo): string {
+  if (!session.teamConfigSnapshot) {
+    return "#6366f1"; // Default indigo color
+  }
+
+  try {
+    const config = JSON.parse(session.teamConfigSnapshot);
+    return config.color || "#6366f1";
+  } catch {
+    return "#6366f1";
+  }
+}
+
 function getStatusColor(status: string): string {
   switch (status) {
     case "idle":
@@ -447,35 +461,17 @@ export function ProcessMonitor() {
       <div className="flex-1 p-6 overflow-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           {sessions.map((session) => (
-            <div key={session.poolKey} className="card card-hover">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-bold">{session.poolKey}</h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <button
-                      onClick={() => handleCopySessionId(session.sessionId)}
-                      className="text-xs text-text-secondary font-mono hover:text-accent-purple transition-colors cursor-pointer flex items-center gap-1"
-                      title="Click to copy full session ID"
-                    >
-                      {session.sessionId.slice(0, 8)}...
-                      {copiedSessionId === session.sessionId ? (
-                        <Check size={12} className="text-status-idle" />
-                      ) : (
-                        <Copy size={12} />
-                      )}
-                    </button>
-                  </div>
-                  {session.pid && (
-                    <p className="text-sm text-text-secondary">
-                      PID: {session.pid}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
+            <div key={session.poolKey} className="card card-hover overflow-hidden">
+              {/* Colored header bar with status and menu */}
+              <div
+                className="h-10 w-full flex items-center justify-end px-3 gap-2"
+                style={{ backgroundColor: getTeamColor(session) }}
+              >
+                <div className="flex items-center gap-2 bg-black/60 px-3 py-1.5 rounded-md">
                   <div
                     className={`w-2 h-2 rounded-full ${getStatusColor(session.processState)}`}
                   />
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-medium text-white">
                     {getStatusLabel(session.processState)}
                   </span>
                   <div
@@ -490,7 +486,7 @@ export function ProcessMonitor() {
                             : session.poolKey,
                         )
                       }
-                      className="btn-secondary px-2 py-1 flex items-center justify-center ml-2"
+                      className="text-white hover:text-gray-200 transition-colors p-0.5"
                       title="More actions"
                     >
                       <MoreVertical size={16} />
@@ -554,6 +550,34 @@ export function ProcessMonitor() {
                   </div>
                 </div>
               </div>
+
+              <div className="p-4">
+                {/* Team names */}
+                <div className="mb-4">
+                  <h3 className="text-2xl font-bold">{session.toTeam}</h3>
+                  <p className="text-sm text-text-secondary mt-0.5">
+                    from {session.fromTeam}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={() => handleCopySessionId(session.sessionId)}
+                      className="text-xs text-text-secondary font-mono hover:text-accent-purple transition-colors cursor-pointer flex items-center gap-1"
+                      title="Click to copy full session ID"
+                    >
+                      {session.sessionId.slice(0, 8)}...
+                      {copiedSessionId === session.sessionId ? (
+                        <Check size={12} className="text-status-idle" />
+                      ) : (
+                        <Copy size={12} />
+                      )}
+                    </button>
+                  </div>
+                  {session.pid && (
+                    <p className="text-sm text-text-secondary">
+                      PID: {session.pid}
+                    </p>
+                  )}
+                </div>
 
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -683,6 +707,7 @@ export function ProcessMonitor() {
                   )}
                 </div>
               )}
+              </div>
             </div>
           ))}
         </div>

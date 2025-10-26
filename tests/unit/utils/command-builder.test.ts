@@ -121,9 +121,9 @@ describe("ClaudeCommandBuilder", () => {
         "session-123",
       );
 
-      // Default grantPermission="yes" adds permission-prompt-tool
+      // Default grantPermission="yes" adds permission-prompt-tool with session-specific naming
       expect(result.args).toContain("--permission-prompt-tool");
-      expect(result.args).toContain("mcp__iris__permissions__approve");
+      expect(result.args).toContain("mcp__iris-session-123__permissions__approve");
     });
 
     it("should add permission-prompt-tool when grantPermission is 'ask'", () => {
@@ -140,7 +140,7 @@ describe("ClaudeCommandBuilder", () => {
 
       // grantPermission="ask" requires approval for everything
       expect(result.args).toContain("--permission-prompt-tool");
-      expect(result.args).toContain("mcp__iris__permissions__approve");
+      expect(result.args).toContain("mcp__iris-session-123__permissions__approve");
 
       // Should only allow the permission tool itself
     });
@@ -273,9 +273,9 @@ describe("ClaudeCommandBuilder", () => {
       );
 
       expect(mcpConfig).toHaveProperty("mcpServers");
-      expect(mcpConfig.mcpServers).toHaveProperty("iris");
-      expect(mcpConfig.mcpServers.iris.type).toBe("http");
-      expect(mcpConfig.mcpServers.iris.url).toMatch(
+      expect(mcpConfig.mcpServers).toHaveProperty("iris-session-123");
+      expect(mcpConfig.mcpServers["iris-session-123"].type).toBe("http");
+      expect(mcpConfig.mcpServers["iris-session-123"].url).toMatch(
         /^http:\/\/localhost:\d+\/mcp\/session-123$/,
       );
     });
@@ -293,7 +293,7 @@ describe("ClaudeCommandBuilder", () => {
         "session-123",
       );
 
-      expect(mcpConfig.mcpServers.iris.url).toMatch(
+      expect(mcpConfig.mcpServers["iris-session-123"].url).toMatch(
         /^https:\/\/localhost:\d+\/mcp\/session-123$/,
       );
     });
@@ -312,7 +312,7 @@ describe("ClaudeCommandBuilder", () => {
         "session-123",
       );
 
-      expect(mcpConfig.mcpServers.iris.url).toMatch(
+      expect(mcpConfig.mcpServers["iris-session-123"].url).toMatch(
         /^http:\/\/localhost:\d+\/mcp\/session-123$/,
       );
     });
@@ -331,7 +331,7 @@ describe("ClaudeCommandBuilder", () => {
         "session-123",
       );
 
-      expect(mcpConfig.mcpServers.iris.url).toBe(
+      expect(mcpConfig.mcpServers["iris-session-123"].url).toBe(
         "https://localhost:8080/mcp/session-123",
       );
     });
@@ -344,7 +344,7 @@ describe("ClaudeCommandBuilder", () => {
         "session-123",
       );
 
-      expect(mcpConfig.mcpServers.iris.url).toBe(
+      expect(mcpConfig.mcpServers["iris-session-123"].url).toBe(
         "http://localhost:9999/mcp/session-123",
       );
 
@@ -480,7 +480,8 @@ describe("ClaudeCommandBuilder", () => {
         baseConfig,
         sessionId,
       );
-      expect(mcpConfig.mcpServers.iris.url).toContain(sessionId);
+      const serverName = `iris-${sessionId}`;
+      expect(mcpConfig.mcpServers[serverName].url).toContain(sessionId);
     });
 
     it("should handle all optional IrisConfig fields", () => {

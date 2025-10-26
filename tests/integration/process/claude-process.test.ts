@@ -19,6 +19,7 @@ describe("ClaudeProcess Integration", () => {
   const testIrisConfig: IrisConfig = {
     path: process.cwd(),
     description: "Test team for integration tests",
+    grantPermission: "no",
   };
 
   // Load config early to get timeout value

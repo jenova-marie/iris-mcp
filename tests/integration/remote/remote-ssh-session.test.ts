@@ -274,7 +274,7 @@ describeRemote("Remote SSH Execution (OpenSSH Client)", () => {
 
         expect(process.getBasicMetrics().isReady).toBe(true);
 
-        logger.info(, {
+        logger.info({
           message: "What is 2+2?",
         }, "Executing remote tell command");
 

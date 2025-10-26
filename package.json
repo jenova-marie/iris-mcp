@@ -1,6 +1,6 @@
 {
   "name": "@jenova-marie/iris-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server for cross-project Claude Code coordination - Bridge your AI agents across codebases",
   "type": "module",
   "main": "dist/index.js",

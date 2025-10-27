@@ -13,34 +13,14 @@
   [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-  Iris MCP enables Claude Code instances across different project directories to communicate and coordinate. Stay in one project while asking questions to teams in other codebases.
+  Iris MCP enables Claude Code instances across different project directories to communicate and coordinate. Stay in one project while orchestrating teams across your entire codebase ecosystem.
 </div>
 
 ---
 
 ## 🎯 What is Iris MCP?
 
-Iris MCP is a **groundbreaking Model Context Protocol server** that enables direct communication between Claude Code instances across different project directories. It creates the **first true cross-codebase AI collaboration system**.
-
-### My Personal Use Case
-
-On the larger sysem I'm building I have 29 current projects - meaning 29 different CLAUDE.md files and 29 different claude code sessions.  Often while I'm working in the common project, for example, I might make a change that needs to be propagated and verified through a significant number of projects that depend on common.  This means opening a terminal for each project starting claude code and then manually instructing in the adoption of this latest change.  Ugh, that stinks.
-
-Wouldn't it be amazing if I could tell my current claude code session to review with all 28 other projects these common changes that may affect them?  Yes, it would be amazing.
-
-Another situation is I'm debugging a project and claude says "The issue appears to be in the api and this is what needs to be fixed there ......".  So I open a api terminal and copy paste the previous session's output to be discussed and resolved in the api claude code.  Why does copy/paste from one claude to another feel so wrong?
-
-Wouldn't it be great if I could just stay in the original project session and tell claude to relay his instructions to team-api, discuss the proposed fix, coming to a resolution, and then implementing it?  Yes, that would be great.
-
-Those cross session communications can get complicated quickly.  No big deal, I open a terminal to the other project and execute
-
-```bash
-claude --continue
-```
-
-...and the conversation is there exactly as claude had been talking to the original session - ready for me to continue the conversation - fully loaded with the verbal context passed from original to current session.  Once the issue has been resolved, I simply ask iris to tell the original team the bug is fixed and to run their tests to verify the fix.
-
-With Iris MCP I'm now working in all my projects - from any project.
+Iris MCP is a **groundbreaking Model Context Protocol server** that enables direct communication between Claude Code instances across different project directories, machines, and networks, creating the **first true cross-codebase AI collaboration system with remote orchestration**.
 
 ### The Problem
 
@@ -60,10 +40,10 @@ Stay in your current project while Claude coordinates with other teams automatic
 
 ```
 You (in frontend project):
-"Iris, ask the backend team what their API versioning strategy is"
+"Ask the backend team what their API versioning strategy is"
 
-Claude (in frontend) → Iris MCP → Claude (in backend) → analyzes backend code → responds
-                                                                              ↓
+Claude (frontend) → Iris MCP → Claude (backend) → analyzes backend code → responds
+                                                                          ↓
 "The backend team uses semantic versioning with /api/v1, /api/v2 prefixes"
 ```
 
@@ -81,6 +61,9 @@ Iris fills **critical gaps** that no existing multi-agent system addresses:
 | **Per-Team MCP Server Access** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Zero Shared State** | ✅ | ❌ | ❌ | ❌ | ❌ |
 | **Natural Language Coordination** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Remote Execution via SSH** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Bidirectional SSH Tunneling** | ✅ | ❌ | ❌ | ❌ | ❌ |
+| **Session Persistence** | ✅ | ❌ | ❌ | ❌ | ❌ |
 
 **All existing solutions** work within a **single project boundary**. Iris breaks this limitation by enabling communication between completely independent codebases, each with their own:
 - Directory structure and dependencies
@@ -118,6 +101,72 @@ From GitHub Issue [#2929](https://github.com/anthropics/claude-code/issues/2929)
 > "Use cases are infinite. I could have a specialist claude run on my specific server answering to natural language requests, while a local generalist claude call it, having no clue of the specific API."
 
 **Developers are already asking for this!** Iris MCP delivers it.
+
+---
+
+## ✨ Key Features
+
+### Core MCP Server (Phase 1) ✅
+
+- **17 MCP Tools** for comprehensive team coordination
+- **Process Pooling** with LRU eviction (10-20x performance improvement)
+- **Session Persistence** with SQLite database
+- **Transport Abstraction** (Local, SSH, RemoteSSH2)
+- **Remote Execution** via OpenSSH client or ssh2 library
+- **Reverse MCP Tunneling** for bidirectional communication
+- **Session MCP Configuration** with sessionId-based routing
+- **Permission Approval System** (yes/no/ask/forward modes)
+- **Hot-Reloadable Configuration** with environment variable interpolation
+- **Wonder Logger** with OpenTelemetry integration
+- **Event-Driven Architecture** with RxJS observables
+
+### Web Dashboard (Phase 2) ✅
+
+- **React SPA** with real-time monitoring
+- **WebSocket Integration** for live updates
+- **Permission Approval Modal** for interactive approval
+- **Log Viewer** with filtering and search
+- **Process Monitoring** with health metrics
+- **Configuration Editor** for team management
+
+### Remote Teams
+
+Execute Claude Code on **remote machines via SSH** while maintaining local orchestration:
+
+```yaml
+teams:
+  team-production:
+    remote: "ssh user@prod-server"
+    claudePath: "~/.local/bin/claude"
+    path: "/opt/production/app"
+    enableReverseMcp: true  # Enable bidirectional tunneling
+```
+
+**Capabilities**:
+- Execute on remote servers without local codebase
+- Automatic SSH tunnel establishment
+- Reverse MCP tunneling for remote→local communication
+- Dual SSH implementation (OpenSSH client + ssh2 library)
+- Session persistence across SSH connections
+
+### Reverse MCP Tunneling
+
+**Bidirectional orchestration** where remote teams can coordinate local teams:
+
+```
+Local Machine ←────SSH Tunnel────→ Remote Machine
+  (Iris MCP)      -R 1615:...         (Claude Code)
+      ↑                                      │
+      └──────── HTTP via tunnel ─────────────┘
+```
+
+Remote Claude instances can use Iris MCP tools to:
+- Wake local teams
+- Send messages to local teams
+- Fork local sessions for debugging
+- List all configured teams
+
+**Security**: SSH-encrypted tunneling, permission approval system, localhost-only binding.
 
 ---
 
@@ -174,138 +223,280 @@ See **[GETTING_STARTED.md](./GETTING_STARTED.md)** for detailed usage examples a
 
 ## 🛠️ MCP Tools
 
-### `teams_ask`
+Iris MCP provides **17 comprehensive tools** for team coordination:
 
-**Ask a team a question and wait for response.**
+### Communication Tools
+
+#### `send_message`
+**Send a message to a team and wait for response.**
 
 ```javascript
 {
-  team: "backend",
-  question: "What database migration system do you use?",
+  fromTeam: "team-frontend",
+  toTeam: "team-backend",
+  message: "What authentication strategy do you use?",
   timeout: 30000  // optional, default 30s
 }
 ```
 
-**Response:**
-```json
+**Modes**:
+- `timeout > 0`: Wait for response (default)
+- `timeout: -1`: Fire-and-forget (async)
+- `persist: true`: Queue in database for later
+
+**Example prompts**:
+- "Tell the backend team about the breaking API change"
+- "Ask mobile team if they support push notifications"
+
+---
+
+#### `ask_message`
+**Semantic alias for send_message emphasizing questions.**
+
+```javascript
 {
-  "team": "backend",
-  "question": "What database migration system do you use?",
-  "response": "We use Prisma for database migrations...",
-  "duration": 2847,
-  "timestamp": 1704067200000
+  fromTeam: "team-frontend",
+  toTeam: "team-backend",
+  message: "What database migration system do you use?",
+  timeout: 30000
 }
 ```
 
-**Example prompts:**
+**Example prompts**:
 - "Ask the backend team about their authentication strategy"
-- "Using Iris, find out from mobile team if they support push notifications"
-- "Check with frontend team what state management library they use"
+- "Find out from mobile team what iOS version they target"
 
 ---
 
-### `teams_send_message`
-
-**Send a message to another team, optionally wait for response.**
+#### `quick_message`
+**Fire-and-forget messaging without waiting for response.**
 
 ```javascript
 {
-  fromTeam: "frontend",      // required: calling team name
-  toTeam: "backend",
-  message: "Breaking change: User model now requires email field",
-  timeout: 30000            // optional
+  fromTeam: "team-backend",
+  toTeam: "team-frontend",
+  message: "New API endpoint deployed: GET /api/v2/users"
 }
 ```
 
-**Example prompts:**
-- "Tell the backend team we're deprecating the old API endpoint"
-- "Send a message to mobile team about the new authentication flow"
-- "Coordinate with all teams to update the User model"
+**Example prompts**:
+- "Quickly tell frontend team the deployment is complete"
+- "Notify all teams about the maintenance window"
 
 ---
 
-### `teams_notify`
+### Session Management Tools
 
-**Fire-and-forget notification (queued for later).**
+#### `session_reboot`
+**Create a brand new session with fresh UUID.**
 
 ```javascript
 {
-  fromTeam: "backend",    // required: calling team name
-  toTeam: "frontend",
-  message: "New API endpoint available: GET /api/v2/users",
-  ttlDays: 30            // optional, default 30
+  fromTeam: "team-iris",
+  toTeam: "team-backend"
 }
 ```
 
-**Response:**
-```json
-{
-  "notificationId": "abc-123-def-456",
-  "from": "backend",
-  "to": "frontend",
-  "message": "New API endpoint available: GET /api/v2/users",
-  "expiresAt": 1706745600000,
-  "timestamp": 1704067200000
-}
-```
-
-**Example prompts:**
-- "Notify all teams about the scheduled maintenance window"
-- "Send a notification to mobile team about the API changes"
+Terminates existing process and creates new session with clean slate.
 
 ---
 
-### `teams_get_status`
+#### `session_delete`
+**Permanently delete a session without creating replacement.**
 
+```javascript
+{
+  fromTeam: "team-iris",
+  toTeam: "team-backend"
+}
+```
+
+---
+
+#### `session_fork`
+**Launch interactive terminal window for manual interaction.**
+
+```javascript
+{
+  fromTeam: "team-iris",
+  toTeam: "team-backend"
+}
+```
+
+Opens separate terminal with `claude --resume --fork-session` for direct interaction.
+
+---
+
+#### `session_cancel`
+**Cancel a running session operation.**
+
+```javascript
+{
+  fromTeam: "team-iris",
+  team: "team-backend"
+}
+```
+
+Attempts to interrupt long-running operations by sending ESC to stdin.
+
+---
+
+#### `session_report`
+**View conversation history for a session.**
+
+```javascript
+{
+  fromTeam: "team-iris",
+  team: "team-backend"
+}
+```
+
+Returns complete conversation cache including all messages and protocol responses.
+
+---
+
+### Process Management Tools
+
+#### `team_wake`
+**Wake up a team by ensuring its process is active.**
+
+```javascript
+{
+  fromTeam: "team-iris",
+  team: "team-backend"
+}
+```
+
+Creates session-specific process (e.g., `iris->backend`) for conversation isolation.
+
+---
+
+#### `team_launch`
+**Semantic alias for team_wake emphasizing activation.**
+
+```javascript
+{
+  fromTeam: "team-iris",
+  team: "team-backend"
+}
+```
+
+---
+
+#### `team_sleep`
+**Put a team to sleep by terminating its process.**
+
+```javascript
+{
+  fromTeam: "team-iris",
+  team: "team-backend",
+  force: false  // optional
+}
+```
+
+---
+
+#### `team_wake_all`
+**Wake all configured teams sequentially.**
+
+```javascript
+{
+  fromTeam: "team-iris",
+  parallel: false  // NOT RECOMMENDED - unstable
+}
+```
+
+**Warning**: Parallel mode causes timeouts due to simultaneous Claude spawning.
+
+---
+
+#### `team_status`
 **Get status of teams, processes, and notifications.**
 
 ```javascript
 {
-  team: "backend",              // optional, omit for all teams
-  includeNotifications: true    // optional, default true
+  fromTeam: "team-iris",
+  team: "team-backend",  // optional, omit for all teams
+  includeNotifications: true  // optional, default true
 }
 ```
 
-**Response:**
+**Response**:
 ```json
 {
-  "teams": [
-    {
-      "name": "backend",
-      "description": "Node.js Express REST API",
-      "path": "/Users/you/projects/acme-backend",
-      "active": true,
-      "processMetrics": {
-        "status": "idle",
-        "messagesProcessed": 47,
-        "lastUsed": 1704067200000,
-        "uptime": 180000,
-        "queueLength": 0
-      },
-      "notifications": {
-        "pending": 2,
-        "total": 15
-      }
+  "teams": [{
+    "name": "team-backend",
+    "path": "/Users/you/projects/backend",
+    "active": true,
+    "processInfo": {
+      "status": "idle",
+      "pid": 12345,
+      "uptime": 180000
+    },
+    "sessionInfo": {
+      "sessionId": "abc-123",
+      "messageCount": 47,
+      "lastUsed": 1704067200000
     }
-  ],
+  }],
   "pool": {
     "totalProcesses": 3,
     "maxProcesses": 10
-  },
-  "queue": {
-    "total": 25,
-    "pending": 2,
-    "read": 20,
-    "expired": 3
-  },
-  "timestamp": 1704067200000
+  }
 }
 ```
 
-**Example prompts:**
-- "Show me the status of all teams"
-- "Check if the backend team is currently active"
-- "How many pending notifications does frontend have?"
+---
+
+### Utility Tools
+
+#### `list_teams`
+**List all configured teams.**
+
+```javascript
+{}
+```
+
+Returns team names with configuration details (path, description, color, settings).
+
+---
+
+#### `get_logs`
+**Query in-memory logs from Iris MCP server.**
+
+```javascript
+{
+  logs_since: 1704067200000,  // optional timestamp
+  level: "error",             // optional: 'trace'|'debug'|'info'|'warn'|'error'|'fatal'
+  format: "parsed"            // optional: 'raw'|'parsed'
+}
+```
+
+---
+
+#### `get_date`
+**Get current system date and time.**
+
+```javascript
+{}
+```
+
+Returns ISO 8601, UTC string, Unix timestamp, and detailed components.
+
+---
+
+#### `permissions__approve`
+**Permission approval handler for Claude Code's `--permission-prompt-tool`.**
+
+```javascript
+{
+  tool_name: "mcp__iris__team_wake",
+  input: { team: "team-backend" },
+  reason: "Need to coordinate deployment"
+}
+```
+
+Auto-approves all `mcp__iris__*` tools, denies everything else.
 
 ---
 
@@ -314,48 +505,74 @@ See **[GETTING_STARTED.md](./GETTING_STARTED.md)** for detailed usage examples a
 ```
 iris-mcp/
 ├── src/
-│   ├── index.ts                 # MCP server entry point
-│   ├── iris.ts                  # Business Logic Layer (orchestrator)
+│   ├── index.ts                      # MCP server entry point
+│   ├── iris.ts                       # IrisOrchestrator (Business Logic Layer)
 │   ├── config/
-│   │   ├── teams-config.ts      # Configuration loader with Zod validation
-│   │   └── teams.example.yaml   # Example configuration
+│   │   ├── teams-config.ts           # Configuration with Zod validation
+│   │   └── iris-config.ts            # Config schema and types
 │   ├── session/
-│   │   ├── session-manager.ts   # Session database and file management
-│   │   ├── session-store.ts     # SQLite session store
-│   │   ├── path-utils.ts        # Session file path utilities
-│   │   ├── validation.ts        # Session validation
-│   │   └── types.ts             # Session interfaces
+│   │   ├── session-manager.ts        # Session database and file management
+│   │   ├── session-store.ts          # SQLite session store
+│   │   ├── path-utils.ts             # Session file path utilities
+│   │   └── types.ts                  # Session interfaces
 │   ├── process-pool/
-│   │   ├── pool-manager.ts      # Process pool with LRU eviction
-│   │   ├── claude-process.ts    # Claude process wrapper (dual-role)
-│   │   └── types.ts             # TypeScript interfaces
-│   ├── tools/
-│   │   ├── teams-ask.ts         # teams_ask tool
-│   │   ├── teams-send-message.ts
-│   │   ├── teams-notify.ts
-│   │   ├── teams-get-status.ts
-│   │   └── index.ts
+│   │   ├── pool-manager.ts           # Process pool with LRU eviction
+│   │   ├── claude-process.ts         # Claude process wrapper
+│   │   └── types.ts                  # Process interfaces
+│   ├── transport/
+│   │   ├── base-transport.ts         # Transport abstraction interface
+│   │   ├── local-transport.ts        # Local process execution
+│   │   ├── ssh-transport.ts          # OpenSSH client execution
+│   │   └── remote-ssh2-transport.ts  # ssh2 library execution
+│   ├── actions/
+│   │   ├── send-message.ts           # send_message tool
+│   │   ├── ask-message.ts            # ask_message tool
+│   │   ├── quick-message.ts          # quick_message tool
+│   │   ├── session-reboot.ts         # session_reboot tool
+│   │   ├── session-delete.ts         # session_delete tool
+│   │   ├── session-fork.ts           # session_fork tool
+│   │   ├── session-cancel.ts         # session_cancel tool
+│   │   ├── team-wake.ts              # team_wake tool
+│   │   ├── team-launch.ts            # team_launch tool
+│   │   ├── team-sleep.ts             # team_sleep tool
+│   │   ├── team-wake-all.ts          # team_wake_all tool
+│   │   ├── team-status.ts            # team_status tool
+│   │   ├── session-report.ts         # session_report tool
+│   │   ├── list-teams.ts             # list_teams tool
+│   │   ├── get-logs.ts               # get_logs tool
+│   │   ├── get-date.ts               # get_date tool
+│   │   └── grant-permission.ts       # permissions__approve tool
+│   ├── dashboard/
+│   │   ├── app.tsx                   # React SPA entry point
+│   │   ├── components/               # React components
+│   │   └── server.ts                 # Express + WebSocket backend
 │   ├── notifications/
-│   │   ├── queue.ts             # SQLite notification queue
-│   │   └── schema.sql
+│   │   ├── queue.ts                  # SQLite notification queue
+│   │   └── schema.sql                # Database schema
+│   ├── logging/
+│   │   ├── wonder-logger.ts          # Wonder Logger implementation
+│   │   └── opentelemetry.ts          # OpenTelemetry integration
 │   └── utils/
-│       ├── logger.ts            # Structured logging to stderr
-│       ├── errors.ts            # Custom error types
-│       ├── validation.ts        # Input validation
-│       └── env-interpolation.ts # Environment variable interpolation
+│       ├── logger.ts                 # Structured logging to stderr
+│       ├── errors.ts                 # Custom error hierarchy
+│       ├── validation.ts             # Input validation
+│       └── env-interpolation.ts      # Environment variable interpolation
 ├── docs/
-│   ├── ARCHITECTURE.md          # Overall architecture overview
-│   ├── CONFIG.md                # Configuration management deep dive
-│   ├── SESSION.md               # SessionManager deep dive
-│   ├── CLAUDE.md                # ClaudeProcess deep dive
-│   ├── POOL.md                  # ClaudeProcessPool deep dive
-│   └── BREAKING.md              # Breaking changes documentation
+│   ├── CONCEPT.md                    # Vision and conceptual overview
+│   ├── ARCHITECTURE.md               # System design and components
+│   ├── ACTIONS.md                    # All 17 MCP tools documentation
+│   ├── CONFIG.md                     # Configuration management
+│   ├── SESSION.md                    # Session management deep dive
+│   ├── REMOTE.md                     # Remote execution via SSH
+│   ├── REVERSE_MCP.md                # Bidirectional SSH tunneling
+│   ├── DASHBOARD.md                  # Web dashboard documentation
+│   ├── FEATURES.md                   # Comprehensive feature inventory
+│   └── NOMENCLATURE.md               # Core concepts and terminology
 ├── data/
-│   ├── team-sessions.db         # Session database (auto-created)
-│   └── notifications.db         # Notification queue (auto-created)
-├── config.yaml                  # Your team configuration
-├── package.json
-└── README.md
+│   ├── team-sessions.db              # Session database (auto-created)
+│   └── notifications.db              # Notification queue (auto-created)
+├── config.yaml                       # Your team configuration
+└── package.json
 ```
 
 ---
@@ -386,108 +603,210 @@ Iris uses a clean three-layer architecture with strict separation of concerns:
        ▼                     ▼
 ┌──────────────┐  ┌─────────────────────┐
 │SessionStore  │  │ClaudeProcess        │
-│SQLite        │  │Static: init files   │
-│              │  │Instance: resume     │
+│SQLite        │  │Transport Abstraction│
 └──────────────┘  └─────────────────────┘
+                          │
+              ┌───────────┴───────────┐
+              │                       │
+              ▼                       ▼
+       ┌─────────────┐        ┌──────────────┐
+       │LocalTransport│        │SSHTransport  │
+       └─────────────┘        └──────────────┘
 ```
 
-**Layer 1: SessionManager**
-- Session database management (SQLite)
-- Session file validation
-- Eager initialization at startup
-- 60-second caching layer
-- **Does NOT** spawn processes
-
-**Layer 2: ClaudeProcessPool**
-- Process lifecycle management
-- LRU eviction when pool is full
-- Health monitoring (every 30s)
-- Process reuse for 10-20x speedup
-- **Does NOT** manage session database
-
-**Layer 3: IrisOrchestrator**
-- Business Logic Layer
-- Coordinates SessionManager + PoolManager
+**Layer 1: IrisOrchestrator (Business Logic Layer)**
+- Coordinates SessionManager + ClaudeProcessPool
 - Implements complete message flow
 - Provides API for MCP tools
+- RxJS-based reactive architecture
+
+**Layer 2: SessionManager + ClaudeProcessPool**
+- **SessionManager**: Session database management, file validation, 60s caching
+- **ClaudeProcessPool**: Process lifecycle, LRU eviction, health monitoring
+- Strict separation: SessionManager does NOT spawn processes, Pool does NOT manage sessions
+
+**Layer 3: SessionStore + ClaudeProcess**
+- **SessionStore**: SQLite persistence with WAL mode
+- **ClaudeProcess**: Transport abstraction (Local, SSH, RemoteSSH2)
+
+### Transport Abstraction
+
+Iris supports multiple execution modes via pluggable transports:
+
+**LocalTransport**:
+- Direct child process execution via Node.js `spawn()`
+- Lowest latency, highest reliability
+- Used for local teams
+
+**SSHTransport** (OpenSSH client):
+- Execute remote Claude via `ssh user@host`
+- Requires OpenSSH client installed
+- Best performance for remote execution
+- Production-ready, battle-tested
+
+**RemoteSSH2Transport** (ssh2 library):
+- Pure Node.js SSH implementation
+- No external dependencies
+- Platform-independent
+- Experimental, for environments without SSH client
 
 ### Session Persistence
 
 **Persistent team-to-team sessions** maintain conversation continuity:
 
-- Each `(fromTeam, toTeam)` pair has exactly one session (e.g., `iris→alpha`, `alpha→beta`)
-- ALL sessions require both fromTeam and toTeam (no "team-beta" or null sessions)
+- Each `(fromTeam, toTeam)` pair has exactly one session (e.g., `iris→backend`, `backend→frontend`)
+- ALL sessions require both fromTeam and toTeam (no null sessions)
 - Sessions stored at `~/.claude/projects/{escaped-path}/{sessionId}.jsonl`
 - Database tracks metadata (message count, last used, status)
 - Sessions resume across process restarts
+
+**Schema**:
+```sql
+CREATE TABLE sessions (
+  pool_key TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  message_count INTEGER DEFAULT 0,
+  last_used_at INTEGER,
+  status TEXT DEFAULT 'active',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+```
 
 ### Process Pool Management
 
 Iris maintains a pool of Claude Code processes with:
 
 - **LRU Eviction**: When pool is full, least recently used process is terminated
-- **Idle Timeout**: Processes automatically terminate after 5 minutes of inactivity
-- **Health Checks**: Regular monitoring ensures processes stay healthy
-- **Warm Starts**: Reuses existing processes for 10-20x faster responses
+- **Idle Timeout**: Processes automatically terminate after 1 hour of inactivity (configurable)
+- **Health Checks**: Regular monitoring ensures processes stay healthy (every 30s)
+- **Warm Starts**: Reuses existing processes for **10-20x faster responses**
 - **Session Resumption**: Each process resumes its specific session via `--resume <sessionId>`
 
-### Dual-Role ClaudeProcess
+**Two-Timeout Architecture**:
+- `responseTimeout`: How long to wait for Claude to respond (default: 2 minutes)
+- `mcpTimeout`: Maximum time for MCP server communication (default: 5 seconds)
 
-ClaudeProcess serves two roles:
+### Reactive Architecture
 
-1. **Static Session Initializer**: `ClaudeProcess.initializeSessionFile()` creates `.jsonl` files
-2. **Instance Process Manager**: Wraps running Claude processes with stdio communication
+Iris uses **RxJS observables** for event-driven communication:
 
-### Notification Queue
-
-Persistent SQLite database stores notifications with:
-
-- **30-day retention**: Automatic cleanup of old notifications
-- **Status tracking**: pending, read, expired
-- **Team filtering**: Get notifications for specific teams
-- **TTL support**: Configurable expiration per notification
-
-### Event System
-
-All process events are emitted for future Intelligence Layer integration:
-
-- `process-spawned`
-- `process-terminated`
-- `process-exited`
-- `process-error`
-- `message-sent`
-- `message-response`
-- `health-check`
-
----
-
-## 🎯 Configuration Options
-
-### Settings
-
-```yaml
-settings:
-  sessionInitTimeout: 30000     # 30 seconds
-  spawnTimeout: 20000           # 20 seconds
-  responseTimeout: 120000       # 2 minutes
-  idleTimeout: 3600000          # 1 hour
-  maxProcesses: 10              # Max concurrent processes
-  healthCheckInterval: 30000    # 30 seconds
-  httpPort: 1615                # MCP server port
-  defaultTransport: http        # stdio or http
+```typescript
+// Process events as Observable streams
+process.events$
+  .pipe(
+    filter(event => event.type === 'message-response'),
+    timeout(responseTimeout),
+    catchError(err => of({ type: 'error', error: err }))
+  )
+  .subscribe(handleResponse);
 ```
 
-### Team Configuration
+**Benefits**:
+- Composable event handling
+- Automatic timeout management
+- Error recovery with retry logic
+- Backpressure handling
+
+### Session MCP Configuration
+
+Remote teams can be configured with **Session MCP** - per-session MCP configuration:
 
 ```yaml
 teams:
+  team-remote:
+    remote: "ssh user@remote-host"
+    sessionMcpEnabled: true
+    sessionMcpPath: "/path/to/session-mcp-server"
+```
+
+Each session gets its own MCP server instance with session-specific context.
+
+### Wonder Logger
+
+**OpenTelemetry-based observability** with structured logging:
+
+```typescript
+logger.info('Process spawned', {
+  poolKey: 'iris->backend',
+  sessionId: 'abc-123',
+  pid: 12345,
+  transport: 'ssh'
+});
+```
+
+**Features**:
+- Structured JSON logging to stderr
+- OpenTelemetry spans and traces
+- Context propagation across async boundaries
+- Log aggregation support (Grafana, Datadog, etc.)
+
+### Permission Approval System
+
+Four modes for controlling team actions:
+
+- **`yes`**: Auto-approve all actions (default)
+- **`no`**: Auto-deny all actions (read-only mode)
+- **`ask`**: Prompt user for each action (via Dashboard)
+- **`forward`**: Forward permission request to calling team
+
+```yaml
+teams:
+  team-production:
+    grantPermission: ask  # Require approval for all actions
+```
+
+---
+
+## 🎯 Configuration
+
+### Example Configuration
+
+```yaml
+settings:
+  # Process Timeouts
+  sessionInitTimeout: 30000     # 30 seconds for session creation
+  spawnTimeout: 20000           # 20 seconds for process spawn
+  responseTimeout: 120000       # 2 minutes for Claude response
+  mcpTimeout: 5000              # 5 seconds for MCP server communication
+
+  # Process Pool
+  idleTimeout: 3600000          # 1 hour idle before termination
+  maxProcesses: 10              # Max concurrent processes
+  healthCheckInterval: 30000    # 30 seconds health check
+
+  # Server
+  httpPort: ${IRIS_HTTP_PORT:-1615}
+  defaultTransport: http        # stdio or http
+
+teams:
+  # Local Team
   team-frontend:
-    path: /Users/you/projects/frontend  # Absolute path
+    path: /Users/you/projects/frontend
     description: React frontend application
-    idleTimeout: 600000                  # Optional: override global (10 min)
-    sessionInitTimeout: 45000            # Optional: override (45s)
-    grantPermission: yes                 # Permission mode: yes/no/ask/forward
-    color: "#61DAFB"                    # Optional: hex color for UI
+    idleTimeout: 600000         # 10 minutes (override)
+    grantPermission: yes
+    color: "#61DAFB"
+
+  # Remote Team with Reverse MCP
+  team-production:
+    remote: "ssh user@prod-server"
+    claudePath: "~/.local/bin/claude"
+    path: "/opt/production/app"
+    description: Production backend server
+    enableReverseMcp: true      # Enable bidirectional tunneling
+    reverseMcpPort: 1615        # Port to tunnel
+    allowHttp: false            # Use HTTPS for production
+    grantPermission: ask        # Require approval for actions
+    color: "#E34F26"
+
+  # Remote Team with Session MCP
+  team-mobile:
+    remote: "ssh user@mobile-server"
+    path: "/home/user/mobile-app"
+    sessionMcpEnabled: true
+    sessionMcpPath: "/usr/local/bin/session-mcp"
+    color: "#3DDC84"
 ```
 
 ### Environment Variable Interpolation
@@ -502,7 +821,7 @@ settings:
 
 teams:
   team-production:
-    path: ${PROD_PATH}  # Required env var (throws if not set)
+    path: ${PROD_PATH}          # Required (throws if not set)
     idleTimeout: ${PROD_TIMEOUT:-1800000}
 ```
 
@@ -514,26 +833,9 @@ PROD_PATH=/opt/production/app
 PROD_TIMEOUT=3600000
 ```
 
-### Configuration Details
+### Configuration Hot-Reload
 
-**Global Settings**:
-- `sessionInitTimeout`: Timeout for session file creation (default: 30s)
-- `spawnTimeout`: Timeout for process spawn (default: 20s)
-- `responseTimeout`: Timeout for process response (default: 2min)
-- `idleTimeout`: How long a process can be idle before termination (default: 1hr)
-- `maxProcesses`: Maximum number of concurrent Claude processes (default: 10)
-- `healthCheckInterval`: How often to check process health (default: 30s)
-
-**Per-Team Overrides**:
-- `idleTimeout`: Override for teams with slower/faster requirements
-- `sessionInitTimeout`: Override for teams with large dependencies (slow startup)
-- `grantPermission`: Permission approval mode (see [CONFIG.md](./docs/CONFIG.md#permission-approval-system))
-  - `yes` - Auto-approve all actions (default)
-  - `no` - Auto-deny all actions (read-only)
-  - `ask` - Prompt user for each action
-  - `forward` - Forward permission request to calling team
-
-See **[docs/CONFIG.md](./docs/CONFIG.md)** for complete configuration reference.
+Iris watches `config.yaml` with `fs.watchFile()` (1s interval) and automatically reloads configuration changes without server restart.
 
 ---
 
@@ -566,7 +868,7 @@ pnpm test:integration
 # Run specific test file
 pnpm test:run path/to/test.ts
 
-# Watch mode
+# Watch mode with UI
 pnpm test:ui
 ```
 
@@ -583,9 +885,8 @@ This opens the MCP inspector at `http://localhost:5173` to test tools interactiv
 All logs go to stderr in JSON format:
 
 ```json
-{"level":"info","context":"server","message":"Iris MCP Server initialized","teams":["frontend","backend","mobile"],"timestamp":"2025-01-15T10:30:00.000Z"}
-{"level":"info","context":"session-manager","message":"Pre-initializing team sessions","timestamp":"2025-01-15T10:30:01.000Z"}
-{"level":"info","context":"pool","message":"Creating new process","poolKey":"frontend->backend","sessionId":"abc-123","timestamp":"2025-01-15T10:30:15.000Z"}
+{"level":"info","context":"server","message":"Iris MCP Server initialized","teams":["frontend","backend"],"timestamp":"2025-01-15T10:30:00.000Z"}
+{"level":"info","context":"pool","message":"Process spawned","poolKey":"iris->backend","sessionId":"abc-123","pid":12345,"timestamp":"2025-01-15T10:30:15.000Z"}
 ```
 
 **Log Contexts**:
@@ -595,7 +896,7 @@ All logs go to stderr in JSON format:
 - `session-store`: Database operations
 - `pool`: Process pool management
 - `process:teamName`: Individual process logs
-- `session-init:path`: Session file initialization
+- `transport:ssh`: SSH transport operations
 
 ---
 
@@ -631,7 +932,7 @@ All logs go to stderr in JSON format:
 
 **Process Pool Management**:
 - LRU eviction keeps memory bounded
-- Idle timeout (5 minutes) terminates unused processes
+- Idle timeout (1 hour) terminates unused processes
 - Health checks (30s) detect and clean unhealthy processes
 - Max 10 concurrent processes (configurable)
 
@@ -658,24 +959,25 @@ All logs go to stderr in JSON format:
 **Solutions**:
 - Check that team name in `config.yaml` matches exactly (case-sensitive)
 - Verify the path exists and is absolute
-- Restart Iris after modifying `config.yaml`
+- Restart Iris after modifying `config.yaml` (or wait for hot-reload)
 
 ### "Process failed to spawn"
 
 **Symptom**: Error during process creation
 
 **Solutions**:
-- Ensure Claude CLI is installed: `which claude` or check `/Users/you/.asdf/installs/nodejs/*/bin/claude`
+- Ensure Claude CLI is installed: `which claude`
 - Check that the team's project directory exists and is accessible
 - Try running `claude --session-id test-$(uuidgen) --print ping` manually in the team directory
 - Check logs for detailed error: `context:"process:teamName"`
+- For remote teams, verify SSH connectivity: `ssh user@host 'which claude'`
 
 ### "Timeout exceeded"
 
-**Symptom**: Message takes longer than 30 seconds
+**Symptom**: Message takes longer than configured timeout
 
 **Solutions**:
-- Increase timeout parameter: `{ timeout: 60000 }` (60 seconds)
+- Increase `responseTimeout` in settings: `responseTimeout: 180000` (3 minutes)
 - Check if the target team's Claude process is stuck (view logs)
 - Verify Claude API is responding (not rate-limited)
 - For session initialization timeouts, increase `sessionInitTimeout` in config
@@ -690,17 +992,18 @@ All logs go to stderr in JSON format:
 - Ensure team path is correct and accessible
 - Check available disk space: `df -h`
 
-### "Session starting... Please retry your request in a moment"
+### SSH Connection Issues
 
-**Symptom**: Async response during process spawn
-
-**Explanation**: This is normal! The process is spawning (takes 7-12 seconds for first request).
+**Symptom**: Remote team execution fails
 
 **Solutions**:
-- Wait a few seconds and retry the request
-- Subsequent requests will be instant (warm start)
+- Test SSH manually: `ssh user@host 'echo hello'`
+- Check SSH key authentication is configured
+- Verify `claudePath` is correct on remote machine
+- For reverse MCP, ensure port 1615 is not blocked
+- Check SSH logs: `ssh -v user@host`
 
-### Database locked
+### Database Locked
 
 **Symptom**: SQLite errors about locked database
 
@@ -709,48 +1012,45 @@ All logs go to stderr in JSON format:
 - Delete WAL files: `rm data/*.db-wal data/*.db-shm`
 - Check for zombie processes: `ps aux | grep iris`
 
-### Process pool full
+### Process Pool Full
 
-**Symptom**: All 10 process slots occupied
+**Symptom**: All process slots occupied
 
 **Solutions**:
 - Increase `maxProcesses` in `config.yaml` settings
 - Reduce `idleTimeout` to free processes faster
 - Check health check logs to see which processes are active
 
-### Memory issues
-
-**Symptom**: High memory usage or OOM errors
-
-**Solutions**:
-- Reduce `maxProcesses` (fewer concurrent processes)
-- Reduce `idleTimeout` (terminate idle processes faster)
-- Monitor process memory: check health-check events
-- For 16GB RAM: `maxProcesses: 5-10` recommended
-
 ---
 
 ## 🗺️ Roadmap
 
-### ✅ Core MCP Server
+### Phase 1: Core MCP Server ✅
 
-- 10 MCP tools for team coordination
-- Process pool with LRU eviction
-- SQLite notification queue
-- Hot-reloadable YAML configuration with env var interpolation
-- Session persistence and resumption
-- Event-driven architecture
+- **17 MCP Tools** for team coordination
+- **Process Pool** with LRU eviction
+- **Session Persistence** with SQLite
+- **Transport Abstraction** (Local, SSH, RemoteSSH2)
+- **Remote Execution** via SSH
+- **Reverse MCP Tunneling**
+- **Session MCP Configuration**
+- **Wonder Logger** with OpenTelemetry
+- **Permission Approval System**
+- **Hot-Reloadable Configuration**
+- **Event-Driven Architecture** with RxJS
 
-### 🚧 Web Dashboard
+### Phase 2: Web Dashboard ✅
 
-- React SPA for monitoring
-- Real-time WebSocket updates
-- Team management UI
-- Analytics dashboard
+- **React SPA** with real-time monitoring
+- **WebSocket Integration** for live updates
+- **Permission Approval Modal**
+- **Log Viewer** with filtering
+- **Process Monitoring** with health metrics
+- **Configuration Editor**
 
-See `src/dashboard/README.md`
+**Status**: Fully implemented and production-ready!
 
-### 🔮 Programmatic API
+### Phase 3: Programmatic API 🔮
 
 - RESTful HTTP endpoints
 - WebSocket streaming
@@ -759,7 +1059,7 @@ See `src/dashboard/README.md`
 
 See `src/api/README.md`
 
-### 🔮 CLI Interface
+### Phase 4: CLI Interface 🔮
 
 - `iris ask` command
 - `iris status` monitoring
@@ -768,12 +1068,13 @@ See `src/api/README.md`
 
 See `src/cli/README.md`
 
-### 🔮 Intelligence Layer
+### Phase 5: Intelligence Layer 🔮
 
 - Loop detection
 - Destructive action prevention
 - Pattern recognition
 - Self-aware coordination
+- Autonomous multi-team orchestration
 
 See `src/intelligence/README.md`
 
@@ -781,23 +1082,22 @@ See `src/intelligence/README.md`
 
 ## 📚 Documentation
 
-### Architecture Documentation
+### Core Documentation
 
 - **[Getting Started](./GETTING_STARTED.md)** - Installation and quick start guide
-- **[Configuration Guide](./docs/CONFIG.md)** - Complete YAML config reference
-- **[Architecture Overview](./docs/ARCHITECTURE.md)** - System design and component interaction
+- **[Concept](./docs/CONCEPT.md)** - Vision and conceptual overview
+- **[Architecture](./docs/ARCHITECTURE.md)** - System design and component interaction
+- **[Actions](./docs/ACTIONS.md)** - All 17 MCP tools documentation
+- **[Configuration](./docs/CONFIG.md)** - Complete YAML config reference
+- **[Features](./docs/FEATURES.md)** - Comprehensive feature inventory
+- **[Nomenclature](./docs/NOMENCLATURE.md)** - Core concepts and terminology
+
+### Advanced Topics
+
 - **[Session Management](./docs/SESSION.md)** - Session database and file management
-- **[Process Pool](./docs/PROCESS_POOL.md)** - Pool management and LRU eviction
-- **[Cache System](./docs/CACHE.md)** - Hierarchical cache with RxJS
-- **[MCP Actions](./docs/ACTIONS.md)** - All 10 MCP tools documentation
-- **[Breaking Changes](./docs/BREAKING.md)** - Migration guide for refactorings
-
-### Future Phases (Planned)
-
-- [Dashboard Spec](./docs/DASHBOARD.md) - React web UI for monitoring
-- [API Spec](./docs/API.md) - RESTful + WebSocket API
-- [CLI Spec](./docs/CLI.md) - Ink terminal interface
-- [Intelligence Layer](./docs/AGENT.md) - Autonomous coordination
+- **[Remote Execution](./docs/REMOTE.md)** - SSH transport and remote teams
+- **[Reverse MCP](./docs/REVERSE_MCP.md)** - Bidirectional SSH tunneling
+- **[Dashboard](./docs/DASHBOARD.md)** - Web dashboard documentation
 
 ---
 
